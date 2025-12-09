@@ -27,6 +27,117 @@ import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 
 /**
+ * @hide
+ */
+class AXUIInterpolator extends BaseInterpolator {
+    private static final double DEFAULT_STIFFNESS = 40.0;
+    private static final double DEFAULT_DAMPING_RATIO = 1.15;
+    private static final float DEFAULT_MAX_VELOCITY = 15000.0f;
+
+    private final double mOmega;
+    private final double mDampingRatio;
+    private final double mInitialVelocityNorm;
+    private final float mDurationScale;
+    private final double mDampedFreq;
+    private final double mCoefficient;
+    private float mNormalizationFactor = -1.0f;
+
+    public AXUIInterpolator(double stiffness, double dampingRatio, double velocity,
+            float durationScale, float maxVelocity) {
+        mOmega = Math.sqrt(stiffness <= 0.0 ? DEFAULT_STIFFNESS : stiffness);
+        mDampingRatio = dampingRatio <= 0.0 ? DEFAULT_DAMPING_RATIO : dampingRatio;
+        mInitialVelocityNorm = Math.abs(velocity) / (maxVelocity <= 0.0f ? DEFAULT_MAX_VELOCITY : maxVelocity);
+        mDurationScale = durationScale <= 0.0f ? 1.0f : durationScale;
+
+        if (mDampingRatio < 1.0) {
+            // Underdamped
+            mDampedFreq = Math.sqrt(1.0 - (mDampingRatio * mDampingRatio)) * mOmega;
+            mCoefficient = ((mDampingRatio * mOmega) - mInitialVelocityNorm) / mDampedFreq;
+        } else if (Double.compare(1.0, mDampingRatio) == 0) {
+            // Critically damped
+            mDampedFreq = 0.0;
+            mCoefficient = (-mInitialVelocityNorm) + mOmega;
+        } else {
+            // Overdamped
+            mDampedFreq = 0.0;
+            mCoefficient = (-mInitialVelocityNorm) + (mDampingRatio * mOmega);
+        }
+    }
+
+    private float calculatePosition(float t) {
+        if (t < 0.0f) t = 0.0f;
+        double time = t * mDurationScale;
+        double expTerm = Math.exp((-mDampingRatio) * mOmega * time);
+        double displacement;
+
+        if (mDampingRatio < 1.0) {
+            // Underdamped oscillation
+            displacement = (Math.cos(mDampedFreq * time) +
+                    (mCoefficient * Math.sin(mDampedFreq * time))) * expTerm;
+        } else if (Double.compare(1.0, mDampingRatio) == 0) {
+            // Critically damped
+            displacement = ((mCoefficient * time) + 1.0) * Math.exp((-mOmega) * time);
+        } else {
+            // Overdamped
+            double sqrtTerm = mOmega * Math.sqrt((mDampingRatio * mDampingRatio) - 1.0);
+            displacement = (expTerm / sqrtTerm) *
+                    (((-mInitialVelocityNorm + (mOmega * mDampingRatio)) *
+                            Math.sinh(mDampingRatio * time)) +
+                            (Math.cosh(mDampingRatio * time) * sqrtTerm));
+        }
+        return (float) (1.0 - displacement);
+    }
+
+    @Override
+    public float getInterpolation(float input) {
+        if (mNormalizationFactor == -1.0f) {
+            float endValue = calculatePosition(1.0f);
+            mNormalizationFactor = endValue != 0.0f ? endValue : 1.0f;
+        }
+        return calculatePosition(input) / mNormalizationFactor;
+    }
+
+    /**
+     */
+    public float getVelocityRatio(float t) {
+        double time = t >= 0.0f ? t : 0.0f;
+        double expTerm = Math.exp((-mDurationScale) * mDampingRatio * mOmega * time);
+        double velocityMagnitude;
+
+        if (mDampingRatio < 1.0) {
+            double sinTerm = Math.sin(mDurationScale * mDampedFreq * time);
+            double cosTerm = Math.cos(mDurationScale * mDampedFreq * time);
+            velocityMagnitude = Math.abs(
+                    ((sinTerm * (-mDurationScale) *
+                            ((mCoefficient * mDampingRatio * mOmega) + mDampedFreq)) +
+                            (cosTerm * mDurationScale *
+                                    ((mCoefficient * mDampedFreq) - (mDampingRatio * mOmega)))) * expTerm);
+        } else if (Double.compare(1.0, mDampingRatio) != 0) {
+            // Overdamped
+            double sqrtTerm = mOmega * Math.sqrt((mDampingRatio * mDampingRatio) - 1.0);
+            double sqrtTermSq = sqrtTerm * sqrtTerm;
+            velocityMagnitude = Math.abs((expTerm / sqrtTerm) *
+                    ((Math.sinh(mDurationScale * mDampingRatio * time) * mDurationScale *
+                            ((sqrtTermSq + (mInitialVelocityNorm * mDampingRatio * mOmega)) -
+                                    ((mDampingRatio * mDampingRatio) * mOmega * mOmega))) +
+                            (Math.cosh(mDurationScale * mDampingRatio * time) * mDurationScale *
+                                    mDampingRatio * (((mDampingRatio * mOmega) - mInitialVelocityNorm) -
+                                    (mOmega * sqrtTerm)))));
+        } else {
+            // Critically damped
+            velocityMagnitude = Math.abs(mDurationScale *
+                    ((mCoefficient - mOmega) - (((mCoefficient * mDurationScale) * mOmega) * time)) *
+                    Math.exp((-mDurationScale) * mOmega * time));
+        }
+        return (float) velocityMagnitude;
+    }
+
+    public float getDurationScale() {
+        return mDurationScale;
+    }
+}
+
+/**
  * This class encapsulates scrolling with the ability to overshoot the bounds
  * of a scrolling operation. This class is a drop-in replacement for
  * {@link android.widget.Scroller} in most cases.
