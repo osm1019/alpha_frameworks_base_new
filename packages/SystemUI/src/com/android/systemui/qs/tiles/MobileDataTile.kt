@@ -94,11 +94,12 @@ constructor(
     }
 
     override fun handleClick(expandable: Expandable?) {
-        lifecycle.coroutineScope.launch { userActionInteractor.handleClick(expandable) }
+        userActionInteractor.handleSecondaryClick(expandable)
     }
 
     override fun handleSecondaryClick(expandable: Expandable?) {
-        userActionInteractor.handleSecondaryClick(expandable)
+        // Disabled
+        handleClick(expandable)
     }
 
     override fun getLongClickIntent(): Intent = userActionInteractor.longClickIntent
@@ -122,8 +123,7 @@ constructor(
             secondaryLabel = tileState.secondaryLabel
             contentDescription = tileState.contentDescription
             expandedAccessibilityClassName = tileState.expandedAccessibilityClassName
-            handlesSecondaryClick =
-                tileState.supportedActions.contains(QSTileState.UserAction.TOGGLE_CLICK)
+            handlesSecondaryClick = false
             handlesLongClick =
                 tileState.supportedActions.contains(QSTileState.UserAction.LONG_CLICK)
         }
