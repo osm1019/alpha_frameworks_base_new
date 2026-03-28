@@ -162,7 +162,11 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     protected int mMainWallpaperColor = Color.TRANSPARENT;
     // UI contrast as reported by UiModeManager
     private double mContrast = 0.0;
-    private double mChromaBoost = 0.0;
+    private float mLuminanceFactor = 1f;
+    private float mChromaFactor = 1f;
+    private boolean mWholePalette = false;
+    private boolean mTintBackground = false;
+    private Integer mBgColor = null;
     private boolean mIsFidelityEnabled = true;
     // Theme variant: Vibrant, Tonal, Expressive, etc
     @VisibleForTesting
@@ -371,6 +375,14 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
             if (!userChosePresetColor && !preserveLockScreenColor && wallpaperColorsNeedUpdate
                     && !isSeedColorSet(jsonObject, wallpaperColors)) {
                 mSkipSettingChange = true;
+
+                // Preserve user-tuned Monet fields before stripping palette keys so that
+                // wallpaper color events don't reset the luminance/chroma sliders.
+                final double savedLuminance = jsonObject.optDouble(OVERLAY_LUMINANCE_FACTOR, 1d);
+                final double savedChroma    = jsonObject.optDouble(OVERLAY_CHROMA_FACTOR, 1d);
+                final int savedWholePalette = jsonObject.optInt(OVERLAY_WHOLE_PALETTE, 0);
+                final int savedTintBg       = jsonObject.optInt(OVERLAY_TINT_BACKGROUND, 0);
+
                 if (jsonObject.has(OVERLAY_CATEGORY_ACCENT_COLOR) || jsonObject.has(
                         OVERLAY_CATEGORY_SYSTEM_PALETTE) || jsonObject.has(OVERLAY_CATEGORY_BG_COLOR)) {
                     jsonObject.remove(OVERLAY_CATEGORY_DYNAMIC_COLOR);
@@ -379,6 +391,13 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
                     jsonObject.remove(OVERLAY_CATEGORY_SYSTEM_PALETTE);
                     jsonObject.remove(OVERLAY_COLOR_INDEX);
                 }
+
+                // Restore preserved user tuning fields
+                if (savedLuminance != 1d) jsonObject.put(OVERLAY_LUMINANCE_FACTOR, savedLuminance);
+                if (savedChroma != 1d)    jsonObject.put(OVERLAY_CHROMA_FACTOR, savedChroma);
+                if (savedWholePalette != 0) jsonObject.put(OVERLAY_WHOLE_PALETTE, savedWholePalette);
+                if (savedTintBg != 0)     jsonObject.put(OVERLAY_TINT_BACKGROUND, savedTintBg);
+
                 // Keep color_both value because users can change either or both home and
                 // lock screen wallpapers.
                 jsonObject.put(OVERLAY_COLOR_BOTH, isDestinationBoth ? "1" : "0");
@@ -686,12 +705,16 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
         if (!TextUtils.isEmpty(overlayPackageJson)) {
             try {
                 JSONObject object = new JSONObject(overlayPackageJson);
-                mContrast = object.optDouble("_contrast_level", 0.0);
-                mChromaBoost = object.optDouble("_chroma_boost", 0.0);
+                mLuminanceFactor = (float) object.optDouble(OVERLAY_LUMINANCE_FACTOR, 1.0);
+                mChromaFactor    = (float) object.optDouble(OVERLAY_CHROMA_FACTOR, 1.0);
+                mWholePalette    = object.optInt(OVERLAY_WHOLE_PALETTE, 0) == 1;
+                mTintBackground  = object.optInt(OVERLAY_TINT_BACKGROUND, 0) == 1;
+                int bgColorInt   = object.optInt(OVERLAY_CATEGORY_BG_COLOR, 0);
+                mBgColor         = bgColorInt != 0 ? bgColorInt : null;
                 mIsFidelityEnabled = object.optBoolean("_fidelity_enabled", true);
                 if (DEBUG) {
-                    Log.d(TAG, "Custom theme settings: contrast=" + mContrast
-                            + " chromaBoost=" + mChromaBoost
+                    Log.d(TAG, "Custom theme settings: luminance=" + mLuminanceFactor
+                            + " chroma=" + mChromaFactor
                             + " fidelity=" + mIsFidelityEnabled);
                 }
             } catch (JSONException e) {
@@ -734,15 +757,23 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
         if (mIsFidelityEnabled) {
             style = ThemeStyle.CONTENT;
         }
-        mDarkColorScheme = new ColorScheme(color, true /* isDark */, style, mContrast);
-        mLightColorScheme = new ColorScheme(color, false /* isDark */, style, mContrast);
+        mDarkColorScheme = new ColorScheme(color, true /* isDark */, style, mContrast,
+                mLuminanceFactor, mChromaFactor, mWholePalette, mTintBackground, mBgColor);
+        mLightColorScheme = new ColorScheme(color, false /* isDark */, style, mContrast,
+                mLuminanceFactor, mChromaFactor, mWholePalette, mTintBackground, mBgColor);
         mColorScheme = isNightMode() ? mDarkColorScheme : mLightColorScheme;
 
         mAccentOverlay = newFabricatedOverlay("accent");
-        assignColorsToOverlay(mAccentOverlay, DynamicColors.getAllAccentPalette(), false);
+        assignColorsToOverlay(mAccentOverlay,
+                // Pass 1f for luminance - ColorScheme/TonalPalette already applies it.
+                // Passing mLuminanceFactor here would double-apply it causing wrong colors.
+                DynamicColors.getAllAccentPalette(1f, mChromaFactor, mWholePalette),
+                false);
 
         mNeutralOverlay = newFabricatedOverlay("neutral");
-        assignColorsToOverlay(mNeutralOverlay, DynamicColors.getAllNeutralPalette(), false);
+        assignColorsToOverlay(mNeutralOverlay,
+                DynamicColors.getAllNeutralPalette(1f, mChromaFactor, mWholePalette),
+                false);
 
         mDynamicOverlay = newFabricatedOverlay("dynamic");
         // Themed Colors
@@ -781,19 +812,10 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     }
 
     private int boostChroma(int argb) {
+        if (mChromaFactor == 1f) return argb;
         Cam cam = Cam.fromInt(argb);
-
-        final float chromaBoost = (float) mChromaBoost;
-
-        float boostedChroma = cam.getChroma() * (1f +  chromaBoost/ 100f);
-        boostedChroma = Math.min(boostedChroma, 150f);
-
-        int boosted = ColorUtils.CAMToColor(
-                cam.getHue(),
-                boostedChroma,
-                cam.getJ()
-        );
-
+        float boostedChroma = Math.min(cam.getChroma() * mChromaFactor, 150f);
+        int boosted = ColorUtils.CAMToColor(cam.getHue(), boostedChroma, cam.getJ());
         return ColorUtils.setAlphaComponent(boosted, Color.alpha(argb));
     }
 
@@ -851,8 +873,12 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
             try {
                 JSONObject object = new JSONObject(overlayPackageJson);
                 
-                mContrast = object.optDouble("_contrast_level", 0.0);
-                mChromaBoost = object.optDouble("_chroma_boost", 0.0);
+                mLuminanceFactor = (float) object.optDouble(OVERLAY_LUMINANCE_FACTOR, 1.0);
+                mChromaFactor    = (float) object.optDouble(OVERLAY_CHROMA_FACTOR, 1.0);
+                mWholePalette    = object.optInt(OVERLAY_WHOLE_PALETTE, 0) == 1;
+                mTintBackground  = object.optInt(OVERLAY_TINT_BACKGROUND, 0) == 1;
+                int bgColorVal   = object.optInt(OVERLAY_CATEGORY_BG_COLOR, 0);
+                mBgColor         = bgColorVal != 0 ? bgColorVal : null;
 
                 for (String category : ThemeOverlayApplier.THEME_CATEGORIES) {
                     if (object.has(category)) {
@@ -903,8 +929,11 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
 
         // Compatibility with legacy themes, where full packages were defined, instead of just
         // colors.
+        // Always register neutral overlay so luminance/chroma apply even in black mode.
+        // The fabricated overlay array below still excludes the neutral frro in black mode
+        // so AndroidBlackTheme wins on background/surface colors.
         if (!categoryToPackage.containsKey(OVERLAY_CATEGORY_SYSTEM_PALETTE)
-                && mNeutralOverlay != null && !isBlackMode) {
+                && mNeutralOverlay != null) {
             categoryToPackage.put(OVERLAY_CATEGORY_SYSTEM_PALETTE,
                     mNeutralOverlay.getIdentifier());
         }
