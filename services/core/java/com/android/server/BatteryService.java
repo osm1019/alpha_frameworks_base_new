@@ -1062,11 +1062,43 @@ public final class BatteryService extends SystemService {
                 BatteryManager.EXTRA_TEMPERATURE, mHealthInfo.batteryTemperatureTenthsCelsius);
         intent.putExtra(BatteryManager.EXTRA_TECHNOLOGY, mHealthInfo.batteryTechnology);
         intent.putExtra(BatteryManager.EXTRA_INVALID_CHARGER, mInvalidCharger);
-        intent.putExtra(
-                BatteryManager.EXTRA_MAX_CHARGING_CURRENT, mHealthInfo.maxChargingCurrentMicroamps);
-        intent.putExtra(
-                BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE,
-                mHealthInfo.maxChargingVoltageMicrovolts);
+        int chargeCurrentUa = mHealthInfo.maxChargingCurrentMicroamps;
+        int chargeVoltageUv = mHealthInfo.maxChargingVoltageMicrovolts;
+        int oemRatedWatts = 0;
+        if (mHealthInfo.chargerAcOnline || mHealthInfo.chargerUsbOnline) {
+            if (readUsbSupplyInt(VOOC_ACTIVE_PATH) == 1) {
+                // During VOOC/SuperVOOC the usb/current_now node reads 0, but the battery
+                // current stays valid (mA, negative while charging). The OP13 pack is two
+                // cells in series and SVOOC direct-charges it (no conversion): Vbus (~9.1V)
+                // equals pack voltage (2x cell) and Ibus equals Ibat. So Vbus x Ibat is the
+                // true charging power and matches external USB meter readings (~78W peak),
+                // whereas cell voltage x Ibat would understate it by half.
+                int iBatt = readUsbSupplyInt(BATT_CURRENT_PATH);
+                int vBus = readUsbSupplyInt(USB_VOLTAGE_PATH);
+                if (vBus <= 0) {
+                    // Fallback: per-cell voltage (will understate power by ~2x on 2S packs).
+                    vBus = readUsbSupplyInt(BATT_VOLTAGE_PATH);
+                }
+                if (vBus > 0 && iBatt != Integer.MIN_VALUE && iBatt != 0) {
+                    chargeVoltageUv = vBus;
+                    chargeCurrentUa = Math.abs(iBatt) * 1000;
+                }
+                // Real input current is not exposed during VOOC; report the adapter's
+                // rated wattage (like stock OOS) for the UI to show as a label.
+                oemRatedWatts = oemRatedWatts(readUsbSupplyInt(FAST_CHG_TYPE_PATH));
+            } else {
+                // Regular charger: usb supply reports real adapter-side uA/uV.
+                int vUsb = readUsbSupplyInt(USB_VOLTAGE_PATH);
+                int iUsb = readUsbSupplyInt(USB_CURRENT_PATH);
+                if (vUsb > 0 && iUsb > 0) {
+                    chargeCurrentUa = iUsb;
+                    chargeVoltageUv = vUsb;
+                }
+            }
+        }
+        intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_CURRENT, chargeCurrentUa);
+        intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, chargeVoltageUv);
+        intent.putExtra("oem_charger_watts", oemRatedWatts);
         intent.putExtra(BatteryManager.EXTRA_CHARGE_COUNTER, mHealthInfo.batteryChargeCounterUah);
         intent.putExtra(BatteryManager.EXTRA_CYCLE_COUNT, mHealthInfo.batteryCycleCount);
         intent.putExtra(BatteryManager.EXTRA_CHARGING_STATUS, mHealthInfo.chargingState);
@@ -1087,6 +1119,41 @@ public final class BatteryService extends SystemService {
         args.arg2 = intent;
         args.arg3 = forceUpdate;
         mHandler.obtainMessage(MSG_BROADCAST_BATTERY_CHANGED, args).sendToTarget();
+    }
+
+    // --- adapter-side charging info for accurate fast-charge wattage display ---
+    private static final String USB_VOLTAGE_PATH = "/sys/class/power_supply/usb/voltage_now";
+    private static final String USB_CURRENT_PATH = "/sys/class/power_supply/usb/current_now";
+    // VOOC zeroes usb/current_now, so fall back to battery-side nodes when VOOC is active.
+    private static final String VOOC_ACTIVE_PATH = "/sys/class/oplus_chg/battery/voocchg_ing";
+    private static final String FAST_CHG_TYPE_PATH = "/sys/class/oplus_chg/usb/fast_chg_type";
+
+    /**
+     * Map the Oplus fast_chg_type id to the adapter's rated wattage for display.
+     * The real input current is never exposed to the AP during VOOC, so like stock
+     * OOS we show the adapter's rating as a label. Returns 0 when unknown so the
+     * UI can fall back to live values only.
+     * TODO: refine with adapter_id once per-brick ids are collected (80W vs 100W
+     * SuperVOOC both report type 101).
+     */
+    private int oemRatedWatts(int fastChgType) {
+        switch (fastChgType) {
+            case 101: // SuperVOOC (this device ships with the 100W NA adapter)
+                return 100;
+            default:
+                return 0;
+        }
+    }
+    private static final String BATT_VOLTAGE_PATH = "/sys/class/power_supply/battery/voltage_now";
+    private static final String BATT_CURRENT_PATH = "/sys/class/power_supply/battery/current_now";
+
+    private int readUsbSupplyInt(String path) {
+        try {
+            String s = FileUtils.readTextFile(new File(path), 0, null).trim();
+            return Integer.parseInt(s);
+        } catch (Exception e) {
+            return Integer.MIN_VALUE;
+        }
     }
 
     private static void broadcastBatteryChangedIntent(Context context, Intent intent,
