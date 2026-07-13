@@ -41,7 +41,12 @@ public class PictureAdjustmentController extends LiveDisplayFeature {
 
         boolean usePA = mHardware.isSupported(LineageHardwareManager.FEATURE_PICTURE_ADJUSTMENT);
         if (usePA) {
-            final List<Range<Float>> r = mHardware.getPictureAdjustmentRanges();
+            List<Range<Float>> r = null;
+            try {
+                r = mHardware.getPictureAdjustmentRanges();
+            } catch (Exception e) {
+                Slog.e(TAG, "Failed to get picture adjustment ranges from HAL", e);
+            }
             if (r != null) {
                 mRanges.addAll(r);
             }
