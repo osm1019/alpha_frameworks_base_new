@@ -252,7 +252,12 @@ public class BrightnessClamperController {
                 || !BrightnessSynchronizer.floatEquals(state1.mMaxBrightness,
                 state2.mMaxBrightness)
                 || !BrightnessSynchronizer.floatEquals(state1.mMinBrightness,
-                state2.mMinBrightness);
+                state2.mMinBrightness)
+                // FullscreenVideoBrightnessModifier pin / active state (apply()-only
+                // modifiers must surface changes here or clamp() never re-runs).
+                || state1.mVideoPinActive != state2.mVideoPinActive
+                || !BrightnessSynchronizer.floatEquals(state1.mVideoPinBrightness,
+                state2.mVideoPinBrightness);
     }
 
     private void start() {
@@ -331,6 +336,9 @@ public class BrightnessClamperController {
                 modifiers.add(new BrightnessLowLuxModifier(handler, listener, context,
                         data.mDisplayDeviceConfig));
             }
+            // Fullscreen HDR pin (50/80/100% of user max from lux bands). Runs BEFORE
+            // HdrBrightnessModifier so the HDR ratio multiplies the pin.
+            modifiers.add(new FullscreenVideoBrightnessModifier(handler, context, listener, data));
             modifiers.add(new HdrBrightnessModifier(
                     handler, context, flags, pluginManager, listener, data));
             if (flags.isMinmodeCapBrightnessEnabled()) {
@@ -500,5 +508,9 @@ public class BrightnessClamperController {
         int mMaxBrightnessReason = BrightnessInfo.BRIGHTNESS_MAX_REASON_NONE;
         float mMaxBrightness = PowerManager.BRIGHTNESS_MAX;
         float mMinBrightness = PowerManager.BRIGHTNESS_MIN;
+        /** Fullscreen HDR pin: whether pin is active. */
+        boolean mVideoPinActive = false;
+        /** Fullscreen HDR pin: target base brightness, or INVALID when inactive. */
+        float mVideoPinBrightness = PowerManager.BRIGHTNESS_INVALID;
     }
 }
