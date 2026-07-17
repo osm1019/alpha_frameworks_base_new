@@ -103,7 +103,6 @@ import com.android.systemui.media.controls.ui.viewmodel.SeekBarViewModel;
 import com.android.systemui.media.controls.util.MediaDataUtils;
 import com.android.systemui.media.controls.util.MediaUiEventLogger;
 import com.android.systemui.media.dialog.MediaOutputDialogManager;
-import com.android.systemui.media.MediaSessionManager;
 import com.android.systemui.monet.ColorScheme;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
@@ -901,10 +900,6 @@ public class MediaControlPanel {
             Drawable artwork;
             boolean isArtworkBound;
             Icon artworkIcon = data.getArtwork();
-            Rect bounds = mContext.getSystemService(android.view.WindowManager.class).getCurrentWindowMetrics().getBounds();
-            int screenWidth = bounds.width();
-            int screenHeight = bounds.height();
-            Drawable albumArt = getScaledBackground(artworkIcon, screenWidth, screenHeight);
             WallpaperColors wallpaperColors = getWallpaperColor(artworkIcon);
             boolean darkTheme = false;
             if (wallpaperColors != null) {
@@ -937,9 +932,6 @@ public class MediaControlPanel {
                     return;
                 }
                 mArtworkBoundId = reqId;
-
-                MediaSessionManager.Companion.get().onAlbumArtChanged(albumArt);
-                MediaSessionManager.Companion.get().onMediaColorsChanged(colorScheme.getAccent1().getS100());
 
                 // Transition Colors to current color scheme
                 boolean colorSchemeChanged;
@@ -990,10 +982,6 @@ public class MediaControlPanel {
                         Log.w(TAG, "Cannot find icon for package " + data.getPackageName(), e);
                         appIconView.setImageResource(R.drawable.ic_music_note);
                     }
-                }
-                Drawable resolvedAppIcon = appIconView.getDrawable();
-                if (resolvedAppIcon != null) {
-                    MediaSessionManager.Companion.get().onAppIconChanged(resolvedAppIcon);
                 }
                 Trace.endAsyncSection(traceName, traceCookie);
             });

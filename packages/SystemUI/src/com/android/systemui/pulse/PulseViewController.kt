@@ -28,7 +28,8 @@ import javax.inject.Inject
 
 @SysUISingleton
 class PulseViewController @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val mediaSessionManager: MediaSessionManager,
 ) : PulseAudioDataProcessor.DataListener,
     MediaSessionManager.MediaDataListener,
     ScrimUtils.ScrimEventListener {
@@ -103,11 +104,11 @@ class PulseViewController @Inject constructor(
         val enabled = pulseEnabled
         if (enabled && !listenersRegistered) {
             ScrimUtils.get().addListener(this)
-            MediaSessionManager.get().addListener(this)
+            mediaSessionManager.addListener(this)
             listenersRegistered = true
         } else if (!enabled && listenersRegistered) {
             ScrimUtils.get().removeListener(this)
-            MediaSessionManager.get().removeListener(this)
+            mediaSessionManager.removeListener(this)
             listenersRegistered = false
             pulseRunning = false
             mainScope.launch {
@@ -148,8 +149,8 @@ class PulseViewController @Inject constructor(
         updateState()
     }
 
-    override fun onMediaColorsChanged(color: Int) {
-        if (pulseEnabled) view.onMediaColorsChanged(color)
+    override fun onMediaColorsChanged(color: Int?) {
+        if (pulseEnabled && color != null) view.onMediaColorsChanged(color)
     }
 
     override fun onKeyguardShowingChanged(showing: Boolean) {
@@ -210,7 +211,7 @@ class PulseViewController @Inject constructor(
         settingsRepository.stopObserving()
         if (listenersRegistered) {
             ScrimUtils.get().removeListener(this)
-            MediaSessionManager.get().removeListener(this)
+            mediaSessionManager.removeListener(this)
             listenersRegistered = false
         }
         audioProcessor.cleanup()
