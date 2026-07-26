@@ -4,5 +4,9 @@
      SPDX-License-Identifier: Apache-2.0
 -->
 <resources>
+    <!-- The location of the device physical tri state switch -->
+    <java-symbol type="integer" name="config_alertSliderLocation" />
 
+    <!-- Key handler broadcast when changing slider position -->
+    <java-symbol type="string" name="config_alertSliderIntent" />
 </resources>
