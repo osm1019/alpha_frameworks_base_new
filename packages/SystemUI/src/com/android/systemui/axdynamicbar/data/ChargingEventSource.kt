@@ -103,54 +103,71 @@ class ChargingEventSource @Inject constructor(
             ) { intent, _ ->
                 val bs = BatteryStatus(intent)
                 val temp = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)
-        
-                var chargingCurrent = bs.maxChargingCurrent.toFloat()
-                val chargingVoltage = bs.maxChargingVoltage.toFloat()
-                var chargingWattage = bs.maxChargingWattage.toFloat()
-        
-                if (chargingCurrent <= 0) {
+                // Adapter-side values from BatteryService: µA / µV. During VOOC the
+                // service injects Vbus x |Ibat| (Ibat is mA on Oplus, already scaled).
+                var chargingCurrentUa = bs.maxChargingCurrent.toFloat()
+                val chargingVoltageUv = bs.maxChargingVoltage.toFloat()
+                val oemRatedWatts = intent.getIntExtra("oem_charger_watts", 0)
+
+                if (chargingCurrentUa <= 0) {
                     val bm = context.getSystemService(BatteryManager::class.java)
                     if (bm != null) {
-                        val currentNow = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-                        if (currentNow != 0) chargingCurrent = Math.abs(currentNow).toFloat()
+                        val currentNow = bm.getIntProperty(
+                            BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+                        if (currentNow != 0) {
+                            // ABI says µA, but Oplus battery/current_now is mA.
+                            // Scale only on VOOC devices where that violation is known.
+                            chargingCurrentUa = if (hasVoocCharger) {
+                                Math.abs(currentNow).toFloat() * 1000f
+                            } else {
+                                Math.abs(currentNow).toFloat()
+                            }
+                        }
                     }
                 }
-        
-                if (chargingWattage <= 0 && chargingCurrent > 0 && chargingVoltage > 0) {
-                    chargingWattage = (chargingCurrent / 1000f) * (chargingVoltage / 1000f)
-                }
-        
-                var currentDivider = 1000
-                try {
-                    var resId = context.resources.getIdentifier("config_currentInfoDivider", "integer", context.packageName)
-                    if (resId == 0) resId = context.resources.getIdentifier("config_currentInfoDivider", "integer", "android")
-                    if (resId != 0) currentDivider = context.resources.getInteger(resId)
-                } catch (ignored: Exception) {}
-        
-                val power = if (chargingWattage > 0) String.format(Locale.US, "%.1fW", chargingWattage / currentDivider / 1000f) else null
-                
-                val current = if (chargingCurrent >= currentDivider * 1000) {
-                    String.format(Locale.US, "%.1fA", chargingCurrent / currentDivider / 1000f)
-                } else if (chargingCurrent > 0) {
-                    String.format(Locale.US, "%.0fmA", chargingCurrent / currentDivider)
+
+                // Compute A / V / W directly from µ-units — a single divider cannot
+                // correctly scale both linear current and quadratic wattage at once.
+                val amps = chargingCurrentUa / 1_000_000f
+                val volts = chargingVoltageUv / 1_000_000f
+                val watts = amps * volts
+
+                val power = if (watts > 0f) {
+                    String.format(Locale.US, "%.1fW", watts)
                 } else null
-        
-                val voltage = if (chargingVoltage > 0) String.format(Locale.US, "%.1fV", chargingVoltage / 1000f / 1000f) else null
-                
-                val tempStr = if (temp > 0) String.format(Locale.US, "%.1f°C", temp / 10f) else null
-        
+
+                val current = if (chargingCurrentUa > 0) {
+                    if (amps >= 1f) {
+                        String.format(Locale.US, "%.1fA", amps)
+                    } else {
+                        String.format(Locale.US, "%.0fmA", amps * 1000f)
+                    }
+                } else null
+
+                val voltage = if (chargingVoltageUv > 0) {
+                    String.format(Locale.US, "%.1fV", volts)
+                } else null
+
+                val tempStr = if (temp > 0) {
+                    String.format(Locale.US, "%.1f°C", temp / 10f)
+                } else null
+
                 val chargeType = when {
-                    bs.chargingStatus == BatteryManager.BATTERY_STATUS_FULL -> 
+                    bs.chargingStatus == BatteryManager.BATTERY_STATUS_FULL ->
                         context.getString(R.string.ax_dynamic_bar_fully_charged)
                     bs.getChargingSpeed(context) == BatteryStatus.CHARGING_OEM -> when {
-                        hasVoocCharger -> "VOOC Charging"
+                        hasVoocCharger -> if (oemRatedWatts > 0) {
+                            "${oemRatedWatts}W SuperVOOC Charging"
+                        } else {
+                            "VOOC Charging"
+                        }
                         hasWarpCharger -> "Warp Charging"
                         hasDashCharger -> "Dash Charging"
                         else -> context.getString(R.string.ax_dynamic_bar_charging_rapidly)
                     }
-                    bs.getChargingSpeed(context) == BatteryStatus.CHARGING_FAST -> 
+                    bs.getChargingSpeed(context) == BatteryStatus.CHARGING_FAST ->
                         context.getString(R.string.ax_dynamic_bar_charging_rapidly)
-                    bs.getChargingSpeed(context) == BatteryStatus.CHARGING_SLOWLY -> 
+                    bs.getChargingSpeed(context) == BatteryStatus.CHARGING_SLOWLY ->
                         context.getString(R.string.ax_dynamic_bar_charging_slowly)
                     else -> context.getString(R.string.ax_dynamic_bar_charging)
                 }

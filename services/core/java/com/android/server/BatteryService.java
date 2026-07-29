@@ -1073,11 +1073,12 @@ public final class BatteryService extends SystemService {
                 && (mHealthInfo.chargerAcOnline || mHealthInfo.chargerUsbOnline)) {
             if (readUsbSupplyInt(VOOC_ACTIVE_PATH) == 1) {
                 // During VOOC/SuperVOOC the usb/current_now node reads 0, but the battery
-                // current stays valid (mA, negative while charging). The OP13 pack is two
-                // cells in series and SVOOC direct-charges it (no conversion): Vbus (~9.1V)
-                // equals pack voltage (2x cell) and Ibus equals Ibat. So Vbus x Ibat is the
-                // true charging power and matches external USB meter readings (~78W peak),
-                // whereas cell voltage x Ibat would understate it by half.
+                // current stays valid (mA, negative while charging). Oplus 2S packs
+                // (dodge / aston) are direct-charged (no conversion): Vbus (~9 V)
+                // equals pack voltage (2x cell) and Ibus equals Ibat. So Vbus x Ibat
+                // is the true charging power and matches external USB meter readings
+                // (dodge ~78 W peak, aston ~71.5 W peak), whereas cell voltage x Ibat
+                // would understate it by half.
                 int iBatt = readUsbSupplyInt(BATT_CURRENT_PATH);
                 int vBus = readUsbSupplyInt(USB_VOLTAGE_PATH);
                 if (vBus <= 0) {
@@ -1145,21 +1146,31 @@ public final class BatteryService extends SystemService {
      * The class is per-session, not per-brick: the dual-port 100W adapter
      * negotiates the 100W class on Type-C but only the 80W class on Type-A /
      * 10A cables (stock logs show chargerWattageOrigin flip 100 <-> 80 on the
-     * same brick). fast_chg_type and the log's adapter_id both read 101 for
-     * every SuperVOOC session, so the negotiated class is recovered from the
-     * handshake sid (vooc_sid), parsed by field name from the charging log to
-     * stay robust against field reordering. Known sids are mapped exactly;
-     * unknown SuperVOOC sessions fall back to the generic class rating.
-     * Returns 0 when not identifiable so the UI leaves the label untouched.
+     * same brick). fast_chg_type / adapter_id encode the SuperVOOC *protocol*
+     * class only (101 on OnePlus 13 / dodge, 105 on OnePlus 12R / Ace 3),
+     * not the wattage class — that lives in the handshake sid (vooc_sid),
+     * parsed by field name from the charging log so field reordering is fine.
+     * Known sids are mapped exactly; unknown SuperVOOC sessions fall back to
+     * the generic class rating. Returns 0 when not identifiable so the UI
+     * leaves the label untouched.
      */
     private int oemRatedWatts() {
         long sid = readVoocSid();
-        if (sid == 0x650A0013L) { // OnePlus 13 100W NA adapter, Type-C / 12A path
+        // OnePlus 12R / Ace 3 (aston/astonc) stock SuperVOOC brick — measured
+        // live on astonc: vooc_sid=0x69006413, fast_chg_type/adapter_id=105.
+        if (sid == 0x69006413L) {
             return 100;
         }
-        // TODO: add the 80W-class sid (Type-A / 10A cable session) once captured.
+        // OnePlus 13 (dodge) 100W NA adapter, Type-C / 12A path
+        if (sid == 0x650A0013L) {
+            return 100;
+        }
+        // TODO: add 80W-class sids (Type-A / 10A cable sessions) once captured.
         // Unknown sid but SuperVOOC protocol active: fall back to class rating.
-        if (readUsbSupplyInt(FAST_CHG_TYPE_PATH) == 101) {
+        // Protocol id is device-family specific (105 aston, 101 dodge) — not
+        // wattage. vooc_sid >>> 24 equals this type on both families.
+        int type = readUsbSupplyInt(FAST_CHG_TYPE_PATH);
+        if (type == 105 || type == 101) {
             return 100;
         }
         return 0;
