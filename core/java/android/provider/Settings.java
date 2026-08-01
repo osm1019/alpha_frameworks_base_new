@@ -16039,9 +16039,52 @@ public final class Settings {
         public static final String SPOOF_PIF_CONFIG = "spoof_pif_config";
 
         /**
+         * Per-apps device spoofing
          * @hide
          */
-        public static final String SPOOF_PIF_PHOTOS = "spoof_pif_photos";
+        public static final String PER_APPS_DEVICE_SPOOF = "per_apps_device_spoof";
+
+        /**
+         * Custom device spoof profiles for per-app spoofing
+         * @hide
+         */
+        public static final String CUSTOM_SPOOF_PROFILES = "custom_spoof_profiles";
+
+        /**
+         * @hide
+         */
+        public static final String PER_APPS_DEVICE_SPOOF_ENABLED = "per_apps_device_spoof_enabled";
+
+        /**
+         * @hide
+         */
+        public static final String PER_APPS_DEVICE_SPOOF_CACHE = "per_apps_device_spoof_cache";
+
+        /**
+         * Whether to use PixelProps spoof for google apps
+         * @hide
+         */
+        public static final String PI_PP_SPOOF = "pi_pp_spoof";
+
+        /**
+         * Whether to use Tensor spoof for google apps
+         * @hide
+         */
+        public static final String PI_TENSOR_SPOOF = "pi_tensor_spoof";
+
+        /**
+         * Whether to use spoof for photos
+         * @hide
+         */
+        public static final String PI_PHOTOS_SPOOF = "pi_photos_spoof";
+
+        /**
+         * Whether to use spoof for snapchat
+         * @hide
+         */
+        public static final String PI_SNAPCHAT_SPOOF = "pi_snapchat_spoof";
+
+
 
         /**
          * @hide

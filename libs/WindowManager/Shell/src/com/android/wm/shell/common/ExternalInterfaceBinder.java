@@ -57,7 +57,8 @@ public interface ExternalInterfaceBinder {
         
         final RemoteCallable<T> controller = controllerInstance;
 
-        if (!com.android.internal.util.alpha.BypassUtils.isSystemLauncher(Binder.getCallingUid())) {
+        if (!com.android.internal.util.alpha.PixelPropsUtils.shouldBypassManageActivityTaskPermission(
+                controllerInstance.getContext())) {
             controllerInstance.getContext().enforceCallingPermission(
                     Manifest.permission.MANAGE_ACTIVITY_TASKS, log);
         }

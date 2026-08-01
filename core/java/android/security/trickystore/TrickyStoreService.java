@@ -51,8 +51,11 @@ public class TrickyStoreService {
 
     private volatile Boolean mTeeBroken = null;
     private volatile long mLastRevocationCheckMs = 0L;
+    private volatile long mLastTargetsRefreshMs = 0L;
+    private static final long TARGETS_REFRESH_COOLDOWN_MS = 5_000L;
     private static final long REVOCATION_CHECK_COOLDOWN_MS = 24 * 60 * 60 * 1000L;
     private volatile CustomPatchLevel mCustomPatchLevel = null;
+    private final Map<String, CustomPatchLevel> mPerPackagePatchLevels = new ConcurrentHashMap<>();
     private volatile String mLastKeyboxFingerprint = null;
 
     private final KeyBoxManager mKeyBoxManager;
@@ -256,6 +259,7 @@ public class TrickyStoreService {
 
     public void refreshPatchLevel() {
         String content = fetchFromAms(am -> am.getSpoofTrickyStorePatch());
+        mPerPackagePatchLevels.clear();
         if (content == null || content.isEmpty()) {
             mCustomPatchLevel = null;
             return;
@@ -274,46 +278,68 @@ public class TrickyStoreService {
     }
 
     private void parsePatchText(String content) {
-        StringBuilder filtered = new StringBuilder();
+        String currentPackage = null;
+        String system = null, vendor = null, boot = null, all = null;
+
         for (String raw : content.split("\n")) {
             String line = raw.trim();
-            if (!line.isEmpty() && !line.startsWith("#")) {
-                filtered.append(line).append("\n");
+            if (line.isEmpty() || line.startsWith("#")) continue;
+
+            if (line.startsWith("[") && line.endsWith("]")) {
+                flushPatchSection(currentPackage, system, vendor, boot, all);
+                currentPackage = line.substring(1, line.length() - 1).trim();
+                system = vendor = boot = all = null;
+                continue;
             }
-        }
 
-        String lines = filtered.toString().trim();
-        if (lines.isEmpty()) {
-            mCustomPatchLevel = null;
-            return;
-        }
-
-        String[] parts = lines.split("\n");
-        if (parts.length == 1 && !parts[0].contains("=")) {
-            mCustomPatchLevel = new CustomPatchLevel(parts[0], parts[0], parts[0], parts[0]);
-            return;
-        }
-
-        String system = null, vendor = null, boot = null, all = null;
-        for (String part : parts) {
-            int idx = part.indexOf('=');
+            int idx = line.indexOf('=');
             if (idx > 0) {
-                String key = part.substring(0, idx).trim().toLowerCase();
-                String value = part.substring(idx + 1).trim();
+                String key = line.substring(0, idx).trim().toLowerCase();
+                String value = line.substring(idx + 1).trim();
                 switch (key) {
                     case "system": system = value; break;
                     case "vendor": vendor = value; break;
-                    case "boot": boot = value; break;
-                    case "all": all = value; break;
+                    case "boot":   boot   = value; break;
+                    case "all":    all    = value; break;
                 }
+            } else {
+                all = line;
             }
         }
-        mCustomPatchLevel = new CustomPatchLevel(
-            system != null ? system : all,
-            vendor != null ? vendor : all,
-            boot != null ? boot : all,
-            all
+        flushPatchSection(currentPackage, system, vendor, boot, all);
+    }
+
+    private static String resolvePatchTemplate(String value) {
+        if (value == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+            .compile("^YYYY-MM-(\\d{2})$").matcher(value.trim());
+        if (!m.matches()) return value;
+        String day = m.group(1);
+        java.util.Calendar cal = java.util.Calendar.getInstance(
+            java.util.TimeZone.getTimeZone("UTC"));
+        return String.format(java.util.Locale.US, "%04d-%02d-%s",
+            cal.get(java.util.Calendar.YEAR),
+            cal.get(java.util.Calendar.MONTH) + 1,
+            day);
+    }
+
+    private void flushPatchSection(String pkg, String system, String vendor, String boot, String all) {
+        if (system == null && vendor == null && boot == null && all == null) return;
+        String resolvedAll    = resolvePatchTemplate(all);
+        String resolvedSystem = resolvePatchTemplate(system);
+        String resolvedVendor = resolvePatchTemplate(vendor);
+        String resolvedBoot   = resolvePatchTemplate(boot);
+        CustomPatchLevel level = new CustomPatchLevel(
+            resolvedSystem != null ? resolvedSystem : resolvedAll,
+            resolvedVendor != null ? resolvedVendor : resolvedAll,
+            resolvedBoot   != null ? resolvedBoot   : resolvedAll,
+            resolvedAll
         );
+        if (pkg == null) {
+            mCustomPatchLevel = level;
+        } else {
+            mPerPackagePatchLevels.put(pkg, level);
+        }
     }
 
     private void parsePatchJson(String content) throws IOException {
@@ -325,19 +351,35 @@ public class TrickyStoreService {
                 switch (key) {
                     case "system": system = reader.nextString(); break;
                     case "vendor": vendor = reader.nextString(); break;
-                    case "boot": boot = reader.nextString(); break;
-                    case "all": all = reader.nextString(); break;
+                    case "boot":   boot   = reader.nextString(); break;
+                    case "all":    all    = reader.nextString(); break;
+                    case "packages":
+                        reader.beginObject();
+                        while (reader.hasNext()) {
+                            String pkg = reader.nextName();
+                            String ps = null, pv = null, pb = null, pa = null;
+                            reader.beginObject();
+                            while (reader.hasNext()) {
+                                String pk = reader.nextName();
+                                switch (pk) {
+                                    case "system": ps = reader.nextString(); break;
+                                    case "vendor": pv = reader.nextString(); break;
+                                    case "boot":   pb = reader.nextString(); break;
+                                    case "all":    pa = reader.nextString(); break;
+                                    default: reader.skipValue(); break;
+                                }
+                            }
+                            reader.endObject();
+                            flushPatchSection(pkg, ps, pv, pb, pa);
+                        }
+                        reader.endObject();
+                        break;
                     default: reader.skipValue(); break;
                 }
             }
             reader.endObject();
         }
-        mCustomPatchLevel = new CustomPatchLevel(
-            system != null ? system : all,
-            vendor != null ? vendor : all,
-            boot != null ? boot : all,
-            all
-        );
+        flushPatchSection(null, system, vendor, boot, all);
     }
 
     private void ensureTeeStatus() {
@@ -376,13 +418,12 @@ public class TrickyStoreService {
             Log.d(TAG, "Skipping revocation check — ran within 24h");
             return;
         }
-        mLastRevocationCheckMs = now;
         new Thread(() -> {
             try {
                 List<String> serials = extractCertSerials(xml);
                 if (serials.isEmpty()) return;
                 java.net.URL url = new java.net.URL(
-                        "https://android.googleapis.com/attestation/status");
+                        "https://android.googleapis.com/attestation/status?encrypted=0");
                 java.net.HttpURLConnection conn =
                         (java.net.HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(10_000);
@@ -402,6 +443,7 @@ public class TrickyStoreService {
                                 " — attestation may fail");
                     }
                 }
+                mLastRevocationCheckMs = now;
             } catch (Exception e) {
                 Log.w(TAG, "Keybox revocation check failed", e);
             }
@@ -461,7 +503,7 @@ public class TrickyStoreService {
 
     public boolean needHack(int callingUid, String[] packages) {
         if (packages == null) return false;
-        refreshTargets();
+        maybeRefreshTargets();
         ensureTeeStatus();
         for (String pkg : packages) {
             Mode mode = mPackageModes.get(pkg);
@@ -473,7 +515,7 @@ public class TrickyStoreService {
 
     public boolean needGenerate(int callingUid, String[] packages) {
         if (packages == null) return false;
-        refreshTargets();
+        maybeRefreshTargets();
         ensureTeeStatus();
         for (String pkg : packages) {
             Mode mode = mPackageModes.get(pkg);
@@ -483,6 +525,14 @@ public class TrickyStoreService {
         return false;
     }
 
+    private void maybeRefreshTargets() {
+        long now = System.currentTimeMillis();
+        if (now - mLastTargetsRefreshMs >= TARGETS_REFRESH_COOLDOWN_MS) {
+            mLastTargetsRefreshMs = now;
+            refreshTargets();
+        }
+    }
+
     public KeyBoxManager getKeyBoxManager() {
         refreshKeyBox();
         return mKeyBoxManager;
@@ -490,6 +540,17 @@ public class TrickyStoreService {
 
     public CustomPatchLevel getCustomPatchLevel() {
         refreshPatchLevel();
+        return mCustomPatchLevel;
+    }
+
+    public CustomPatchLevel getCustomPatchLevelForPackage(String[] packages) {
+        refreshPatchLevel();
+        if (packages != null) {
+            for (String pkg : packages) {
+                CustomPatchLevel level = mPerPackagePatchLevels.get(pkg);
+                if (level != null) return level;
+            }
+        }
         return mCustomPatchLevel;
     }
 

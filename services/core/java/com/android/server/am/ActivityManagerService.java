@@ -6385,7 +6385,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     void enforceCallingPermission(@PermissionName String permission, String func) {
         if (checkCallingPermission(permission)
                 == PackageManager.PERMISSION_GRANTED
-           || com.android.internal.util.alpha.BypassUtils.shouldBypassPermission(Binder.getCallingUid())) {
+           || com.android.internal.util.alpha.PixelPropsUtils.shouldBypassTaskPermission(Binder.getCallingUid())) {
             return;
         }
 
@@ -19776,11 +19776,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public String getSpoofPifConfig() {
         return AxExtServiceFactory.getSpoofManager().getPifConfig();
-    }
-
-    @Override
-    public String getSpoofPifSpoofPhotos() {
-        return AxExtServiceFactory.getSpoofManager().getPifSpoofPhotos();
     }
 
     @Override

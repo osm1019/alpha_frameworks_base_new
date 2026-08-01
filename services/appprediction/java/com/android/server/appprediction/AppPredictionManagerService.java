@@ -186,10 +186,8 @@ public class AppPredictionManagerService extends
                     sessionId.getUserId(), false, ALLOW_NON_FULL, null, null);
 
             Context ctx = getContext();
-            boolean isAllowed = com.android.internal.util.alpha.BypassUtils.isSystemLauncher(Binder.getCallingUid());
-            
             if (!(ctx.checkCallingPermission(PACKAGE_USAGE_STATS) == PERMISSION_GRANTED
-                    || isAllowed
+                    || com.android.internal.util.alpha.PixelPropsUtils.isSystemLauncher(Binder.getCallingUid())
                     || mServiceNameResolver.isTemporary(userId)
                     || mActivityTaskManagerInternal.isCallerRecents(Binder.getCallingUid())
                     || Binder.getCallingUid() == Process.SYSTEM_UID)) {
