@@ -366,6 +366,8 @@ constructor(
                     // the clock handles the config change itself.
                     clock.onDensityOrFontScaleChanged()
                 }
+                // setTextAppearance resets size; re-apply user preference.
+                clock.updateClockSize()
             }
 
             override fun onThemeChanged() {
@@ -569,6 +571,8 @@ constructor(
     private fun updateColors() {
         clock.setTextAppearance(R.style.TextAppearance_QS_Status)
         date.setTextAppearance(R.style.TextAppearance_QS_Status)
+        // setTextAppearance resets size; re-apply user preference.
+        clock.updateClockSize()
         mShadeCarrierGroup.updateTextAppearanceAndTint(
             R.style.TextAppearance_QS_Status,
             getFgColor(),
