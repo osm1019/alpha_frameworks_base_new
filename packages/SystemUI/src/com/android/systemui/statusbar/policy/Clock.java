@@ -49,7 +49,6 @@ import android.widget.TextView;
 import com.android.settingslib.Utils;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.Dependency;
-import com.android.systemui.FontSizeUtils;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.demomode.DemoModeCommandReceiver;
 import com.android.systemui.plugins.DarkIconDispatcher;
@@ -97,6 +96,15 @@ public class Clock extends TextView implements
             "system:" + Settings.System.STATUS_BAR_CLOCK_DATE_POSITION;
     public static final String STATUS_BAR_CLOCK_DATE_FORMAT =
             "system:" + Settings.System.STATUS_BAR_CLOCK_DATE_FORMAT;
+    public static final String STATUS_BAR_CLOCK_SIZE =
+            "system:" + Settings.System.STATUS_BAR_CLOCK_SIZE;
+    public static final String QS_HEADER_CLOCK_SIZE =
+            "system:" + Settings.System.QS_HEADER_CLOCK_SIZE;
+
+    private static final int DEFAULT_CLOCK_SIZE = 14;
+
+    private int mClockSize = DEFAULT_CLOCK_SIZE;
+    private int mClockSizeQsHeader = DEFAULT_CLOCK_SIZE;
 
     private final UserTracker mUserTracker;
     private final CommandQueue mCommandQueue;
@@ -249,7 +257,9 @@ public class Clock extends TextView implements
                     STATUS_BAR_CLOCK_DATE_DISPLAY,
                     STATUS_BAR_CLOCK_DATE_STYLE,
                     STATUS_BAR_CLOCK_DATE_POSITION,
-                    STATUS_BAR_CLOCK_DATE_FORMAT);
+                    STATUS_BAR_CLOCK_DATE_FORMAT,
+                    STATUS_BAR_CLOCK_SIZE,
+                    QS_HEADER_CLOCK_SIZE);
             mCommandQueue.addCallback(this);
             mUserTracker.addCallback(mUserChangedCallback, mContext.getMainExecutor());
             mCurrentUserId = mUserTracker.getUserId();
@@ -266,6 +276,7 @@ public class Clock extends TextView implements
             updateClockVisibility();
         }
         updateShowSeconds();
+        updateClockSize();
     }
 
     @Override
@@ -405,6 +416,14 @@ public class Clock extends TextView implements
             case STATUS_BAR_CLOCK_DATE_FORMAT:
                 mClockDateFormat = newValue;
                 break;
+            case STATUS_BAR_CLOCK_SIZE:
+                mClockSize = TunerService.parseInteger(newValue, DEFAULT_CLOCK_SIZE);
+                updateClockSize();
+                return;
+            case QS_HEADER_CLOCK_SIZE:
+                mClockSizeQsHeader = TunerService.parseInteger(newValue, DEFAULT_CLOCK_SIZE);
+                updateClockSize();
+                return;
             default:
                 break;
         }
@@ -461,7 +480,8 @@ public class Clock extends TextView implements
     }
 
     private void reloadDimens() {
-        FontSizeUtils.updateFontSize(this, R.dimen.status_bar_clock_size);
+        // Prefer user-selected size over the default dimen.
+        updateClockSize();
 
         // Note: The padding for the clock in the shade is controlled by ShadeHeaderController so
         // this just affects the status bar clock.
@@ -475,6 +495,16 @@ public class Clock extends TextView implements
                         isLeftClock ? R.dimen.status_bar_left_clock_end_padding
                                 : R.dimen.status_bar_clock_end_padding),
                 0);
+    }
+
+    /**
+     * Apply the user-selected clock font size (sp). Status bar clocks use
+     * {@link Settings.System#STATUS_BAR_CLOCK_SIZE}; QS header clocks use
+     * {@link Settings.System#QS_HEADER_CLOCK_SIZE}.
+     */
+    public void updateClockSize() {
+        final int sizeSp = mIsStatusBar ? mClockSize : mClockSizeQsHeader;
+        setTextSize(sizeSp);
     }
 
 
