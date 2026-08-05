@@ -366,9 +366,25 @@ public class SliderPreference extends Preference {
         } else {
             mSlider.setStateDescription(null);
         }
-        mSlider.setValueFrom(mMin);
-        mSlider.setValueTo(mMax);
-        mSlider.setValue(mSliderValue);
+        // Material Slider requires valueFrom < valueTo and throws IllegalStateException on
+        // layout if the range is empty (e.g. both 0). Clamp so a stale/bad max never crashes.
+        int min = mMin;
+        int max = mMax;
+        if (max <= min) {
+            Log.w(TAG, "Invalid slider range min=" + min + " max=" + max
+                    + " key=" + getKey() + "; clamping max to min+1");
+            max = min + 1;
+            mMax = max;
+        }
+        int value = mSliderValue;
+        if (value < min) {
+            value = min;
+        } else if (value > max) {
+            value = max;
+        }
+        mSlider.setValueFrom(min);
+        mSlider.setValueTo(max);
+        mSlider.setValue(value);
         mSlider.clearOnSliderTouchListeners();
         mSlider.addOnSliderTouchListener(mTouchListener);
         mSlider.clearOnChangeListeners();
@@ -438,8 +454,9 @@ public class SliderPreference extends Preference {
      * @param min The lower bound to set
      */
     public void setMin(int min) {
-        if (min > mMax) {
-            min = mMax;
+        // Keep a non-empty range: Material Slider requires valueFrom < valueTo.
+        if (min >= mMax) {
+            mMax = min + 1;
         }
         if (min != mMin) {
             mMin = min;
@@ -462,8 +479,10 @@ public class SliderPreference extends Preference {
      * @param max The upper bound to set
      */
     public final void setMax(int max) {
-        if (max < mMin) {
-            max = mMin;
+        // Keep a non-empty range: Material Slider requires valueFrom < valueTo.
+        // (Previously max < min was clamped to max == min, which still crashes on layout.)
+        if (max <= mMin) {
+            max = mMin + 1;
         }
         if (max != mMax) {
             mMax = max;
