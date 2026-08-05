@@ -98,6 +98,7 @@ import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.KeyguardBatteryInfo
+import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.res.R
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -119,18 +120,6 @@ private val MediaActionIconSize = 16.dp
 private val BatteryIconSize = ChipHeight - SpaceXxl
 private val CountBadgeHeight = ChipHeight / 2
 
-/**
- * Dark glass body for the keyguard media chip (Phase 1 redesign).
- * Full-fill accent was the old look; accent is reserved for the play control + progress.
- */
-private val MediaGlassBody = Color(0xCC1C1C1E) // ~80% alpha glass
-private val MediaGlassBorder = Color.White.copy(alpha = 0.10f)
-private val MediaOnGlass = Color.White
-private val MediaOnGlassSecondary = Color.White.copy(alpha = AlphaSecondary)
-private val MediaOnGlassHint = Color.White.copy(alpha = AlphaHint)
-private val MediaSkipBg = Color.White.copy(alpha = 0.12f)
-private val MediaProgressTrack = Color.White.copy(alpha = 0.18f)
-private val MediaProgressHeight = 2.dp
 /**
  * Cap on the track/artist lane while expanded so art + text + transport + badge fit the
  * chip's max width (260dp). Text ellipsizes inside this; collapse hides the lane entirely.
@@ -317,13 +306,13 @@ private fun KeyguardChipBody(
     }
 
     // Media: dark glass + accent play/progress. Other events keep full-fill accent body.
-    val bodyColor = if (isMedia) MediaGlassBody else accent
-    val onBody = if (isMedia) MediaOnGlass else contentColor
+    val bodyColor = if (isMedia) MediaChrome.GlassBody else accent
+    val onBody = if (isMedia) MediaChrome.OnGlass else contentColor
     val progressTrack =
-        if (isMedia) MediaProgressTrack else lerp(accent, contentColor, 0.2f)
+        if (isMedia) MediaChrome.ProgressTrack else lerp(accent, contentColor, 0.2f)
     val progressFill =
         if (isMedia) accent else lerp(accent, contentColor, 0.6f)
-    val progressBarH = if (isMedia) MediaProgressHeight else SizeStrokeWidth
+    val progressBarH = if (isMedia) MediaChrome.ProgressHeight else SizeStrokeWidth
 
     // Media needs room for art + text + 3 transport buttons + optional stack badge.
     val chipMaxWidth = if (isMedia) 280.dp else 260.dp
@@ -337,7 +326,7 @@ private fun KeyguardChipBody(
                 .background(bodyColor)
                 .then(
                     if (isMedia) {
-                        Modifier.border(1.dp, MediaGlassBorder, ChipShape)
+                        Modifier.border(1.dp, MediaChrome.GlassBorder, ChipShape)
                     } else {
                         Modifier
                     },
@@ -467,7 +456,7 @@ private fun KeyguardChipBody(
                         .height(CountBadgeHeight)
                         .widthIn(min = CountBadgeHeight)
                         .background(
-                            if (isMedia) MediaSkipBg
+                            if (isMedia) MediaChrome.SkipNeutral
                             else lerp(accent, contentColor, AlphaDisabled),
                             ShapeChip,
                         )
@@ -505,7 +494,7 @@ private fun RowScope.KeyguardMediaChipContent(
     // Play is solid art accent. Skip buttons use an opaque blend toward the same accent
     // (not a low-alpha overlay — that vanished on the dark glass and looked unthemed).
     val onAccent = chipContentColorOn(accent)
-    val skipBg = lerp(MediaGlassBody, accent, 0.55f)
+    val skipBg = MediaChrome.skipBackground(accent)
 
     // Idle collapse — same delay as cutout center. Key is track|artist only (not isPlaying).
     val contentKey = remember(event.track, event.artist) { "${event.track}|${event.artist}" }
@@ -562,7 +551,7 @@ private fun RowScope.KeyguardMediaChipContent(
                 contentScale = ContentScale.Crop,
             )
         } else {
-            PillEventIcon(event, tint = MediaOnGlass)
+            PillEventIcon(event, tint = MediaChrome.OnGlass)
         }
     }
 
@@ -610,7 +599,7 @@ private fun RowScope.KeyguardMediaChipContent(
                         Text(
                             ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
                             style = PillPrimary,
-                            color = MediaOnGlass,
+                            color = MediaChrome.OnGlass,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
@@ -620,12 +609,12 @@ private fun RowScope.KeyguardMediaChipContent(
                         Text(
                             " · ",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MediaOnGlassHint,
+                            color = MediaChrome.OnGlassHint,
                         )
                         Text(
                             ev.artist,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MediaOnGlassSecondary,
+                            color = MediaChrome.OnGlassSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 48.dp),
@@ -635,7 +624,7 @@ private fun RowScope.KeyguardMediaChipContent(
                     Text(
                         ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
                         style = PillPrimary,
-                        color = MediaOnGlass,
+                        color = MediaChrome.OnGlass,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier

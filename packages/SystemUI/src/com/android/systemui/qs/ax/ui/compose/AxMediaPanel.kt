@@ -44,6 +44,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.indication
@@ -120,6 +121,7 @@ import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.common.ui.compose.PagerDots
+import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
@@ -202,7 +204,12 @@ fun AxMediaPanel(
         return
     }
 
-    val shape = axQsControlShape(AxQsControl.MEDIA, span)
+    val shape =
+        if (surface == AxMediaSurface.LOCKSCREEN) {
+            RoundedCornerShape(MediaChrome.LockscreenCornerRadius)
+        } else {
+            axQsControlShape(AxQsControl.MEDIA, span)
+        }
     val gesturesEnabled = !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
@@ -302,15 +309,23 @@ private fun AxMediaCard(
 ) {
     val title = session?.title ?: stringResource(R.string.ax_qs_media_not_playing)
     val subtitle = session?.subtitle.orEmpty()
-    val shape = axQsControlShape(AxQsControl.MEDIA, span)
+    val isLockscreen = surface == AxMediaSurface.LOCKSCREEN
+    val shape =
+        if (isLockscreen) {
+            RoundedCornerShape(MediaChrome.LockscreenCornerRadius)
+        } else {
+            axQsControlShape(AxQsControl.MEDIA, span)
+        }
     val layout =
         when {
+            isLockscreen -> AxMediaLayout.Lockscreen
             span.rows == 1 -> AxMediaLayout.OneRow
             span.columns >= 3 -> AxMediaLayout.Expanded
             else -> AxMediaLayout.Compact
         }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
-    val artwork = session?.background?.takeIf { span.columns > 1 }
+    // Lockscreen draws its own art thumbnail; full-bleed wash is optional under glass.
+    val artwork = session?.background?.takeIf { isLockscreen || span.columns > 1 }
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
@@ -320,6 +335,7 @@ private fun AxMediaCard(
             targetValue =
                 when {
                     artwork != null && !gutsVisible -> Color.Transparent
+                    isLockscreen && session != null -> MediaChrome.GlassBody
                     session != null -> mediaBackground
                     else -> tileBackground
                 },
@@ -347,7 +363,12 @@ private fun AxMediaCard(
         )
     val foreground by
         animateColorAsState(
-            targetValue = if (session != null) Color.White else tileForeground,
+            targetValue =
+                if (session != null) {
+                    if (isLockscreen) MediaChrome.OnGlass else Color.White
+                } else {
+                    tileForeground
+                },
             label = "AxMediaForeground",
         )
     val animatedMediaBackground by
@@ -372,6 +393,16 @@ private fun AxMediaCard(
         } else {
             null
         }
+    val cardModifier =
+        if (isLockscreen && session != null) {
+            modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(background)
+                .border(1.dp, MediaChrome.GlassBorder, shape)
+        } else {
+            modifier.fillMaxSize().clip(shape)
+        }
     ExpandableContainer(
         // Empty cards paint their own styled fill; keep expandable transparent so the style
         // wrapper is the sole chrome. Session cards keep media/artwork colors for the morph.
@@ -380,7 +411,7 @@ private fun AxMediaCard(
                 color = { if (session == null) Color.Transparent else background },
                 shape = shape,
             ),
-        modifier = modifier.fillMaxSize().clip(shape),
+        modifier = cardModifier,
         onClick = null,
         onClickLabel = null,
         defaultMinSize = false,
@@ -439,8 +470,17 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        if (session != null) {
-                            MediaArtwork(artwork = artwork, overlayColor = colors.background)
+                        // QS: full-bleed art. Lockscreen: soft wash under glass for depth (#7).
+                        if (session != null && artwork != null) {
+                            if (isLockscreen) {
+                                MediaArtwork(
+                                    artwork = artwork,
+                                    overlayColor = MediaChrome.GlassBody,
+                                    washAlpha = 0.68f,
+                                )
+                            } else {
+                                MediaArtwork(artwork = artwork, overlayColor = colors.background)
+                            }
                         }
                         AnimatedContent(
                             targetState = layout,
@@ -486,6 +526,15 @@ private fun AxMediaCard(
                                         colors = colors,
                                         interactive = interactive,
                                     )
+                                AxMediaLayout.Lockscreen ->
+                                    LockscreenMediaContent(
+                                        session = session,
+                                        title = title,
+                                        subtitle = subtitle,
+                                        viewModel = viewModel,
+                                        colors = colors,
+                                        interactive = interactive,
+                                    )
                             }
                         }
                     }
@@ -496,7 +545,12 @@ private fun AxMediaCard(
 }
 
 @Composable
-private fun MediaArtwork(artwork: IconModel?, overlayColor: Color) {
+private fun MediaArtwork(
+    artwork: IconModel?,
+    overlayColor: Color,
+    /** Higher = more overlay (glass wash). QS uses the default radial mask. */
+    washAlpha: Float = 0.65f,
+) {
     Crossfade(targetState = artwork, label = "AxMediaArtwork", modifier = Modifier.fillMaxSize()) {
         currentArtwork ->
         val modifier =
@@ -505,8 +559,8 @@ private fun MediaArtwork(artwork: IconModel?, overlayColor: Color) {
                 drawRect(
                     brush =
                         Brush.radialGradient(
-                            0f to overlayColor.copy(alpha = 0.65f),
-                            1f to overlayColor.copy(alpha = 0.75f),
+                            0f to overlayColor.copy(alpha = washAlpha),
+                            1f to overlayColor.copy(alpha = (washAlpha + 0.1f).coerceAtMost(0.95f)),
                             center = center,
                             radius = max(size.width, size.height) / 2f,
                         )
@@ -525,6 +579,190 @@ private fun MediaArtwork(artwork: IconModel?, overlayColor: Color) {
             }
             is IconModel.Resource ->
                 Icon(icon = currentArtwork, tint = Color.Unspecified, modifier = modifier)
+        }
+    }
+}
+
+/**
+ * Lockscreen card: app icon + output chip above, title with the accent play control, and a
+ * transport row where the seek bar sits between its elapsed / total labels and the extra session
+ * actions. Element layout follows the Axion 2.8 card; chrome stays ours ([MediaChrome] glass,
+ * accent play, tonal skips), and the art is full-bleed under the glass wash rather than a
+ * thumbnail.
+ */
+@Composable
+private fun LockscreenMediaContent(
+    session: MediaSessionModel?,
+    title: String,
+    subtitle: String,
+    viewModel: AxMediaViewModel,
+    colors: AxMediaColors,
+    interactive: Boolean,
+) {
+    val playPauseCornerRadius by
+        animateDpAsState(
+            targetValue = if (session?.state == MediaSessionState.Playing) 16.dp else 28.dp,
+            label = "AxLockscreenMediaPlayPauseCornerRadius",
+        )
+    val playPauseShape = RoundedCornerShape(playPauseCornerRadius)
+    val showCoreActions =
+        session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
+    val skipBg = MediaChrome.skipBackground(colors.primary)
+    val outputLabel =
+        session?.outputDevice?.name?.takeUnless { it.isBlank() || it == "null" }
+            ?: stringResource(R.string.ax_dynamic_bar_media_output)
+    val progress = session?.let(viewModel::progress) ?: 0f
+    val durationMs = session?.durationMs ?: 0L
+    val hasDuration = durationMs > 0L
+    val elapsedLabel =
+        if (hasDuration) DateUtils.formatElapsedTime((progress * durationMs).toLong() / 1000L)
+        else ""
+    val totalLabel = if (hasDuration) DateUtils.formatElapsedTime(durationMs / 1000L) else ""
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Extra actions only earn their place once the seek bar still has room to be scrubbable.
+        val cardWidth = maxWidth
+        val transportWidth = cardWidth - 24.dp
+        val extraActionCapacity =
+            ((transportWidth - ExpandedMediaMinSeekWidth - 88.dp) / 40.dp).toInt().coerceIn(0, 2)
+        val additionalActions = session?.additionalActions.orEmpty().take(extraActionCapacity)
+
+        // Height budget: qs_media_session_height_expanded = 184dp.
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Box(Modifier.fillMaxWidth()) {
+                MediaAppIcon(
+                    session = session,
+                    size = 24.dp,
+                    tint = colors.primary,
+                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp),
+                )
+                MediaOutputChip(
+                    session = session,
+                    viewModel = viewModel,
+                    colors = colors,
+                    interactive = interactive,
+                    showLabel = true,
+                    label = outputLabel,
+                    compact = false,
+                    modifier = Modifier.align(Alignment.CenterEnd).widthIn(max = cardWidth * 0.5f),
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            Row(
+                // Pinned so the row cannot grow with the font scale: the title and subtitle are
+                // single-line, but two stacked lines can still outgrow the play control at 2x and
+                // push the transport past the fixed card height.
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 8.dp)) {
+                    AnimatedMediaText(
+                        text = title,
+                        color = colors.foreground,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                    )
+                    if (subtitle.isNotEmpty()) {
+                        AnimatedMediaText(
+                            text = subtitle,
+                            color = MediaChrome.OnGlassSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                if (showCoreActions) {
+                    CoreMediaAction(
+                        action = session?.playPauseAction,
+                        imageVector = playPauseIcon(session),
+                        descriptionRes = playPauseDescription(session),
+                        animatedIconRes = R.drawable.ic_media_play_button,
+                        animatedIconAtEnd = session?.state == MediaSessionState.Playing,
+                        viewModel = viewModel,
+                        width = 72.dp,
+                        height = 48.dp,
+                        iconSize = 26.dp,
+                        tint = colors.onPrimary,
+                        background = colors.primary,
+                        shape = playPauseShape,
+                        interactive = interactive,
+                    )
+                }
+            }
+
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showCoreActions) {
+                        CoreMediaAction(
+                            action = session?.leftAction,
+                            imageVector = Icons.Filled.SkipPrevious,
+                            descriptionRes = R.string.controls_media_button_prev,
+                            viewModel = viewModel,
+                            width = 40.dp,
+                            height = 40.dp,
+                            iconSize = 22.dp,
+                            tint = MediaChrome.OnGlass,
+                            background = skipBg,
+                            shape = CircleShape,
+                            interactive = interactive,
+                        )
+                    }
+                    if (hasDuration) {
+                        Text(
+                            text = elapsedLabel,
+                            color = MediaChrome.OnGlassSecondary,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                    }
+                    MediaSeekBar(
+                        session = session,
+                        viewModel = viewModel,
+                        colors = colors,
+                        dense = true,
+                        interactive = interactive,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (hasDuration) {
+                        Text(
+                            text = totalLabel,
+                            color = MediaChrome.OnGlassHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                        )
+                    }
+                    if (showCoreActions) {
+                        CoreMediaAction(
+                            action = session?.rightAction,
+                            imageVector = Icons.Filled.SkipNext,
+                            descriptionRes = R.string.controls_media_button_next,
+                            viewModel = viewModel,
+                            width = 40.dp,
+                            height = 40.dp,
+                            iconSize = 22.dp,
+                            tint = MediaChrome.OnGlass,
+                            background = skipBg,
+                            shape = CircleShape,
+                            interactive = interactive,
+                        )
+                    }
+                    additionalActions.forEach { action ->
+                        MediaAction(
+                            action = action,
+                            viewModel = viewModel,
+                            width = 36.dp,
+                            height = 36.dp,
+                            iconSize = 20.dp,
+                            tint = MediaChrome.OnGlassSecondary,
+                            interactive = interactive,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1207,12 +1445,13 @@ private fun MediaSeekBar(
                 }
                 seekBar.isEnabled = interactive && session?.canBeScrubbed == true
                 seekBar.contentDescription = seekDescription
-                val foreground = colors.foreground.toArgb()
-                seekBar.setMediaColor(foreground)
-                seekBar.thumbTintList = ColorStateList.valueOf(foreground)
-                seekBar.progressTintList = ColorStateList.valueOf(foreground)
-                seekBar.progressBackgroundTintList =
-                    ColorStateList.valueOf(colors.foreground.copy(alpha = 0.3f).toArgb())
+                // Progress uses art accent (Phase 1/2 language); track stays on-glass neutral.
+                val progressColor = colors.primary.toArgb()
+                val trackColor = MediaChrome.ProgressTrack.toArgb()
+                seekBar.setMediaColor(progressColor)
+                seekBar.thumbTintList = ColorStateList.valueOf(progressColor)
+                seekBar.progressTintList = ColorStateList.valueOf(progressColor)
+                seekBar.progressBackgroundTintList = ColorStateList.valueOf(trackColor)
                 val playing = session?.state == MediaSessionState.Playing && !seekBar.isPressed
                 val animate = playing && squiggleAnimationEnabled
                 (seekBar.progressDrawable as? SquigglyProgress)?.animate = animate
@@ -1458,6 +1697,8 @@ private enum class AxMediaLayout {
     OneRow,
     Compact,
     Expanded,
+    /** Full-width keyguard card — glass chrome (Phase 2). */
+    Lockscreen,
 }
 
 private val ExpandedMediaMinSeekWidth = 40.dp
