@@ -26,6 +26,11 @@
     <dimen name="qs_brightness_margin_bottom">12dp</dimen>
     <dimen name="qqs_layout_margin_top">8dp</dimen>
 
+    <!-- The ax panel splits its own width again into a controls grid and a tile grid, so an even
+         split would leave each of them at a quarter of the screen while the notification stack
+         keeps a half. Give QS two thirds so all three visible columns are about equal. -->
+    <item name="split_shade_qs_fraction" type="dimen" format="float">0.6667</item>
+
     <!--  In landscape the security footer is actually part of the header,
     and needs to be as short as the header  -->
     <dimen name="qs_footer_padding">14dp</dimen>

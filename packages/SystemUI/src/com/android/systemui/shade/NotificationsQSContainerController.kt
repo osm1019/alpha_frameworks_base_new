@@ -83,6 +83,7 @@ constructor(
     private var bottomCutoutInsets = 0
     private var panelMarginHorizontal = 0
     private var topMargin = 0
+    private var splitShadeQsFraction = 0.5f
 
     private var isGestureNavigation = true
     private var taskbarVisible = false
@@ -162,6 +163,7 @@ constructor(
         shadeHeaderHeight = calculateShadeHeaderHeight()
         panelMarginHorizontal =
             resources.getDimensionPixelSize(R.dimen.notification_panel_margin_horizontal)
+        splitShadeQsFraction = resources.getFloat(R.dimen.split_shade_qs_fraction)
         topMargin =
             if (largeScreenShadeHeaderActive) {
                 largeScreenShadeHeaderHeight
@@ -292,6 +294,7 @@ constructor(
     private fun setQsConstraints(constraintSet: ConstraintSet) {
         val endConstraintId = if (splitShadeEnabled) R.id.qs_edge_guideline else PARENT_ID
         constraintSet.apply {
+            setGuidelinePercent(R.id.qs_edge_guideline, splitShadeQsFraction)
             connect(R.id.qs_frame, END, endConstraintId, END)
             setMargin(R.id.qs_frame, START, if (splitShadeEnabled) 0 else panelMarginHorizontal)
             setMargin(R.id.qs_frame, END, if (splitShadeEnabled) 0 else panelMarginHorizontal)

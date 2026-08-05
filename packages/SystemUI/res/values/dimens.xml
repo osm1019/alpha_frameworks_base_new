@@ -645,6 +645,11 @@
 
     <dimen name="split_shade_notifications_scrim_margin_bottom">0dp</dimen>
 
+    <!-- Fraction of the shade width given to Quick Settings when the split shade is used. The
+         notification stack takes the remainder. Drives both the qs_frame guideline and the
+         notification stack guideline, which must stay in sync. -->
+    <item name="split_shade_qs_fraction" type="dimen" format="float">0.5</item>
+
     <dimen name="shelf_and_lock_icon_overlap">@dimen/notification_shelf_height</dimen>
 
     <dimen name="notification_panel_margin_horizontal">0dp</dimen>

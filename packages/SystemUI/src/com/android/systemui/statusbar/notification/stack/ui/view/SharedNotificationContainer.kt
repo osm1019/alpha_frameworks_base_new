@@ -43,11 +43,19 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
 
     private val baseConstraintSet = ConstraintSet()
 
+    /**
+     * Where the stack meets Quick Settings in the split shade. Must match the qs_frame guideline in
+     * [com.android.systemui.shade.NotificationsQSContainerController], which reads the same
+     * resource, or the two panes overlap.
+     */
+    private val splitShadeQsFraction: Float
+        get() = resources.getFloat(R.dimen.split_shade_qs_fraction)
+
     init {
         optimizationLevel = optimizationLevel or Optimizer.OPTIMIZATION_GRAPH
         baseConstraintSet.apply {
             create(R.id.nssl_guideline, VERTICAL)
-            setGuidelinePercent(R.id.nssl_guideline, 0.5f)
+            setGuidelinePercent(R.id.nssl_guideline, splitShadeQsFraction)
         }
         baseConstraintSet.applyTo(this)
     }
@@ -79,17 +87,22 @@ class SharedNotificationContainer(context: Context, attrs: AttributeSet?) :
 
         val nsslId = R.id.notification_stack_scroller
         constraintSet.apply {
+            // Re-applied on every update: the base set is built once, but the fraction is
+            // orientation-dependent and this runs again on configuration changes.
+            setGuidelinePercent(R.id.nssl_guideline, splitShadeQsFraction)
             if (SceneContainerFlag.isEnabled) {
                 when (horizontalPosition) {
                     is EdgeToMiddle -> {
-                        setGuidelinePercent(R.id.nssl_guideline, /* ratio= */ 0.5f)
+                        // Mirrored case: the stack runs edge -> guideline, so it takes the share
+                        // QS does not.
+                        setGuidelinePercent(R.id.nssl_guideline, 1f - splitShadeQsFraction)
                         constrainMaxWidth(nsslId, horizontalPosition.maxWidth)
                         // Ensure START alignment in case the maxWidth is smaller than half the
                         // parent width.
                         constraintSet.setHorizontalBias(nsslId, /* bias= */ 0f)
                     }
                     is MiddleToEdge -> {
-                        setGuidelinePercent(R.id.nssl_guideline, /* ratio= */ 0.5f)
+                        setGuidelinePercent(R.id.nssl_guideline, splitShadeQsFraction)
                         constrainMaxWidth(nsslId, horizontalPosition.maxWidth)
                         // Ensure END alignment in case the maxWidth is smaller than half the
                         // parent width.
