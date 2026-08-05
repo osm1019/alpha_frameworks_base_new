@@ -120,6 +120,7 @@ import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.common.ui.compose.PagerDots
+import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.media.controls.ui.view.WaveformSeekBar
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
@@ -206,13 +207,24 @@ fun AxMediaPanel(
     val carouselScrollingEnabled =
         gesturesEnabled && (surface != AxMediaSurface.LOCKSCREEN || sessions.size > 1)
     var isFalseTouchDetected by remember(surface) { mutableStateOf(false) }
+    // "Pin media player" keeps inactive (resumable) cards around off the lockscreen, and those are
+    // only reachable if the carousel itself stays visible without an active card.
+    val keepsResumableCards =
+        viewModel.isMediaResumptionEnabled &&
+            surface != AxMediaSurface.LOCKSCREEN &&
+            sessions.isNotEmpty()
     val behavior =
-        remember(viewModel, surface, carouselScrollingEnabled) {
+        remember(viewModel, surface, carouselScrollingEnabled, keepsResumableCards) {
             MediaUiBehavior(
                 isCarouselDismissible = false,
                 isCarouselScrollingEnabled = carouselScrollingEnabled,
                 isSettingsRevealEnabled = false,
-                carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
+                carouselVisibility =
+                    if (keepsResumableCards) {
+                        MediaCarouselVisibility.WhenNotEmpty
+                    } else {
+                        MediaCarouselVisibility.WhenAnyCardIsActive
+                    },
                 isCarouselScrollFalseTouch =
                     if (surface == AxMediaSurface.LOCKSCREEN) {
                         null
@@ -1121,6 +1133,7 @@ private fun MediaSeekBar(
     modifier: Modifier = Modifier,
 ) {
     val height = if (dense) 20.dp else 32.dp
+    val squiggleAnimationEnabled = rememberSquiggleAnimationEnabled()
     val currentSession by rememberUpdatedState(session)
     val currentViewModel by rememberUpdatedState(viewModel)
     val progress = session?.let(viewModel::progress) ?: 0f
@@ -1201,8 +1214,9 @@ private fun MediaSeekBar(
                 seekBar.progressBackgroundTintList =
                     ColorStateList.valueOf(colors.foreground.copy(alpha = 0.3f).toArgb())
                 val playing = session?.state == MediaSessionState.Playing && !seekBar.isPressed
-                (seekBar.progressDrawable as? SquigglyProgress)?.animate = playing
-                seekBar.setWaveformPlaying(playing)
+                val animate = playing && squiggleAnimationEnabled
+                (seekBar.progressDrawable as? SquigglyProgress)?.animate = animate
+                seekBar.setWaveformPlaying(animate)
             },
             modifier = Modifier.fillMaxWidth().height(height),
         )

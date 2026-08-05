@@ -58,6 +58,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
+import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
@@ -310,6 +311,7 @@ private fun MediaSeekBar(
     accent: Color,
 ) {
     val mediaProgress = rememberMediaProgress(event)
+    val squiggleAnimationEnabled = rememberSquiggleAnimationEnabled()
     val isPlaying = event.isPlaying
     val durationMs = event.duration
     val positionMs = mediaProgress.positionMs
@@ -483,7 +485,7 @@ private fun MediaSeekBar(
                     squiggle?.apply {
                         setTint(accentArgb)
                         setAlpha(alpha)
-                        animate = isPlaying && !isScrubbing
+                        animate = isPlaying && !isScrubbing && squiggleAnimationEnabled
                     }
 
                     layer?.alpha = alpha

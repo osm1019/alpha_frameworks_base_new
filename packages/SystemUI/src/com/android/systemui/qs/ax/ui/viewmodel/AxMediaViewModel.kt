@@ -37,6 +37,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaFalsingSystem
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.qs.ax.data.repository.AxMediaHistoryRepository
+import com.android.systemui.qs.ax.data.repository.AxMediaSettingsRepository
 import com.android.systemui.qs.ax.ui.model.AxMediaSurface
 import javax.inject.Inject
 import kotlin.math.abs
@@ -51,6 +52,7 @@ constructor(
     private val falsingSystem: MediaFalsingSystem,
     private val mediaCarouselInteractor: MediaCarouselInteractor,
     private val mediaHistoryRepository: AxMediaHistoryRepository,
+    private val mediaSettingsRepository: AxMediaSettingsRepository,
     private val activityStarter: ActivityStarter,
     @Application private val applicationScope: CoroutineScope,
     @Main private val mainDispatcher: CoroutineDispatcher,
@@ -72,8 +74,21 @@ constructor(
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
     val lastMediaPackage = mediaHistoryRepository.lastMediaPackage
 
+    /**
+     * Whether "Pin media player" is on. Resumable cards are inactive by definition, so the setting
+     * decides both whether they are listed and whether the carousel stays visible for them.
+     */
+    var isMediaResumptionEnabled by
+        mutableStateOf(mediaSettingsRepository.isMediaResumptionEnabled.value)
+        private set
+
     init {
         mediaHistoryRepository.startListening()
+        applicationScope.launch(context = mainDispatcher) {
+            mediaSettingsRepository.isMediaResumptionEnabled.collect {
+                isMediaResumptionEnabled = it
+            }
+        }
     }
 
     fun synchronizeSession(sessionKey: Any?) {
@@ -86,7 +101,7 @@ constructor(
     }
 
     fun visibleSessions(surface: AxMediaSurface): List<MediaSessionModel> {
-        return activeSessions.filter { it.isVisibleOn(surface) }
+        return sessions.filter { it.isVisibleOn(surface) }
     }
 
     fun hasVisibleSessions(surface: AxMediaSurface): Boolean = visibleSessions(surface).isNotEmpty()
@@ -125,7 +140,7 @@ constructor(
         if (!surface.dismissible) return
         dismissedSessions =
             dismissedSessions +
-                (surface to activeSessions.mapTo(mutableSetOf()) { it.dismissToken() })
+                (surface to visibleSessions(surface).mapTo(mutableSetOf()) { it.dismissToken() })
         closeGuts()
     }
 
@@ -201,8 +216,16 @@ constructor(
 
     private fun MediaSessionModel.isDisplayable(): Boolean = isActive && title.isNotBlank()
 
+    /**
+     * A pinned (resumable) session is inactive but still worth showing off the lockscreen, where
+     * only live media belongs.
+     */
+    private fun MediaSessionModel.isResumable(): Boolean =
+        isMediaResumptionEnabled && !isActive && title.isNotBlank()
+
     private fun MediaSessionModel.isVisibleOn(surface: AxMediaSurface): Boolean {
-        return isDisplayable() &&
+        val shown = isDisplayable() || (surface != AxMediaSurface.LOCKSCREEN && isResumable())
+        return shown &&
             (!surface.dismissible || dismissToken() !in dismissedSessions[surface].orEmpty())
     }
 

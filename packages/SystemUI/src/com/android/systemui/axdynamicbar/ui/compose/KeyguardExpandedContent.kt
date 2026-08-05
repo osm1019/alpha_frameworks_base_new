@@ -97,6 +97,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
+import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import kotlinx.coroutines.delay
 
@@ -486,6 +487,7 @@ private fun KeyguardMediaSeekBar(
     accent: Color,
 ) {
     val mediaProgress = rememberMediaProgress(event)
+    val squiggleAnimationEnabled = rememberSquiggleAnimationEnabled()
     val isPlaying = event.isPlaying
     val durationMs = event.duration
     val positionMs = mediaProgress.positionMs
@@ -639,7 +641,7 @@ private fun KeyguardMediaSeekBar(
                 squiggle?.apply {
                     setTint(accentArgb)
                     setAlpha(alpha)
-                    animate = isPlaying && !isScrubbing
+                    animate = isPlaying && !isScrubbing && squiggleAnimationEnabled
                 }
 
                 layer?.alpha = alpha
