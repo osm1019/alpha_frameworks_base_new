@@ -296,8 +296,6 @@ constructor(
             scheduleAutoDismiss(it, if (it.isRinging) 30_000L else 5_000L)
         }
 
-        repository.media.onMediaSessionLost = { repository.media.clear() }
-
         repository.biometric.onBiometricUnlock = { scheduleAutoDismiss(it) }
 
         applicationScope.launch {
@@ -333,8 +331,7 @@ constructor(
             ) { mediaActive, panelExpanded, qsOpen ->
                 mediaActive && !panelExpanded && !qsOpen
             }.distinctUntilChanged().collect { needsPolling ->
-                if (needsPolling) repository.media.startProgressPolling()
-                else repository.media.stopProgressPolling()
+                repository.media.setProgressUpdatesEnabled(needsPolling)
             }
         }
 

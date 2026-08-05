@@ -39,7 +39,6 @@ import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
-import com.android.systemui.media.MediaSessionManager
 import com.android.systemui.media.NotificationMediaManager
 import com.android.systemui.media.controls.data.model.MediaSortKeyModel
 import com.android.systemui.media.controls.shared.model.MediaData
@@ -52,7 +51,6 @@ import com.android.systemui.res.R
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.time.SystemClock
 import java.util.TreeMap
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -121,13 +119,6 @@ constructor(
     private val positionPollers = mutableMapOf<InstanceId, Job>()
     private val mediaMutex = Mutex()
 
-    /**
-     * Per-session accent for the legacy [MediaSessionManager] hub (Dynamic Bar, Pulse, etc.).
-     * Matches historical [MediaControlPanel] publishing of accent1 S100 — remedia no longer
-     * instantiates that panel when [MediaControlsInComposeFlag] is on.
-     */
-    private val sessionHubAccentColors = ConcurrentHashMap<InstanceId, Int>()
-
     override fun addCurrentUserMediaEntry(data: MediaData): UpdateArtInfoModel? {
         return super.addCurrentUserMediaEntry(data).also { updateModel ->
             applicationScope.launch {
@@ -158,7 +149,6 @@ constructor(
         applicationScope.launch {
             mediaMutex.withLock {
                 userEntries.forEach { removeFromSortedMediaLocked(it.value) }
-                sessionHubAccentColors.clear()
             }
         }
     }
@@ -183,7 +173,6 @@ constructor(
             mediaMutex.withLock {
                 currentMedia.clear()
                 currentMedia.addAll(sortedMedia.values.toList())
-                publishPrimarySessionToLegacyHub()
             }
         }
         currentCarouselIndex = 0
@@ -253,7 +242,6 @@ constructor(
                 }
 
                 sortedMedia = sortedMap
-                publishPrimarySessionToLegacyHub()
             }
         }
     }
@@ -265,31 +253,7 @@ constructor(
             TreeMap<MediaSortKeyModel, MediaDataModel>(comparator).apply {
                 putAll(sortedMedia.filter { (_, model) -> model.instanceId != data.instanceId })
             }
-        sessionHubAccentColors.remove(data.instanceId)
         clearControllerState(data.instanceId)
-        publishPrimarySessionToLegacyHub()
-    }
-
-    /**
-     * Push the primary remedia session's art / accent / app icon into [MediaSessionManager] so
-     * listeners that still depend on the legacy hub (Dynamic Bar [MediaIslandManager], Pulse)
-     * keep working when the stock media panel is not bound.
-     *
-     * Must be called while [mediaMutex] is held (or immediately after [currentMedia] is stable).
-     */
-    @GuardedBy("mediaMutex")
-    private fun publishPrimarySessionToLegacyHub() {
-        val primary =
-            currentMedia.firstOrNull { it.isActive && !it.isResume }
-                ?: currentMedia.firstOrNull { it.isActive }
-                ?: currentMedia.firstOrNull()
-        if (primary == null) {
-            return
-        }
-        val hub = MediaSessionManager.get()
-        sessionHubAccentColors[primary.instanceId]?.let { hub.onMediaColorsChanged(it) }
-        (primary.background as? Icon.Loaded)?.drawable?.let { hub.onAlbumArtChanged(it) }
-        (primary.appIcon as? Icon.Loaded)?.drawable?.let { hub.onAppIconChanged(it) }
     }
 
     private suspend fun MediaData.toDataModel(
@@ -304,12 +268,7 @@ constructor(
             val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
             val position = currentPlaybackState?.position ?: 0L
             val state = currentPlaybackState?.state ?: PlaybackState.STATE_NONE
-            val (mediaColorScheme, hubAccent) = getScheme(artwork, packageName)
-            if (hubAccent != 0) {
-                sessionHubAccentColors[instanceId] = hubAccent
-            } else {
-                sessionHubAccentColors.remove(instanceId)
-            }
+            val mediaColorScheme = getScheme(artwork, packageName)
             MediaDataModel(
                 instanceId = instanceId,
                 appUid = appUid,
@@ -371,14 +330,10 @@ constructor(
         }
     }
 
-    /**
-     * @return Compose [MediaColorScheme] for remedia UI, plus the legacy hub accent (accent1 S100)
-     *   used by Dynamic Bar / Pulse via [MediaSessionManager].
-     */
     private suspend fun getScheme(
         artwork: android.graphics.drawable.Icon?,
         packageName: String,
-    ): Pair<MediaColorScheme?, Int> {
+    ): MediaColorScheme? {
         val wallpaperColors = getWallpaperColor(applicationContext, backgroundDispatcher, artwork)
         val colorScheme =
             wallpaperColors?.let { ColorScheme(it, false, ThemeStyle.CONTENT) }
@@ -391,17 +346,13 @@ constructor(
                     }
                 }
         if (colorScheme == null) {
-            return Pair(null, 0)
+            return null
         }
-        val mediaScheme =
-            MediaColorScheme(
-                Color(colorScheme.materialScheme.getPrimaryFixed()),
-                Color(colorScheme.materialScheme.getOnPrimaryFixed()),
-                Color(colorScheme.materialScheme.getOnSurface()),
-            )
-        // Same tone MediaControlPanel historically published for the hub.
-        val hubAccent = colorScheme.accent1.s100
-        return Pair(mediaScheme, hubAccent)
+        return MediaColorScheme(
+            Color(colorScheme.materialScheme.getPrimaryFixed()),
+            Color(colorScheme.materialScheme.getOnPrimaryFixed()),
+            Color(colorScheme.materialScheme.getOnSurface()),
+        )
     }
 
     private suspend fun getAltIcon(packageName: String): Icon {

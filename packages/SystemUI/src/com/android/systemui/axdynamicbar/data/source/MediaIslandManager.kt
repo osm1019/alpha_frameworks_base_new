@@ -1,388 +1,277 @@
 package com.android.systemui.axdynamicbar.data.source
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.Icon as DrawableIcon
-import android.media.AudioDeviceInfo
-import android.media.AudioManager
-import android.media.MediaMetadata
-import android.media.session.MediaController
-import android.media.session.MediaSessionManager as SystemMediaSessionManager
-import android.media.session.PlaybackState
 import android.os.Handler
-import android.os.SystemClock
 import android.util.Log
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.toArgb
+import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
-import com.android.systemui.media.MediaSessionManager
-import com.android.systemui.media.NotificationMediaManager
+import com.android.systemui.media.controls.shared.model.MediaAction
+import com.android.systemui.media.controls.shared.model.MediaButton
 import com.android.systemui.media.dialog.MediaOutputDialogManager
-import com.android.systemui.util.concurrency.RepeatableExecutor
+import com.android.systemui.media.remedia.data.model.MediaDataModel
+import com.android.systemui.media.remedia.data.repository.MediaRepositoryImpl
+import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
+/**
+ * Produces [IslandEvent.Media] from the remedia session list, so every Dynamic Bar media surface
+ * shows and controls the same session as Ax QS.
+ *
+ * The island UI contract is unchanged — this is a producer swap, not a redesign. Metadata, art,
+ * accent, position and transport all come from [MediaDataModel]; nothing here binds
+ * `NotificationMediaManager` or the platform `MediaSessionManager` any more.
+ */
 @SysUISingleton
 class MediaIslandManager
 @Inject
 constructor(
     @Application private val context: Context,
+    @Application private val applicationScope: CoroutineScope,
     @Main private val mainHandler: Handler,
-    @Main private val mainExecutor: RepeatableExecutor,
-    private val notificationMediaManager: NotificationMediaManager,
+    @Background private val backgroundDispatcher: CoroutineDispatcher,
+    private val mediaRepository: MediaRepositoryImpl,
     private val mediaOutputDialogManager: MediaOutputDialogManager,
-    private val mediaSessionManager: MediaSessionManager,
 ) {
     companion object {
         private const val TAG = "MediaIslandManager"
-        private const val POSITION_UPDATE_INTERVAL_MS = 1000L
+        private const val CUSTOM_ACTION_0 = "ax_media_custom_0"
+        private const val CUSTOM_ACTION_1 = "ax_media_custom_1"
     }
 
     private val _mediaEvent = MutableStateFlow<IslandEvent.Media?>(null)
     val mediaEvent: StateFlow<IslandEvent.Media?> = _mediaEvent.asStateFlow()
 
+    /** Package of the session on the island, so its own notifications do not alert twice. */
     var activeMediaPackage: String? = null
         private set
 
-    var onMediaSessionLost: (() -> Unit)? = null
+    private var listening = false
+    private var collectJob: Job? = null
 
-    @Volatile private var listening = false
-    @Volatile private var sessionMediaColor: Int = 0
-    @Volatile private var sessionAlbumArt: Drawable? = null
-    @Volatile private var sessionAppIcon: Drawable? = null
-    private val systemMediaSessionManager: SystemMediaSessionManager by lazy {
-        context.getSystemService(SystemMediaSessionManager::class.java)
-    }
-    private var activeMediaController: MediaController? = null
+    /**
+     * Session the user dismissed from the island. remedia keeps publishing it, so without this the
+     * next emission (≤500 ms while playing) would put the chip straight back.
+     */
+    @Volatile private var dismissed: DismissToken? = null
 
-    private val mediaControllerCallback =
-        object : MediaController.Callback() {
-            override fun onPlaybackStateChanged(state: PlaybackState?) {
-                if (state != null) {
-                    updatePosition(state)
-                }
-            }
+    /** Off while the island is hidden or covered: position-only changes stop re-emitting. */
+    @Volatile private var progressUpdatesEnabled = true
 
-            override fun onAudioInfoChanged(info: MediaController.PlaybackInfo) {
-
-                val current = _mediaEvent.value ?: return
-                _mediaEvent.value = current.copy(outputDeviceName = getOutputDeviceName())
-            }
-
-            override fun onSessionDestroyed() {
-                activeMediaController = null
-                onMediaSessionLost?.invoke()
-            }
-        }
-
-    private val sessionChangedListener =
-        SystemMediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-            bindController(controllers)
-        }
-
-    private val mediaSessionListener = object : MediaSessionManager.MediaDataListener {
-        override fun onMediaColorsChanged(color: Int?) {
-            sessionMediaColor = color ?: 0
-            val current = _mediaEvent.value ?: return
-            _mediaEvent.value = current.copy(mediaColor = color ?: 0)
-        }
-
-        override fun onAlbumArtChanged(drawable: Drawable?) {
-            sessionAlbumArt = drawable
-            val current = _mediaEvent.value ?: return
-            _mediaEvent.value = current.copy(albumArt = drawable)
-        }
-
-        override fun onAppIconChanged(drawable: Drawable?) {
-            sessionAppIcon = drawable
-            val current = _mediaEvent.value ?: return
-            _mediaEvent.value = current.copy(appIcon = drawable)
-        }
-
-        override fun onMetadataChanged(track: String, artist: String) {
-            val current = _mediaEvent.value ?: return
-            if (current.track == track && current.artist == artist) return
-            _mediaEvent.value = current.copy(track = track, artist = artist)
-        }
-    }
-
-    private fun bindController(controllers: List<MediaController>?) {
-        activeMediaController?.unregisterCallback(mediaControllerCallback)
-        activeMediaController = controllers?.firstOrNull()
-        activeMediaController?.registerCallback(mediaControllerCallback, mainHandler)
-        activeMediaController?.playbackState?.let {
-            updatePosition(it)
-        }
-
-        if (controllers.isNullOrEmpty() && _mediaEvent.value != null) {
-            onMediaSessionLost?.invoke()
-        }
-    }
-
-    private fun isInMotion(state: PlaybackState): Boolean =
-        state.state == PlaybackState.STATE_PLAYING ||
-            state.state == PlaybackState.STATE_FAST_FORWARDING ||
-            state.state == PlaybackState.STATE_REWINDING
-
-    private fun computeAccuratePosition(state: PlaybackState): Long {
-        val basePos = state.position.coerceAtLeast(0L)
-        if (!isInMotion(state)) return basePos
-        val updateTime = state.lastPositionUpdateTime
-        if (updateTime <= 0) return basePos
-        val elapsed = SystemClock.elapsedRealtime() - updateTime
-        val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
-        val rawDuration = _mediaEvent.value?.duration ?: Long.MAX_VALUE
-        val safeDuration = if (rawDuration > 0L) rawDuration else Long.MAX_VALUE
-
-        return (basePos + (elapsed * speed).toLong())
-            .coerceIn(0L, safeDuration)
-    }
-
-    private var cancelProgressPolling: Runnable? = null
-
-    private fun tickProgress() {
-        val ev = _mediaEvent.value ?: return
-        if (!ev.isPlaying || ev.duration <= 0L) return
-        val now = SystemClock.elapsedRealtime()
-        val elapsed = now - ev.positionUpdateTime
-        val pos = (ev.position + (elapsed * ev.playbackSpeed).toLong()).coerceIn(0L, ev.duration)
-        val prog = (pos.toFloat() / ev.duration).coerceIn(0f, 1f)
-        _mediaEvent.value = ev.copy(progress = prog, position = pos, positionUpdateTime = now)
-    }
-
-    fun startProgressPolling() {
-        if (cancelProgressPolling != null) return
-        cancelProgressPolling = mainExecutor.executeRepeatedly(
-            ::tickProgress, 0L, POSITION_UPDATE_INTERVAL_MS,
-        )
-    }
-
-    fun stopProgressPolling() {
-        cancelProgressPolling?.run()
-        cancelProgressPolling = null
-    }
-
-    private fun updatePosition(state: PlaybackState) {
-        val current = _mediaEvent.value ?: return
-        val duration = current.duration.takeIf { it > 0L } ?: return
-        val posMs = computeAccuratePosition(state)
-        val progress = (posMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-        val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
-        val playing = isInMotion(state)
-        _mediaEvent.value = current.copy(
-            isPlaying = playing,
-            position = posMs,
-            progress = progress,
-            playbackSpeed = speed,
-            positionUpdateTime = state.lastPositionUpdateTime,
-        )
-    }
-
-    private fun getActiveController(): MediaController? =
-        try {
-            systemMediaSessionManager.getActiveSessions(null).firstOrNull()
-        } catch (_: Exception) {
-            null
-        }
-
-    private val mediaListener =
-        object : NotificationMediaManager.MediaListener {
-            override fun onPrimaryMetadataOrStateChanged(
-                metadata: MediaMetadata?,
-                @PlaybackState.State state: Int,
-            ) {
-                val isPlaying = state == PlaybackState.STATE_PLAYING
-                val track =
-                    metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
-                        ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-                        ?: ""
-                val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
-                val durationRaw = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-                val duration = if (durationRaw > 0L) durationRaw else 0L
-
-                val albumArt = sessionAlbumArt ?: run {
-                    val bmp = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                        ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
-                    bmp?.let { BitmapDrawable(context.resources, it) }
-                }
-
-                val controller = getActiveController()
-                val ps = controller?.playbackState
-                val existingPos = _mediaEvent.value?.position ?: 0L
-                val posMs = if (ps != null) computeAccuratePosition(ps) else existingPos
-                val progress =
-                    if (duration > 0L) (posMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                    else 0f
-                val outputDevice = getOutputDeviceName()
-                val pkg = controller?.packageName
-                val customActions =
-                    ps?.customActions?.take(2)?.mapNotNull { ca ->
-                        val lbl =
-                            ca.name?.toString()?.takeIf { it.isNotEmpty() }
-                                ?: return@mapNotNull null
-                        val act = ca.action?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                        val icon = try {
-                            if (ca.icon != 0 && pkg != null) {
-                                DrawableIcon.createWithResource(pkg, ca.icon)
-                                    .loadDrawable(context)
-                            } else null
-                        } catch (_: Exception) { null }
-                        IslandEvent.MediaCustomAction(label = lbl, action = act, icon = icon)
-                    } ?: emptyList()
-                val appIcon = sessionAppIcon
-
-                val speed = ps?.playbackSpeed?.takeIf { it > 0f } ?: 1f
-                val updateTime = ps?.lastPositionUpdateTime ?: 0L
-
-                if (isPlaying) {
-                    activeMediaPackage = pkg
-                    _mediaEvent.value =
-                        IslandEvent.Media(
-                            track = track,
-                            artist = artist,
-                            isPlaying = true,
-                            albumArt = albumArt,
-                            progress = progress,
-                            duration = duration,
-                            position = posMs,
-                            playbackSpeed = speed,
-                            positionUpdateTime = updateTime,
-                            outputDeviceName = outputDevice,
-                            customActions = customActions,
-                            appIcon = appIcon,
-                            packageName = pkg ?: "",
-                            mediaColor = sessionMediaColor,
-                        )
-                } else {
-                    val current = _mediaEvent.value
-                    if (current != null) {
-                        _mediaEvent.value =
-                            current.copy(
-                                isPlaying = false,
-                                albumArt = albumArt ?: current.albumArt,
-                                progress = progress,
-                                position = posMs,
-                                playbackSpeed = speed,
-                                positionUpdateTime = updateTime,
-                            )
-                    }
-                }
-            }
-        }
+    /** Transport targets whatever the island is currently showing. */
+    @Volatile private var primaryKey: InstanceId? = null
+    @Volatile private var transport: MediaButton? = null
+    @Volatile private var clickIntent: PendingIntent? = null
 
     fun startListening() {
         if (listening) return
         listening = true
-        notificationMediaManager.addCallback(mediaListener)
-        mediaSessionManager.addListener(mediaSessionListener)
-        try {
-            bindController(systemMediaSessionManager.getActiveSessions(null))
-            systemMediaSessionManager.addOnActiveSessionsChangedListener(
-                sessionChangedListener,
-                null,
-                mainHandler,
-            )
-        } catch (_: Exception) {}
-
+        collectJob =
+            applicationScope.launch(context = backgroundDispatcher) {
+                snapshotFlow { selectPrimary() }.collect(::onPrimaryChanged)
+            }
     }
 
     fun stopListening() {
         if (!listening) return
         listening = false
-        stopProgressPolling()
-        notificationMediaManager.removeCallback(mediaListener)
-        mediaSessionManager.removeListener(mediaSessionListener)
-        try {
-            systemMediaSessionManager.removeOnActiveSessionsChangedListener(sessionChangedListener)
-            activeMediaController?.unregisterCallback(mediaControllerCallback)
-            activeMediaController = null
-        } catch (_: Exception) {}
+        collectJob?.cancel()
+        collectJob = null
         _mediaEvent.value = null
         activeMediaPackage = null
-        sessionMediaColor = 0
-        sessionAlbumArt = null
-        sessionAppIcon = null
+        primaryKey = null
+        transport = null
+        clickIntent = null
+        dismissed = null
     }
 
+    /**
+     * Island-only dismiss: hides the chip without touching the remedia session, matching the old
+     * behaviour where [clear] dropped the event and nothing else.
+     */
     fun clear() {
-        stopProgressPolling()
+        val event = _mediaEvent.value
+        dismissed = event?.let { DismissToken(primaryKey, it.track, it.artist) }
         _mediaEvent.value = null
+        activeMediaPackage = null
     }
+
+    /** Position updates are pointless while nothing renders them; text/state changes still emit. */
+    fun setProgressUpdatesEnabled(enabled: Boolean) {
+        progressUpdatesEnabled = enabled
+    }
+
+    private fun onPrimaryChanged(model: MediaDataModel?) {
+        if (model == null) {
+            primaryKey = null
+            transport = null
+            clickIntent = null
+            dismissed = null
+            activeMediaPackage = null
+            _mediaEvent.value = null
+            return
+        }
+
+        val event = model.toIslandMedia()
+
+        dismissed?.let { token ->
+            if (token.matches(model.instanceId, event.track, event.artist)) return
+            dismissed = null
+        }
+
+        val current = _mediaEvent.value
+        if (!progressUpdatesEnabled && current != null && current.isSameExceptProgress(event)) {
+            return
+        }
+
+        primaryKey = model.instanceId
+        transport = model.playbackStateActions
+        clickIntent = model.clickIntent
+        activeMediaPackage = model.packageName.takeIf { event.isPlaying }
+        _mediaEvent.value = event
+    }
+
+    /**
+     * Same order the hub uses ([com.android.systemui.media.MediaSessionManager]), so the chip,
+     * Pulse and the lockscreen art never disagree about which session is current: a playing card
+     * the user selected wins, then any playing card, then the selection, then the first displayable
+     * one. Resume entries never own the island.
+     */
+    private fun selectPrimary(): MediaDataModel? {
+        val sessions = mediaRepository.currentMedia
+        val selected = sessions.getOrNull(mediaRepository.currentCarouselIndex)
+        return selected?.takeIf { it.isDisplayable() && it.isPlaying() }
+            ?: sessions.firstOrNull { it.isDisplayable() && it.isPlaying() }
+            ?: selected?.takeIf { it.isDisplayable() }
+            ?: sessions.firstOrNull { it.isDisplayable() }
+    }
+
+    private fun MediaDataModel.isPlaying(): Boolean = state == MediaSessionState.Playing
+
+    private fun MediaDataModel.isDisplayable(): Boolean =
+        isActive && !isResume && (title.isNotBlank() || isPlaying())
+
+    private fun MediaDataModel.toIslandMedia(): IslandEvent.Media {
+        val playing = isPlaying()
+        val duration = durationMs.coerceAtLeast(0L)
+        val position = positionMs.coerceIn(0L, if (duration > 0L) duration else Long.MAX_VALUE)
+        val progress = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+        return IslandEvent.Media(
+            track = title,
+            artist = subtitle,
+            isPlaying = playing,
+            albumArt = background?.toDrawable(),
+            progress = progress,
+            duration = duration,
+            position = position,
+            outputDeviceName = outputDevice?.name?.toString().orEmpty(),
+            customActions = customActionsOf(playbackStateActions),
+            appIcon = appIcon.toDrawable(),
+            packageName = packageName,
+            mediaColor = colorScheme?.primary?.toArgb() ?: 0,
+        )
+    }
+
+    private fun customActionsOf(actions: MediaButton?): List<IslandEvent.MediaCustomAction> {
+        if (actions == null) return emptyList()
+        return listOfNotNull(
+            actions.custom0?.toCustomAction(CUSTOM_ACTION_0),
+            actions.custom1?.toCustomAction(CUSTOM_ACTION_1),
+        )
+    }
+
+    private fun MediaAction.toCustomAction(id: String): IslandEvent.MediaCustomAction? {
+        if (action == null) return null
+        val label = contentDescription?.toString()?.takeIf { it.isNotEmpty() } ?: return null
+        return IslandEvent.MediaCustomAction(label = label, action = id, icon = icon)
+    }
+
+    private fun Icon.toDrawable(): Drawable? =
+        when (this) {
+            is Icon.Loaded -> drawable
+            is Icon.Resource -> context.getDrawable(resId)
+        }
+
+    /** Everything the island renders apart from the moving parts of the seek bar. */
+    private fun IslandEvent.Media.isSameExceptProgress(other: IslandEvent.Media): Boolean =
+        track == other.track &&
+            artist == other.artist &&
+            isPlaying == other.isPlaying &&
+            albumArt === other.albumArt &&
+            appIcon === other.appIcon &&
+            packageName == other.packageName &&
+            mediaColor == other.mediaColor &&
+            outputDeviceName == other.outputDeviceName &&
+            duration == other.duration &&
+            customActions == other.customActions
 
     fun togglePlayPause() {
-        val c = getActiveController() ?: return
-        val playing = c.playbackState?.state == PlaybackState.STATE_PLAYING
-        if (playing) {
-            c.transportControls.pause()
-        } else {
-            c.transportControls.play()
-        }
-        val current = _mediaEvent.value ?: return
-        _mediaEvent.value = current.copy(isPlaying = !playing)
+        val playing = _mediaEvent.value?.isPlaying ?: return
+        val action = transport?.playOrPause?.action ?: return
+        action.run()
+        // Optimistic flip so the button reacts before remedia republishes the session.
+        _mediaEvent.value = _mediaEvent.value?.copy(isPlaying = !playing)
     }
 
     fun skipNext() {
-        getActiveController()?.transportControls?.skipToNext()
+        transport?.nextOrCustom?.action?.run()
     }
 
     fun skipPrev() {
-        getActiveController()?.transportControls?.skipToPrevious()
+        transport?.prevOrCustom?.action?.run()
     }
 
     fun seekTo(position: Long) {
-        getActiveController()?.transportControls?.seekTo(position)
+        val key = primaryKey ?: return
+        mediaRepository.seek(key, position)
     }
 
     fun sendCustomAction(action: String) {
-        getActiveController()?.transportControls?.sendCustomAction(action, null)
+        val button = transport ?: return
+        when (action) {
+            CUSTOM_ACTION_0 -> button.custom0?.action?.run()
+            CUSTOM_ACTION_1 -> button.custom1?.action?.run()
+            else -> Unit
+        }
     }
 
     fun openMediaApp() {
-        val pkg = getActiveController()?.packageName ?: return
-        val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        clickIntent?.let { intent ->
+            try {
+                intent.send()
+                return
+            } catch (e: PendingIntent.CanceledException) {
+                Log.w(TAG, "Media click intent cancelled", e)
+            }
+        }
+        val pkg = _mediaEvent.value?.packageName?.takeIf { it.isNotEmpty() } ?: return
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            context.startActivity(intent)
+            context.startActivity(launchIntent)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to open media app: $pkg", e)
         }
     }
 
-    private fun getOutputDeviceName(): String =
-        try {
-            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-
-            val primary =
-                outputs.firstOrNull {
-                    it.type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER &&
-                        it.type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                } ?: outputs.firstOrNull()
-            when (primary?.type) {
-                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO ->
-                    primary.productName?.toString()?.takeIf { it.isNotEmpty() } ?: "Bluetooth"
-                AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Headset"
-                AudioDeviceInfo.TYPE_USB_DEVICE -> "USB Audio"
-                AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Headphones"
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Headset"
-                AudioDeviceInfo.TYPE_HDMI -> "HDMI"
-                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Speaker"
-                AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Earpiece"
-                null -> "Speaker"
-                else -> primary.productName?.toString()?.takeIf { it.isNotEmpty() } ?: "Speaker"
-            }
-        } catch (_: Exception) {
-            "Speaker"
-        }
-
     fun openMediaOutputSwitcher() {
-        val pkg = getActiveController()?.packageName ?: return
+        val pkg = _mediaEvent.value?.packageName?.takeIf { it.isNotEmpty() } ?: return
         mainHandler.post {
             try {
                 mediaOutputDialogManager.createAndShow(packageName = pkg, aboveStatusBar = true)
@@ -391,5 +280,14 @@ constructor(
             }
         }
     }
-}
 
+    private data class DismissToken(
+        val key: InstanceId?,
+        val track: String,
+        val artist: String,
+    ) {
+        /** Released when the session changes, or when the same session moves to another track. */
+        fun matches(otherKey: InstanceId?, otherTrack: String, otherArtist: String): Boolean =
+            key == otherKey && track == otherTrack && artist == otherArtist
+    }
+}
