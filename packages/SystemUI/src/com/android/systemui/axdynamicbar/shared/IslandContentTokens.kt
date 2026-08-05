@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import kotlin.math.max
+import kotlin.math.roundToInt
 import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -511,6 +513,26 @@ internal fun formatTimeAgo(timestampMs: Long, res: android.content.res.Resources
 internal fun Drawable.toScaledBitmap(sizeDp: Dp): ImageBitmap {
     val px = with(LocalDensity.current) { sizeDp.roundToPx() }
     return remember(this, px) { toBitmap(px, px).asImageBitmap() }
+}
+
+/**
+ * Rasterised to *cover* a [sizeDp] square, keeping the drawable's aspect: the short side lands on
+ * the target and the long one overhangs, for `ContentScale.Crop` to trim. [toScaledBitmap] forces
+ * the square instead, which squashes anything that is not one.
+ */
+@Composable
+internal fun Drawable.toCoverBitmap(sizeDp: Dp): ImageBitmap {
+    val px = with(LocalDensity.current) { sizeDp.roundToPx() }
+    return remember(this, px) {
+        val w = intrinsicWidth
+        val h = intrinsicHeight
+        if (w <= 0 || h <= 0) {
+            toBitmap(px, px).asImageBitmap()
+        } else {
+            val scale = max(px.toFloat() / w, px.toFloat() / h)
+            toBitmap((w * scale).roundToInt(), (h * scale).roundToInt()).asImageBitmap()
+        }
+    }
 }
 
 internal fun chipProgressFor(event: IslandEvent): Float? =

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.systemui.qs.ax.ui.model
+package com.android.systemui.media.ax.ui.model
 
 /**
  * Look of the lockscreen media card, picked by the user in AlphaSettings

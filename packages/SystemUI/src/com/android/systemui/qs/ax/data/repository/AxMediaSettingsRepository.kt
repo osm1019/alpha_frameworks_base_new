@@ -21,7 +21,7 @@ import android.provider.Settings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
-import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
+import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
 import com.android.systemui.util.settings.SystemSettings

@@ -30,6 +30,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -99,6 +100,7 @@ import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.KeyguardBatteryInfo
 import com.android.systemui.media.ax.ui.compose.MediaChrome
+import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.res.R
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -146,6 +148,7 @@ fun AxDynamicBarKeyguardChip(
     val keyguardBatteryChipMode by viewModel.keyguardBatteryChipMode.collectAsStateWithLifecycle()
     val batteryInfo by viewModel.keyguardBatteryInfo.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
+    val lockscreenMediaStyle by viewModel.lockscreenMediaStyle.collectAsStateWithLifecycle()
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
 
@@ -175,6 +178,7 @@ fun AxDynamicBarKeyguardChip(
                     interactor = viewModel.interactor,
                     onCollapse = { viewModel.keyguardExpansion.collapse() },
                     hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
+                    lockscreenMediaStyle = lockscreenMediaStyle,
                 )
             }
         }
@@ -267,6 +271,7 @@ fun AxDynamicBarKeyguardChip(
                         eventCount = chipState.eventCount,
                         viewModel = viewModel,
                         batteryString = batteryString,
+                        mediaStyle = lockscreenMediaStyle,
                     )
                 }
             } else {
@@ -290,6 +295,7 @@ private fun KeyguardChipBody(
     eventCount: Int,
     viewModel: AxDynamicBarChipViewModel,
     batteryString: String = "",
+    mediaStyle: AxLockscreenMediaStyle = AxLockscreenMediaStyle.DEFAULT,
 ) {
     val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
@@ -305,13 +311,23 @@ private fun KeyguardChipBody(
         else -> ChipHeight
     }
 
-    // Media: dark glass + accent play/progress. Other events keep full-fill accent body.
+    // Media: dark glass body for every style. Pill chrome only recolors buttons + progress
+    // (Waveform = today's accent look; Minimal = neutral; Glass deferred to a later pass).
     val bodyColor = if (isMedia) MediaChrome.GlassBody else accent
     val onBody = if (isMedia) MediaChrome.OnGlass else contentColor
+    val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
     val progressTrack =
-        if (isMedia) MediaChrome.ProgressTrack else lerp(accent, contentColor, 0.2f)
+        when {
+            !isMedia -> lerp(accent, contentColor, 0.2f)
+            neutralChrome -> MediaChrome.LockscreenProgressTrack
+            else -> MediaChrome.ProgressTrack
+        }
     val progressFill =
-        if (isMedia) accent else lerp(accent, contentColor, 0.6f)
+        when {
+            !isMedia -> lerp(accent, contentColor, 0.6f)
+            neutralChrome -> MediaChrome.LockscreenProgress
+            else -> accent
+        }
     val progressBarH = if (isMedia) MediaChrome.ProgressHeight else SizeStrokeWidth
 
     // Media needs room for art + text + 3 transport buttons + optional stack badge.
@@ -365,6 +381,7 @@ private fun KeyguardChipBody(
                     event = event,
                     accent = accent,
                     viewModel = viewModel,
+                    mediaStyle = mediaStyle,
                 )
             } else if (event is IslandEvent.Sports && event.team2Name.isNotEmpty()) {
                 SportsChipTeamBadge(event.team1Name, event.team1Icon, contentColor)
@@ -475,26 +492,41 @@ private fun KeyguardChipBody(
 }
 
 /**
- * Lockscreen media capsule content (Phase 1): spinning art, marquee meta, floating
- * transport. Play is filled with art-derived [accent]; skip buttons stay tonal on glass.
+ * Lockscreen media capsule content: spinning art, marquee meta, floating transport.
  *
- * **Expanded:** original flexible layout — text is [weight] + [widthIn] + ellipsis so it
- * never pushes transport/badge out of the chip (max 260dp).
+ * Geometry is shared across styles. Only button fills + icon tints follow [mediaStyle]:
+ * - **Waveform** (and Glass until its pass): today's look — accent play, tonal skip fills.
+ * - **Minimal**: transparent button backgrounds, bare white icons.
  *
- * **Collapsed (after 5s idle):** text lane removed (width-only); art + prev/play/next remain.
- * Re-expands on track/artist change only (not play/pause). Height stays fixed on parent.
+ * **Collapsed (after 5s idle):** text lane removed; art + prev/play/next remain.
+ * Re-expands on track/artist change only (not play/pause).
  */
 @Composable
 private fun RowScope.KeyguardMediaChipContent(
     event: IslandEvent.Media,
     accent: Color,
     viewModel: AxDynamicBarChipViewModel,
+    mediaStyle: AxLockscreenMediaStyle = AxLockscreenMediaStyle.DEFAULT,
 ) {
     val motionScheme = MaterialTheme.motionScheme
-    // Play is solid art accent. Skip buttons use an opaque blend toward the same accent
-    // (not a low-alpha overlay — that vanished on the dark glass and looked unthemed).
+    val minimal = mediaStyle == AxLockscreenMediaStyle.MINIMAL
+    val glass = mediaStyle == AxLockscreenMediaStyle.GLASS
     val onAccent = chipContentColorOn(accent)
-    val skipBg = MediaChrome.skipBackground(accent)
+    val skipBg =
+        if (minimal || glass) Color.Transparent else MediaChrome.skipBackground(accent)
+    val skipIcon = if (minimal || glass) MediaChrome.ControlBare else onAccent
+    val playBg = if (minimal) Color.Transparent else accent
+    val playIcon = if (minimal) MediaChrome.ControlBare else onAccent
+    // Same hairline the expand card's play button carries — one control, two surfaces.
+    val playBorder =
+        if (glass) {
+            BorderStroke(
+                MediaChrome.LockscreenGlassBorderWidth,
+                MediaChrome.LockscreenGlassBorder,
+            )
+        } else {
+            null
+        }
 
     // Idle collapse — same delay as cutout center. Key is track|artist only (not isPlaying).
     val contentKey = remember(event.track, event.artist) { "${event.track}|${event.artist}" }
@@ -640,7 +672,7 @@ private fun RowScope.KeyguardMediaChipContent(
     Spacer(Modifier.width(SpaceXs))
     ActionButton(
         icon = ActionIcon.SKIP_PREV,
-        color = onAccent,
+        color = skipIcon,
         bgColor = skipBg,
         onClick = { viewModel.skipPrev() },
         size = MediaActionSize,
@@ -651,7 +683,8 @@ private fun RowScope.KeyguardMediaChipContent(
         onClick = { viewModel.togglePlayPause() },
         modifier = Modifier.size(MediaActionSize),
         shape = CircleShape,
-        color = accent,
+        color = playBg,
+        border = playBorder,
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(MediaActionSize)) {
             Icon(
@@ -660,7 +693,7 @@ private fun RowScope.KeyguardMediaChipContent(
                     if (event.isPlaying) R.string.ax_dynamic_bar_pause
                     else R.string.ax_dynamic_bar_play,
                 ),
-                tint = onAccent,
+                tint = playIcon,
                 modifier = Modifier.size(MediaActionIconSize),
             )
         }
@@ -668,7 +701,7 @@ private fun RowScope.KeyguardMediaChipContent(
     Spacer(Modifier.width(SpaceXxs))
     ActionButton(
         icon = ActionIcon.SKIP_NEXT,
-        color = onAccent,
+        color = skipIcon,
         bgColor = skipBg,
         onClick = { viewModel.skipNext() },
         size = MediaActionSize,

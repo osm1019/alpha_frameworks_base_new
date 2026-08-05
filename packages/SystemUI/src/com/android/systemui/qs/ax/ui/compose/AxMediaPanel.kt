@@ -157,7 +157,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerF
 import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.ui.gesture.mediaOverscrollToDismiss
-import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
+import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.qs.ax.ui.model.AxMediaSurface
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R

@@ -81,7 +81,7 @@ import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
-import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
+import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
 import kotlin.math.floor

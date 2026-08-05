@@ -10,6 +10,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toArgb
 import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.axdynamicbar.shared.sendWithBal
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -21,6 +22,7 @@ import com.android.systemui.media.dialog.MediaOutputDialogManager
 import com.android.systemui.media.remedia.data.model.MediaDataModel
 import com.android.systemui.media.remedia.data.repository.MediaRepositoryImpl
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
+import com.android.systemui.plugins.ActivityStarter
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +50,7 @@ constructor(
     @Background private val backgroundDispatcher: CoroutineDispatcher,
     private val mediaRepository: MediaRepositoryImpl,
     private val mediaOutputDialogManager: MediaOutputDialogManager,
+    private val activityStarter: ActivityStarter,
 ) {
     companion object {
         private const val TAG = "MediaIslandManager"
@@ -251,10 +254,32 @@ constructor(
         }
     }
 
+    /**
+     * The island is reachable from the keyguard, and an app started from behind it never becomes
+     * visible, so the launch waits for the keyguard to be gone.
+     *
+     * `afterKeyguardGone` has to be true. The starter's own dismissing helpers pass false, which
+     * parks the action on the *primary* bouncer while a fingerprint device shows the *alternate*
+     * one — unlocking by fingerprint then dismisses the keyguard and drops the launch.
+     */
     fun openMediaApp() {
+        activityStarter.dismissKeyguardThenExecute(
+            ActivityStarter.OnDismissAction {
+                launchMediaApp()
+                false
+            },
+            /* cancel = */ null,
+            /* afterKeyguardGone = */ true,
+        )
+    }
+
+    private fun launchMediaApp() {
         clickIntent?.let { intent ->
             try {
-                intent.send()
+                // The sender has to opt in: the session's intent is system-defined, so without
+                // this the start mode falls to its creator, which grants nothing, and the launch
+                // is refused as a background activity start.
+                intent.sendWithBal(context)
                 return
             } catch (e: PendingIntent.CanceledException) {
                 Log.w(TAG, "Media click intent cancelled", e)

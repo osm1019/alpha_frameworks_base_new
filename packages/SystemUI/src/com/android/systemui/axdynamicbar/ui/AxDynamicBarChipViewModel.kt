@@ -12,6 +12,8 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.statusbar.KeyguardIndicationController
 import com.android.systemui.statusbar.pipeline.battery.domain.interactor.BatteryInteractor
 import com.android.systemui.statusbar.policy.BatteryController
+import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
+import com.android.systemui.qs.ax.data.repository.AxMediaSettingsRepository
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,7 +64,14 @@ constructor(
     val statusBarExpansion: AxDynamicBarStatusBarExpansion,
     private val keyguardIndicationController: KeyguardIndicationController,
     chargingEventSource: ChargingEventSource,
+    mediaSettingsRepository: AxMediaSettingsRepository,
 ) {
+    /**
+     * Lockscreen media style (Glass / Minimal / Waveform). Shared with surface B so A and E follow
+     * the same setting when the user has Dynamic Bar keyguard media on.
+     */
+    val lockscreenMediaStyle: StateFlow<AxLockscreenMediaStyle> =
+        mediaSettingsRepository.lockscreenMediaStyle
     val isLowUdfps: StateFlow<Boolean> =
         udfpsOverlayInteractor.udfpsOverlayParams
             .map { params ->
