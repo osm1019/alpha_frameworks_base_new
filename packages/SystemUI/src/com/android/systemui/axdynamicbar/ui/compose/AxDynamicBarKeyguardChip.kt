@@ -13,28 +13,34 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlin.math.abs
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +90,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.systemui.axdynamicbar.model.IslandEvent
@@ -110,6 +118,25 @@ private val MediaActionSize = 28.dp
 private val MediaActionIconSize = 16.dp
 private val BatteryIconSize = ChipHeight - SpaceXxl
 private val CountBadgeHeight = ChipHeight / 2
+
+/**
+ * Dark glass body for the keyguard media chip (Phase 1 redesign).
+ * Full-fill accent was the old look; accent is reserved for the play control + progress.
+ */
+private val MediaGlassBody = Color(0xCC1C1C1E) // ~80% alpha glass
+private val MediaGlassBorder = Color.White.copy(alpha = 0.10f)
+private val MediaOnGlass = Color.White
+private val MediaOnGlassSecondary = Color.White.copy(alpha = AlphaSecondary)
+private val MediaOnGlassHint = Color.White.copy(alpha = AlphaHint)
+private val MediaSkipBg = Color.White.copy(alpha = 0.12f)
+private val MediaProgressTrack = Color.White.copy(alpha = 0.18f)
+private val MediaProgressHeight = 2.dp
+/**
+ * Cap on the track/artist lane while expanded so art + text + transport + badge fit the
+ * chip's max width (260dp). Text ellipsizes inside this; collapse hides the lane entirely.
+ * Timing reuses [CutoutCenterCollapsePolicy.CUTOUT_CENTER_RIGHT_IDLE_COLLAPSE_DELAY_MS] (5s).
+ */
+private val MediaTextExpandedMaxWidth = 90.dp
 
 @Composable
 private fun rememberChargingParts(batteryString: String): List<String> {
@@ -280,32 +307,54 @@ private fun KeyguardChipBody(
 
     val parts = rememberChargingParts(batteryString)
     val isMultiLineCharging = event is IslandEvent.Charging && parts.size >= 2
+    val isMedia = event is IslandEvent.Media
     // Match keyguard shortcut diameter for media so the bottom row reads as one band.
     val mediaChipHeight = dimensionResource(R.dimen.keyguard_affordance_fixed_height)
     val dynamicHeight = when {
-        event is IslandEvent.Media -> mediaChipHeight
+        isMedia -> mediaChipHeight
         isMultiLineCharging -> 48.dp
         else -> ChipHeight
     }
+
+    // Media: dark glass + accent play/progress. Other events keep full-fill accent body.
+    val bodyColor = if (isMedia) MediaGlassBody else accent
+    val onBody = if (isMedia) MediaOnGlass else contentColor
+    val progressTrack =
+        if (isMedia) MediaProgressTrack else lerp(accent, contentColor, 0.2f)
+    val progressFill =
+        if (isMedia) accent else lerp(accent, contentColor, 0.6f)
+    val progressBarH = if (isMedia) MediaProgressHeight else SizeStrokeWidth
+
+    // Media needs room for art + text + 3 transport buttons + optional stack badge.
+    val chipMaxWidth = if (isMedia) 280.dp else 260.dp
 
     Box(contentAlignment = Alignment.Center) {
         Row(
             modifier = Modifier
                 .height(dynamicHeight)
-                .widthIn(min = 48.dp, max = 260.dp)
+                .widthIn(min = 48.dp, max = chipMaxWidth)
                 .clip(ChipShape)
-                .background(accent)
+                .background(bodyColor)
+                .then(
+                    if (isMedia) {
+                        Modifier.border(1.dp, MediaGlassBorder, ChipShape)
+                    } else {
+                        Modifier
+                    },
+                )
                 .animateContentSize(motionScheme.defaultSpatialSpec())
                 .then(
                     if (progress != null) {
-                        val trackColor = lerp(accent, contentColor, 0.2f)
-                        val fillColor = lerp(accent, contentColor, 0.6f)
                         Modifier.drawWithContent {
                             drawContent()
-                            val barH = SizeStrokeWidth.toPx()
+                            val barH = progressBarH.toPx()
                             val y = size.height - barH
-                            drawRect(trackColor, Offset(0f, y), Size(size.width, barH))
-                            drawRect(fillColor, Offset(0f, y), Size(size.width * progress, barH))
+                            drawRect(progressTrack, Offset(0f, y), Size(size.width, barH))
+                            drawRect(
+                                progressFill,
+                                Offset(0f, y),
+                                Size(size.width * progress, barH),
+                            )
                         }
                     } else Modifier
                 )
@@ -323,127 +372,10 @@ private fun KeyguardChipBody(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (event is IslandEvent.Media) {
-                AnimatedContent(
-                    targetState = event.albumArt,
-                    transitionSpec = {
-                        (fadeIn(motionScheme.defaultEffectsSpec()) +
-                            scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
-                            (fadeOut(motionScheme.fastEffectsSpec()) +
-                                scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
-                            SizeTransform(clip = false)
-                    },
-                    contentKey = { it?.hashCode() ?: 0 },
-                    label = "kg_media_icon",
-                ) { art ->
-                    if (art != null) {
-                        val rotation: Float
-                        if (event.isPlaying) {
-                            val transition = rememberInfiniteTransition(label = "kg_media_art_roll")
-                            val animatedRotation by transition.animateFloat(
-                                initialValue = 0f,
-                                targetValue = 360f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(8000, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Restart
-                                ),
-                                label = "kg_media_art_rotation"
-                            )
-                            rotation = animatedRotation
-                        } else {
-                            rotation = 0f
-                        }
-
-                        Image(
-                            bitmap = art.toScaledBitmap(MediaChipIconSize),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(MediaChipIconSize)
-                                .clip(CircleShape)
-                                .graphicsLayer { rotationZ = rotation },
-                            contentScale = ContentScale.Crop,
-                        )
-                    } else {
-                        PillEventIcon(event, tint = contentColor)
-                    }
-                }
-                Spacer(Modifier.width(SpaceXs))
-                AnimatedContent(
-                    targetState = event,
-                    transitionSpec = {
-                        (fadeIn(motionScheme.defaultEffectsSpec()) +
-                            scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
-                            (fadeOut(motionScheme.fastEffectsSpec()) +
-                                scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
-                            SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() })
-                    },
-                    contentKey = { "${it.track}|${it.artist}" },
-                    label = "kg_media_text",
-                    modifier = Modifier.weight(1f, fill = false),
-                ) { ev ->
-                    if (ev.artist.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
-                                style = PillPrimary,
-                                color = contentColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 90.dp).basicMarquee(iterations = 1),
-                            )
-                            Text(
-                                " · ",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = contentColor.copy(alpha = AlphaHint),
-                            )
-                            Text(
-                                ev.artist,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = contentColor.copy(alpha = AlphaSecondary),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 60.dp),
-                            )
-                        }
-                    } else {
-                        MarqueeText(ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) }, contentColor, Modifier)
-                    }
-                }
-                Spacer(Modifier.width(SpaceXs))
-                ActionButton(
-                    icon = ActionIcon.SKIP_PREV,
-                    color = contentColor,
-                    bgColor = lerp(accent, contentColor, AlphaSubtle),
-                    onClick = { viewModel.skipPrev() },
-                    size = MediaActionSize,
-                    iconSize = MediaActionIconSize,
-                )
-                Spacer(Modifier.width(SpaceXxs))
-                Surface(
-                    onClick = { viewModel.togglePlayPause() },
-                    modifier = Modifier.size(MediaActionSize),
-                    shape = CircleShape,
-                    color = lerp(accent, contentColor, AlphaSubtle),
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(MediaActionSize)) {
-                        Icon(
-                            if (event.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(
-                                if (event.isPlaying) R.string.ax_dynamic_bar_pause
-                                else R.string.ax_dynamic_bar_play,
-                            ),
-                            tint = contentColor,
-                            modifier = Modifier.size(MediaActionIconSize),
-                        )
-                    }
-                }
-                Spacer(Modifier.width(SpaceXxs))
-                ActionButton(
-                    icon = ActionIcon.SKIP_NEXT,
-                    color = contentColor,
-                    bgColor = lerp(accent, contentColor, AlphaSubtle),
-                    onClick = { viewModel.skipNext() },
-                    size = MediaActionSize,
-                    iconSize = MediaActionIconSize,
+                KeyguardMediaChipContent(
+                    event = event,
+                    accent = accent,
+                    viewModel = viewModel,
                 )
             } else if (event is IslandEvent.Sports && event.team2Name.isNotEmpty()) {
                 SportsChipTeamBadge(event.team1Name, event.team1Icon, contentColor)
@@ -534,19 +466,225 @@ private fun KeyguardChipBody(
                     modifier = Modifier
                         .height(CountBadgeHeight)
                         .widthIn(min = CountBadgeHeight)
-                        .background(lerp(accent, contentColor, AlphaDisabled), ShapeChip)
+                        .background(
+                            if (isMedia) MediaSkipBg
+                            else lerp(accent, contentColor, AlphaDisabled),
+                            ShapeChip,
+                        )
                         .padding(horizontal = SpaceXxs),
                 ) {
                     Text(
                         "$eventCount",
                         style = TsBadge,
-                        color = contentColor,
+                        color = onBody,
                         maxLines = 1,
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Lockscreen media capsule content (Phase 1): spinning art, marquee meta, floating
+ * transport. Play is filled with art-derived [accent]; skip buttons stay tonal on glass.
+ *
+ * **Expanded:** original flexible layout — text is [weight] + [widthIn] + ellipsis so it
+ * never pushes transport/badge out of the chip (max 260dp).
+ *
+ * **Collapsed (after 5s idle):** text lane removed (width-only); art + prev/play/next remain.
+ * Re-expands on track/artist change only (not play/pause). Height stays fixed on parent.
+ */
+@Composable
+private fun RowScope.KeyguardMediaChipContent(
+    event: IslandEvent.Media,
+    accent: Color,
+    viewModel: AxDynamicBarChipViewModel,
+) {
+    val motionScheme = MaterialTheme.motionScheme
+    // Play is solid art accent. Skip buttons use an opaque blend toward the same accent
+    // (not a low-alpha overlay — that vanished on the dark glass and looked unthemed).
+    val onAccent = chipContentColorOn(accent)
+    val skipBg = lerp(MediaGlassBody, accent, 0.55f)
+
+    // Idle collapse — same delay as cutout center. Key is track|artist only (not isPlaying).
+    val contentKey = remember(event.track, event.artist) { "${event.track}|${event.artist}" }
+    var isTextCollapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(contentKey) {
+        isTextCollapsed = false
+        delay(CutoutCenterCollapsePolicy.CUTOUT_CENTER_RIGHT_IDLE_COLLAPSE_DELAY_MS)
+        isTextCollapsed = true
+    }
+
+    // Collapse spring shared with cutout right-lane width animation.
+    val textCollapseSpec = spring<IntSize>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+
+    AnimatedContent(
+        targetState = event.albumArt,
+        transitionSpec = {
+            (fadeIn(motionScheme.defaultEffectsSpec()) +
+                scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
+                (fadeOut(motionScheme.fastEffectsSpec()) +
+                    scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
+                SizeTransform(clip = false)
+        },
+        contentKey = { it?.hashCode() ?: 0 },
+        label = "kg_media_icon",
+    ) { art ->
+        if (art != null) {
+            val rotation: Float
+            if (event.isPlaying) {
+                val transition = rememberInfiniteTransition(label = "kg_media_art_roll")
+                val animatedRotation by transition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(8000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                    label = "kg_media_art_rotation",
+                )
+                rotation = animatedRotation
+            } else {
+                rotation = 0f
+            }
+
+            Image(
+                bitmap = art.toScaledBitmap(MediaChipIconSize),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(MediaChipIconSize)
+                    .clip(CircleShape)
+                    .graphicsLayer { rotationZ = rotation },
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            PillEventIcon(event, tint = MediaOnGlass)
+        }
+    }
+
+    // Expanded text: hard-capped width + ellipsis (never pushes transport/badge off-chip).
+    // No weight here — a weighted empty AnimatedVisibility would keep the chip at max width
+    // when collapsed. Parent Row already has animateContentSize for the width change.
+    AnimatedVisibility(
+        visible = !isTextCollapsed,
+        enter = expandHorizontally(
+            expandFrom = Alignment.Start,
+            animationSpec = textCollapseSpec,
+        ) + fadeIn(motionScheme.fastEffectsSpec()),
+        exit = shrinkHorizontally(
+            shrinkTowards = Alignment.Start,
+            animationSpec = textCollapseSpec,
+        ) + fadeOut(motionScheme.fastEffectsSpec()),
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(start = SpaceXs)
+                .width(MediaTextExpandedMaxWidth),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AnimatedContent(
+                targetState = event,
+                transitionSpec = {
+                    (fadeIn(motionScheme.defaultEffectsSpec()) +
+                        scaleIn(initialScale = 0.85f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
+                        (fadeOut(motionScheme.fastEffectsSpec()) +
+                            scaleOut(targetScale = 0.85f, animationSpec = motionScheme.fastSpatialSpec())) using
+                        SizeTransform(
+                            clip = false,
+                            sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() },
+                        )
+                },
+                contentKey = { "${it.track}|${it.artist}" },
+                label = "kg_media_text",
+                modifier = Modifier.fillMaxWidth(),
+            ) { ev ->
+                if (ev.artist.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
+                            style = PillPrimary,
+                            color = MediaOnGlass,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .basicMarquee(iterations = 1),
+                        )
+                        Text(
+                            " · ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MediaOnGlassHint,
+                        )
+                        Text(
+                            ev.artist,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MediaOnGlassSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 48.dp),
+                        )
+                    }
+                } else {
+                    Text(
+                        ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
+                        style = PillPrimary,
+                        color = MediaOnGlass,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .basicMarquee(iterations = 1),
+                    )
+                }
+            }
+        }
+    }
+
+    // Transport is fixed-size and always after text — never clipped by long titles.
+    Spacer(Modifier.width(SpaceXs))
+    ActionButton(
+        icon = ActionIcon.SKIP_PREV,
+        color = onAccent,
+        bgColor = skipBg,
+        onClick = { viewModel.skipPrev() },
+        size = MediaActionSize,
+        iconSize = MediaActionIconSize,
+    )
+    Spacer(Modifier.width(SpaceXxs))
+    Surface(
+        onClick = { viewModel.togglePlayPause() },
+        modifier = Modifier.size(MediaActionSize),
+        shape = CircleShape,
+        color = accent,
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(MediaActionSize)) {
+            Icon(
+                if (event.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = stringResource(
+                    if (event.isPlaying) R.string.ax_dynamic_bar_pause
+                    else R.string.ax_dynamic_bar_play,
+                ),
+                tint = onAccent,
+                modifier = Modifier.size(MediaActionIconSize),
+            )
+        }
+    }
+    Spacer(Modifier.width(SpaceXxs))
+    ActionButton(
+        icon = ActionIcon.SKIP_NEXT,
+        color = onAccent,
+        bgColor = skipBg,
+        onClick = { viewModel.skipNext() },
+        size = MediaActionSize,
+        iconSize = MediaActionIconSize,
+    )
 }
 
 @Composable

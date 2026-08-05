@@ -29,8 +29,9 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
  *
  * ### Non-goals
  *
- * Left icon lane stays fixed width; badge behavior is unrelated. Status bar chip and lockscreen chip
- * do **not** use this policy.
+ * Left icon lane stays fixed width; badge behavior is unrelated. Status bar chip does **not**
+ * use this policy. The lockscreen **media** chip reuses the same delay + width-collapse spring
+ * for its track/artist lane only (`KeyguardMediaChipContent`); other keyguard events do not.
  */
 internal object CutoutCenterCollapsePolicy {
 
