@@ -105,9 +105,15 @@ constructor(
 
     private fun MediaInteractor.currentSessionSnapshot(): MediaSessionSnapshot? {
         val currentSessions = sessions
-        val currentSession = currentSessions.getOrNull(currentCarouselIndex)
+        val carouselSession = currentSessions.getOrNull(currentCarouselIndex)
         val session =
-            currentSession?.takeIf { it.isDisplayable() }
+            // The carousel selection wins while it is playing - with more than one session
+            // actually producing audio, the swipe is the only signal of which one is meant.
+            // A playing session still beats a paused card the user swiped to, so Pulse and the
+            // lockscreen media art do not stop while music keeps going.
+            carouselSession?.takeIf { it.isDisplayable() && it.isPlaying() }
+                ?: currentSessions.firstOrNull { it.isDisplayable() && it.isPlaying() }
+                ?: carouselSession?.takeIf { it.isDisplayable() }
                 ?: currentSessions.firstOrNull { it.isDisplayable() }
                 ?: return null
         return MediaSessionSnapshot(
@@ -120,7 +126,14 @@ constructor(
         )
     }
 
-    private fun MediaSessionModel.isDisplayable(): Boolean = isActive && title.isNotBlank()
+    /**
+     * A session with no metadata still drives Pulse and the play gate, so a blank title only
+     * disqualifies a session that is not playing.
+     */
+    private fun MediaSessionModel.isDisplayable(): Boolean =
+        isActive && (title.isNotBlank() || isPlaying())
+
+    private fun MediaSessionModel.isPlaying(): Boolean = state == MediaSessionState.Playing
 
     private fun MediaSessionState.toPlaybackState(): Int =
         when (this) {

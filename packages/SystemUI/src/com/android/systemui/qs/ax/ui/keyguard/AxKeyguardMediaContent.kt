@@ -119,7 +119,9 @@ constructor(
         if (viewModel.hasVisibleGuts()) return false
         val sessions = viewModel.visibleSessions(AxMediaSurface.LOCKSCREEN)
         if (sessions.size <= 1) return sessions.isNotEmpty()
-        val selectedKey = viewModel.currentSession?.key
+        // The page on screen, not the primary session: `currentSession` prefers whatever is playing,
+        // so on a two-card carousel it can name the other card and make this think we are at an edge.
+        val selectedKey = viewModel.selectedSession?.key
         val selectedIndex = sessions.indexOfFirst { it.key == selectedKey }.coerceAtLeast(0)
         val towardStart = if (isRtl) deltaX < 0f else deltaX > 0f
         return if (towardStart) selectedIndex == 0 else selectedIndex == sessions.lastIndex

@@ -208,8 +208,10 @@ fun AxMediaPanel(
     }
 
     val factory = checkNotNull(mediaViewModelFactory)
-    val currentSession = viewModel.currentSession
-    LaunchedEffect(currentSession?.key) { viewModel.synchronizeSession(currentSession?.key) }
+    // Scrub and guts belong to the card on screen, so this follows the carousel page rather than the
+    // playing-preferred `currentSession` — otherwise paging away leaves them open on the old card.
+    val selectedSession = viewModel.selectedSession
+    LaunchedEffect(selectedSession?.key) { viewModel.synchronizeSession(selectedSession?.key) }
     if (sessions.isEmpty() && showPlaceholder) {
         AxMediaCard(
             viewModel = viewModel,

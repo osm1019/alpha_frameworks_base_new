@@ -33,6 +33,7 @@ import com.android.systemui.media.remedia.domain.interactor.MediaInteractor
 import com.android.systemui.media.remedia.domain.model.MediaActionModel
 import com.android.systemui.media.remedia.domain.model.MediaOutputDeviceModel
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
+import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.media.remedia.ui.viewmodel.MediaFalsingSystem
 import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.FalsingManager
@@ -66,9 +67,30 @@ constructor(
 
     private val activeSessions by derivedStateOf { sessions.filter { it.isDisplayable() } }
 
+    /**
+     * Same order as `MediaIslandManager.selectPrimary()`, so the cards and the Dynamic Bar never
+     * disagree about which session is current: the carousel selection if it is playing, then any
+     * playing session, then the selection, then the first displayable one.
+     *
+     * Without the playing terms the cards held whatever sat at the carousel index for as long as it
+     * stayed *active* — and `MediaData.active` outlives playback by `PAUSED_MEDIA_TIMEOUT` (10 min),
+     * so starting a second player left QS and the lockscreen on the first one.
+     */
     val currentSession by derivedStateOf {
-        val selected = sessions.getOrNull(interactor.currentCarouselIndex)
-        selected?.takeIf { it.isDisplayable() } ?: activeSessions.firstOrNull()
+        selectedSession?.takeIf { it.isPlaying() }
+            ?: activeSessions.firstOrNull { it.isPlaying() }
+            ?: selectedSession
+    }
+
+    /**
+     * The card the carousel is actually parked on — **not** [currentSession], which prefers whatever
+     * is playing and can therefore name a different card than the one on screen.
+     *
+     * Anything reasoning about the visible page (paging, swipe-to-dismiss edges) must use this.
+     */
+    val selectedSession by derivedStateOf {
+        sessions.getOrNull(interactor.currentCarouselIndex)?.takeIf { it.isDisplayable() }
+            ?: activeSessions.firstOrNull()
     }
 
     val showOnLockscreen = mediaCarouselInteractor.allowMediaOnLockscreen
@@ -233,6 +255,8 @@ constructor(
     private fun Offset.isHorizontal(): Boolean = abs(x) >= abs(y)
 
     private fun MediaSessionModel.isDisplayable(): Boolean = isActive && title.isNotBlank()
+
+    private fun MediaSessionModel.isPlaying(): Boolean = state == MediaSessionState.Playing
 
     /**
      * A pinned (resumable) session is inactive but still worth showing off the lockscreen, where
