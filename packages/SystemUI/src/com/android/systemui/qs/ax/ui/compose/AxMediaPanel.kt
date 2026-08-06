@@ -1118,12 +1118,15 @@ internal fun MediaOutputChip(
     showLabel: Boolean,
     compact: Boolean,
     label: String? = null,
+    /** Overrides the size derived from [compact], for surfaces that draw it bare beside transport
+     * icons and need it to match their weight. */
+    iconSize: Dp? = null,
     modifier: Modifier = Modifier,
 ) {
     val outputDescription = stringResource(R.string.ax_dynamic_bar_media_output)
     val interactionSource = remember { MutableInteractionSource() }
     val chipHeight = if (compact) 24.dp else 32.dp
-    val iconSize = if (compact) 14.dp else 16.dp
+    val resolvedIconSize = iconSize ?: if (compact) 14.dp else 16.dp
     ExpandableContainer(
         controller =
             rememberExpandableController(color = { Color.Transparent }, shape = CircleShape),
@@ -1168,14 +1171,14 @@ internal fun MediaOutputChip(
                     Icon(
                         icon = session.outputDevice.icon,
                         tint = colors.onPrimary,
-                        modifier = Modifier.size(iconSize),
+                        modifier = Modifier.size(resolvedIconSize),
                     )
                 } else {
                     MaterialIcon(
                         painter = painterResource(R.drawable.ic_music_note),
                         contentDescription = null,
                         tint = colors.onPrimary,
-                        modifier = Modifier.size(iconSize),
+                        modifier = Modifier.size(resolvedIconSize),
                     )
                 }
                 if (showLabel) {

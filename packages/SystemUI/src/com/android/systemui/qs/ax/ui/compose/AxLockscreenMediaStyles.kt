@@ -318,19 +318,21 @@ private fun GlassLockscreenMedia(
                         )
                     }
                 }
-                // Output switcher balances the custom action across the transport row, in neutral
-                // chrome so it reads as chrome rather than as the card's accent.
+                // Output switcher balances the custom action across the transport row. Drawn bare
+                // and pure white like every other glyph here — a tinted pill made it the faintest
+                // thing on the card.
                 MediaOutputChip(
                     session = session,
                     viewModel = viewModel,
                     colors =
                         colors.copy(
-                            primary = MediaChrome.SkipNeutral,
-                            onPrimary = MediaChrome.OnGlassSecondary,
+                            primary = Color.Transparent,
+                            onPrimary = MediaChrome.ControlBare,
                         ),
                     interactive = interactive,
                     showLabel = false,
-                    compact = true,
+                    compact = false,
+                    iconSize = 22.dp,
                     modifier = Modifier.align(Alignment.CenterStart),
                 )
                 if (trailingAction != null) {
@@ -513,18 +515,20 @@ private fun WaveformLockscreenMedia(
                     }
                     Spacer(Modifier.width(8.dp))
                     // Where the reference puts a second small waveform glyph, we put the output
-                    // switcher: a decorative duplicate of the band would earn nothing.
+                    // switcher: a decorative duplicate of the band would earn nothing. Bare and
+                    // white, at the weight of the transport glyphs.
                     MediaOutputChip(
                         session = session,
                         viewModel = viewModel,
                         colors =
                             colors.copy(
-                                primary = MediaChrome.SkipNeutral,
-                                onPrimary = MediaChrome.OnGlassSecondary,
+                                primary = Color.Transparent,
+                                onPrimary = MediaChrome.ControlBare,
                             ),
                         interactive = interactive,
                         showLabel = false,
-                        compact = true,
+                        compact = false,
+                        iconSize = 22.dp,
                     )
                 }
                 Spacer(Modifier.height(8.dp))
