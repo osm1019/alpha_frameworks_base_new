@@ -26,7 +26,7 @@
     <string name="config_recentsComponent" translatable="false">com.android.systemui.recents.OverviewProxyRecentsImpl</string>
 
     <!-- For how long the lock screen can be on before the display turns off. -->
-    <integer name="config_lockScreenDisplayTimeout">10000</integer>
+    <integer name="config_lockScreenDisplayTimeout">20000</integer>
 
     <!-- Vibrator pattern for camera gesture launch. -->
     <integer-array translatable="false" name="config_cameraLaunchGestureVibePattern">
