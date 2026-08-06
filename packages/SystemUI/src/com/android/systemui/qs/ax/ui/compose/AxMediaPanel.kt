@@ -104,6 +104,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -154,6 +155,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.ui.gesture.mediaOverscrollToDismiss
+import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.qs.ax.ui.model.AxMediaSurface
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
@@ -414,6 +416,12 @@ private fun AxMediaCard(
         } else {
             null
         }
+    val lockscreenRim =
+        if (viewModel.lockscreenMediaStyle.effective == AxLockscreenMediaStyle.WAVEFORM) {
+            MediaChrome.accentSweep(primary)
+        } else {
+            SolidColor(MediaChrome.LockscreenGlassBorder)
+        }
     val cardModifier =
         if (isLockscreen && session != null) {
             // Depth first (shadow needs unclipped space), then clip + luminous rim. The frosted
@@ -429,11 +437,9 @@ private fun AxMediaCard(
                     spotColor = Color.Black.copy(alpha = 0.42f),
                 )
                 .clip(shape)
-                .border(
-                    MediaChrome.LockscreenGlassBorderWidth,
-                    MediaChrome.LockscreenGlassBorder,
-                    shape,
-                )
+                // Waveform rims the card with the same sweep it draws the band in; the other
+                // styles keep the neutral hairline.
+                .border(MediaChrome.LockscreenGlassBorderWidth, lockscreenRim, shape)
         } else {
             modifier.fillMaxSize().clip(shape)
         }

@@ -58,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -90,7 +91,11 @@ import kotlin.math.roundToInt
  * card height alike — so the tree stays shippable while the remaining styles are built.
  */
 private val ImplementedStyles =
-    setOf(AxLockscreenMediaStyle.GLASS, AxLockscreenMediaStyle.MINIMAL)
+    setOf(
+        AxLockscreenMediaStyle.GLASS,
+        AxLockscreenMediaStyle.MINIMAL,
+        AxLockscreenMediaStyle.WAVEFORM,
+    )
 
 /** The style actually rendered for [this] selection. */
 internal val AxLockscreenMediaStyle.effective: AxLockscreenMediaStyle
@@ -128,10 +133,17 @@ internal fun LockscreenMediaContent(
     interactive: Boolean,
 ) {
     when (viewModel.lockscreenMediaStyle.effective) {
-        AxLockscreenMediaStyle.GLASS,
-        // Lands in M3; until then it renders Glass (see [ImplementedStyles]).
-        AxLockscreenMediaStyle.WAVEFORM ->
+        AxLockscreenMediaStyle.GLASS ->
             GlassLockscreenMedia(
+                session = session,
+                title = title,
+                subtitle = subtitle,
+                viewModel = viewModel,
+                colors = colors,
+                interactive = interactive,
+            )
+        AxLockscreenMediaStyle.WAVEFORM ->
+            WaveformLockscreenMedia(
                 session = session,
                 title = title,
                 subtitle = subtitle,
@@ -242,7 +254,7 @@ private fun GlassLockscreenMedia(
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }
-                GlassSeekBar(
+                LockscreenSeekBar(
                     session = session,
                     viewModel = viewModel,
                     interactive = interactive,
@@ -435,6 +447,212 @@ private fun MinimalLockscreenMedia(
     }
 }
 
+/**
+ * Waveform card: art and track text on top, an accent band across the middle, a five-slot transport
+ * and a full-width timeline under it.
+ *
+ * This is the one style where accent is loud — band, rim and played progress all come from the art.
+ * The mockup is a landscape frame, so proportions are re-derived for a four-column card rather than
+ * copied: art is 72dp, not the third of the width the reference shows.
+ */
+@Composable
+private fun WaveformLockscreenMedia(
+    session: MediaSessionModel?,
+    title: String,
+    subtitle: String,
+    viewModel: AxMediaViewModel,
+    colors: AxMediaColors,
+    interactive: Boolean,
+) {
+    val playing = session?.state == MediaSessionState.Playing
+    val showCoreActions =
+        session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
+    val progress = session?.let(viewModel::progress) ?: 0f
+    val durationMs = session?.durationMs ?: 0L
+    val hasDuration = durationMs > 0L
+    val elapsedLabel =
+        if (hasDuration) DateUtils.formatElapsedTime((progress * durationMs).toLong() / 1000L)
+        else ""
+    val totalLabel = if (hasDuration) DateUtils.formatElapsedTime(durationMs / 1000L) else ""
+    // The reference's outer slots are shuffle and repeat, but custom actions carry no semantic type,
+    // so whatever the app offers goes there with its own icon — and the slot vanishes if it has none.
+    val extras = session?.additionalActions.orEmpty()
+    val leadingExtra = extras.getOrNull(0)
+    val trailingExtra = extras.getOrNull(1)
+    val seed = session?.key?.hashCode() ?: 0
+    val sweep = remember(colors.primary) { MediaChrome.accentSweep(colors.primary) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        // Art is a tall pane on the left; everything about the track — text, output, band — stacks
+        // beside it, as in the reference.
+        Row(
+            modifier = Modifier.fillMaxWidth().height(WaveformArtSize),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MediaArtPane(
+                session = session,
+                size = WaveformArtSize,
+                shape = RoundedCornerShape(MediaChrome.LockscreenArtCorner),
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        AnimatedMediaText(
+                            text = title,
+                            color = colors.foreground,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                        )
+                        if (subtitle.isNotEmpty()) {
+                            AnimatedMediaText(
+                                text = subtitle,
+                                color = MediaChrome.OnGlassSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    // Where the reference puts a second small waveform glyph, we put the output
+                    // switcher: a decorative duplicate of the band would earn nothing.
+                    MediaOutputChip(
+                        session = session,
+                        viewModel = viewModel,
+                        colors =
+                            colors.copy(
+                                primary = MediaChrome.SkipNeutral,
+                                onPrimary = MediaChrome.OnGlassSecondary,
+                            ),
+                        interactive = interactive,
+                        showLabel = false,
+                        compact = true,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                AxWaveform(
+                    playing = playing,
+                    color = sweep,
+                    // Derived from the width, so the band fills whatever the art leaves.
+                    barCount = null,
+                    barWidth = 2.dp,
+                    barGap = 2.dp,
+                    seed = seed,
+                    modifier = Modifier.fillMaxWidth().height(WaveformBandHeight),
+                )
+            }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(WaveformTransportHeight),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (leadingExtra != null) {
+                    MediaAction(
+                        action = leadingExtra,
+                        viewModel = viewModel,
+                        width = 36.dp,
+                        iconSize = 20.dp,
+                        tint = MediaChrome.OnGlassSecondary,
+                        interactive = interactive,
+                    )
+                }
+                if (showCoreActions) {
+                    CoreMediaAction(
+                        action = session?.leftAction,
+                        imageVector = Icons.Filled.SkipPrevious,
+                        descriptionRes = R.string.controls_media_button_prev,
+                        viewModel = viewModel,
+                        width = 40.dp,
+                        iconSize = 26.dp,
+                        tint = MediaChrome.ControlBare,
+                        interactive = interactive,
+                    )
+                    // Hollow play, ringed with the same sweep the band uses.
+                    Box(
+                        modifier =
+                            Modifier.size(WaveformPlaySize)
+                                .border(WaveformRingWidth, sweep, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CoreMediaAction(
+                            action = session?.playPauseAction,
+                            imageVector = playPauseIcon(session),
+                            descriptionRes = playPauseDescription(session),
+                            animatedIconRes = R.drawable.ic_media_play_button,
+                            animatedIconAtEnd = playing,
+                            viewModel = viewModel,
+                            width = WaveformPlaySize,
+                            iconSize = 26.dp,
+                            tint = MediaChrome.ControlBare,
+                            shape = CircleShape,
+                            interactive = interactive,
+                        )
+                    }
+                    CoreMediaAction(
+                        action = session?.rightAction,
+                        imageVector = Icons.Filled.SkipNext,
+                        descriptionRes = R.string.controls_media_button_next,
+                        viewModel = viewModel,
+                        width = 40.dp,
+                        iconSize = 26.dp,
+                        tint = MediaChrome.ControlBare,
+                        interactive = interactive,
+                    )
+                }
+                if (trailingExtra != null) {
+                    MediaAction(
+                        action = trailingExtra,
+                        viewModel = viewModel,
+                        width = 36.dp,
+                        iconSize = 20.dp,
+                        tint = MediaChrome.OnGlassSecondary,
+                        interactive = interactive,
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (hasDuration) {
+                    Text(
+                        text = elapsedLabel,
+                        color = MediaChrome.OnGlassSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                LockscreenSeekBar(
+                    session = session,
+                    viewModel = viewModel,
+                    interactive = interactive,
+                    // Accent fill rather than the Glass trail — the reference is a solid bar.
+                    trail = { SolidColor(colors.primary) },
+                    modifier = Modifier.weight(1f),
+                )
+                if (hasDuration) {
+                    Text(
+                        text = totalLabel,
+                        color = MediaChrome.OnGlassSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** Progress as a row of dashes, filled up to [progress]. Indicator only — never interactive. */
 @Composable
 private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
@@ -457,16 +675,19 @@ private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
 }
 
 /**
- * Timeline for the Glass style: a quiet track, a played portion that fades in behind the thumb, and
- * a small round thumb. The platform [MediaSeekBar] cannot draw the trail — its progress drawable is
- * a flat fill or the squiggle — so this style owns its own bar.
+ * Timeline for the lockscreen styles: a quiet track, a played portion and a small round thumb. The
+ * platform [MediaSeekBar] cannot draw either look — its progress drawable is a flat fill or the
+ * squiggle — so the lockscreen owns its own bar.
+ *
+ * Glass fades the played portion in behind the thumb; Waveform passes a solid accent [trail].
  */
 @Composable
-private fun GlassSeekBar(
+private fun LockscreenSeekBar(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     interactive: Boolean,
     modifier: Modifier = Modifier,
+    trail: (Float) -> Brush = MediaChrome::lockscreenProgressTrail,
 ) {
     val progress = session?.let(viewModel::progress) ?: 0f
     val scrubbable = interactive && session != null && session.canBeScrubbed
@@ -545,7 +766,7 @@ private fun GlassSeekBar(
             )
             if (playedX > thumbRadius) {
                 drawLine(
-                    brush = MediaChrome.lockscreenProgressTrail(playedX),
+                    brush = trail(playedX),
                     start = Offset(thumbRadius, centreY),
                     end = Offset(playedX, centreY),
                     strokeWidth = stroke,
@@ -630,6 +851,15 @@ private val TransportRowHeight = 56.dp
 private val GlassSeekBarHeight = 20.dp
 private val GlassSeekBarTrack = 3.dp
 private val GlassSeekBarThumb = 5.dp
+
+// Waveform budget inside ax_lockscreen_media_height_waveform (204dp): 20 padding + 104 art row +
+// 48 transport + 4 + 20 timeline = 196, leaving the weighted spacer ~8dp. The band lives inside the
+// art row now, so the card is shorter than the first cut even with a bigger thumbnail.
+private val WaveformArtSize = 104.dp
+private val WaveformBandHeight = 40.dp
+private val WaveformTransportHeight = 48.dp
+private val WaveformPlaySize = 48.dp
+private val WaveformRingWidth = 2.dp
 
 /** Half of `ax_lockscreen_media_height_minimal` (104dp) — keep the two in step. */
 private val MinimalPillCorner = 52.dp

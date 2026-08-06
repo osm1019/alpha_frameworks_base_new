@@ -84,7 +84,8 @@ fun AxWaveform(
     playing: Boolean,
     color: Brush,
     modifier: Modifier = Modifier,
-    barCount: Int = 13,
+    /** Null derives the count from the available width, so a band fills edge to edge. */
+    barCount: Int? = 13,
     barWidth: Dp = 2.dp,
     barGap: Dp = 2.dp,
     seed: Int = 0,
@@ -111,11 +112,14 @@ fun AxWaveform(
     Canvas(modifier = modifier) {
         val widthPx = barWidth.toPx()
         val gapPx = barGap.toPx()
-        val totalPx = barCount * widthPx + (barCount - 1) * gapPx
+        val bars =
+            barCount
+                ?: ((size.width + gapPx) / (widthPx + gapPx)).toInt().coerceIn(1, MaxDerivedBars)
+        val totalPx = bars * widthPx + (bars - 1) * gapPx
         val startX = (size.width - totalPx) / 2f
         val radius = CornerRadius(widthPx / 2f, widthPx / 2f)
-        val live = source.amplitudes(barCount, phase, seed)
-        for (index in 0 until barCount) {
+        val live = source.amplitudes(bars, phase, seed)
+        for (index in 0 until bars) {
             // Liveness alone drives the collapse, so pausing settles the row instead of freezing it.
             val fraction = RestFraction + (live[index] - RestFraction) * liveness
             val barHeight = (size.height * fraction).coerceAtLeast(widthPx)
@@ -137,3 +141,6 @@ fun AxWaveform(
  * settled row still has to look like a waveform.
  */
 private const val RestFraction = 0.3f
+
+/** Ceiling for width-derived bar counts, so a wide surface cannot ask for hundreds of bars. */
+private const val MaxDerivedBars = 128

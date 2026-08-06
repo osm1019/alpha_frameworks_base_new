@@ -16,9 +16,11 @@
 
 package com.android.systemui.media.ax.ui.compose
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 
 /**
@@ -56,6 +58,20 @@ object MediaChrome {
      * a bright wallpaper — the volume dialog swaps colours the same way.
      */
     val LockscreenGlassBodyNoBlur = Color(0xD91C1C1E)
+
+    /**
+     * Sweep from the art accent to a hue-rotated sibling — the Waveform style's signature, used for
+     * its band and its rim. Derived from the art so it stays the track's own palette.
+     */
+    fun accentSweep(accent: Color, degrees: Float = 62f): Brush =
+        Brush.horizontalGradient(listOf(accent, accent.rotateHue(degrees)))
+
+    private fun Color.rotateHue(degrees: Float): Color {
+        val hsv = FloatArray(3)
+        AndroidColor.colorToHSV(toArgb(), hsv)
+        hsv[0] = (hsv[0] + degrees).mod(360f)
+        return Color(AndroidColor.HSVToColor(hsv))
+    }
 
     /**
      * Played portion of the Glass timeline: a trail that fades in behind the thumb rather than a
