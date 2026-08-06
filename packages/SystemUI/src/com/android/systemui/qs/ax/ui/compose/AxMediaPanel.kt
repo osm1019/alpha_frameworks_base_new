@@ -223,7 +223,7 @@ fun AxMediaPanel(
 
     val shape =
         if (surface == AxMediaSurface.LOCKSCREEN) {
-            RoundedCornerShape(MediaChrome.LockscreenCornerRadius)
+            RoundedCornerShape(viewModel.lockscreenMediaStyle.effective.cornerRadius())
         } else {
             axQsControlShape(AxQsControl.MEDIA, span)
         }
@@ -327,9 +327,11 @@ private fun AxMediaCard(
     val title = session?.title ?: stringResource(R.string.ax_qs_media_not_playing)
     val subtitle = session?.subtitle.orEmpty()
     val isLockscreen = surface == AxMediaSurface.LOCKSCREEN
+    // Each lockscreen style owns its silhouette — Minimal is a pill, not a rounded rectangle.
+    val lockscreenCorner = viewModel.lockscreenMediaStyle.effective.cornerRadius()
     val shape =
         if (isLockscreen) {
-            RoundedCornerShape(MediaChrome.LockscreenCornerRadius)
+            RoundedCornerShape(lockscreenCorner)
         } else {
             axQsControlShape(AxQsControl.MEDIA, span)
         }
@@ -458,7 +460,7 @@ private fun AxMediaCard(
         Box(Modifier.fillMaxSize()) {
             if (isLockscreen && session != null) {
                 LockscreenGlassBackdrop(
-                    corner = MediaChrome.LockscreenCornerRadius,
+                    corner = lockscreenCorner,
                     artwork =
                         session.background.takeIf { viewModel.isLockscreenMediaArtEnabled },
                 )

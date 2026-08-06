@@ -55,8 +55,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,12 +82,15 @@ import com.android.systemui.media.remedia.shared.model.MediaSessionState
 import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.res.R
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /**
  * Styles whose layout has landed. The rest fall back to [AxLockscreenMediaStyle.GLASS] — layout and
  * card height alike — so the tree stays shippable while the remaining styles are built.
  */
-private val ImplementedStyles = setOf(AxLockscreenMediaStyle.GLASS)
+private val ImplementedStyles =
+    setOf(AxLockscreenMediaStyle.GLASS, AxLockscreenMediaStyle.MINIMAL)
 
 /** The style actually rendered for [this] selection. */
 internal val AxLockscreenMediaStyle.effective: AxLockscreenMediaStyle
@@ -99,6 +105,18 @@ internal fun AxLockscreenMediaStyle.heightRes(): Int =
         AxLockscreenMediaStyle.WAVEFORM -> R.dimen.ax_lockscreen_media_height_waveform
     }
 
+/**
+ * Corner radius of the card body for [this] style. Also drives the blur drawable's corner, so the
+ * frost stops exactly where the border does.
+ */
+internal fun AxLockscreenMediaStyle.cornerRadius(): Dp =
+    when (this) {
+        AxLockscreenMediaStyle.GLASS -> MediaChrome.LockscreenCornerRadius
+        // Half of ax_lockscreen_media_height_minimal — a true pill.
+        AxLockscreenMediaStyle.MINIMAL -> MinimalPillCorner
+        AxLockscreenMediaStyle.WAVEFORM -> MediaChrome.LockscreenCornerRadius
+    }
+
 /** Picks the lockscreen card layout the user asked for. */
 @Composable
 internal fun LockscreenMediaContent(
@@ -111,10 +129,18 @@ internal fun LockscreenMediaContent(
 ) {
     when (viewModel.lockscreenMediaStyle.effective) {
         AxLockscreenMediaStyle.GLASS,
-        // Land in M2 / M3; until then every selection renders Glass (see [ImplementedStyles]).
-        AxLockscreenMediaStyle.MINIMAL,
+        // Lands in M3; until then it renders Glass (see [ImplementedStyles]).
         AxLockscreenMediaStyle.WAVEFORM ->
             GlassLockscreenMedia(
+                session = session,
+                title = title,
+                subtitle = subtitle,
+                viewModel = viewModel,
+                colors = colors,
+                interactive = interactive,
+            )
+        AxLockscreenMediaStyle.MINIMAL ->
+            MinimalLockscreenMedia(
                 session = session,
                 title = title,
                 subtitle = subtitle,
@@ -169,7 +195,11 @@ private fun GlassLockscreenMedia(
             modifier = Modifier.fillMaxWidth().height(MediaChrome.LockscreenArtSize),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MediaArtThumbnail(session = session, size = MediaChrome.LockscreenArtSize)
+            MediaArtPane(
+                session = session,
+                size = MediaChrome.LockscreenArtSize,
+                shape = RoundedCornerShape(MediaChrome.LockscreenArtCorner),
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 AnimatedMediaText(
@@ -309,6 +339,124 @@ private fun GlassLockscreenMedia(
 }
 
 /**
+ * Minimal pill: circular art filling the pill's height, track text with a segmented progress read-out
+ * under it, and bare transport icons at the trailing edge.
+ *
+ * Deliberately spare — no output chip, no custom action, no timestamps, no scrubbing. The segments
+ * are an indicator only: a 4dp row of dashes is not a touch target worth pretending about.
+ */
+@Composable
+private fun MinimalLockscreenMedia(
+    session: MediaSessionModel?,
+    title: String,
+    subtitle: String,
+    viewModel: AxMediaViewModel,
+    colors: AxMediaColors,
+    interactive: Boolean,
+) {
+    val playing = session?.state == MediaSessionState.Playing
+    val showCoreActions =
+        session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
+    val progress = session?.let(viewModel::progress) ?: 0f
+
+    Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MediaArtPane(
+            session = session,
+            size = MediaChrome.LockscreenArtSize,
+            shape = CircleShape,
+            borderWidth = MinimalArtRingWidth,
+            borderColor = MediaChrome.LockscreenGlassBorder,
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            AnimatedMediaText(
+                text = title,
+                color = colors.foreground,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (subtitle.isNotEmpty()) {
+                AnimatedMediaText(
+                    text = subtitle,
+                    color = MediaChrome.OnGlassSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            SegmentedProgress(
+                progress = progress,
+                modifier = Modifier.fillMaxWidth().height(MinimalSegmentHeight),
+            )
+        }
+        if (showCoreActions) {
+            Spacer(Modifier.width(8.dp))
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CoreMediaAction(
+                        action = session?.leftAction,
+                        imageVector = Icons.Filled.SkipPrevious,
+                        descriptionRes = R.string.controls_media_button_prev,
+                        viewModel = viewModel,
+                        width = 40.dp,
+                        iconSize = 24.dp,
+                        tint = MediaChrome.ControlBare,
+                        interactive = interactive,
+                    )
+                    CoreMediaAction(
+                        action = session?.playPauseAction,
+                        imageVector = playPauseIcon(session),
+                        descriptionRes = playPauseDescription(session),
+                        animatedIconRes = R.drawable.ic_media_play_button,
+                        animatedIconAtEnd = playing,
+                        viewModel = viewModel,
+                        width = 48.dp,
+                        iconSize = 32.dp,
+                        tint = MediaChrome.ControlBare,
+                        interactive = interactive,
+                    )
+                    CoreMediaAction(
+                        action = session?.rightAction,
+                        imageVector = Icons.Filled.SkipNext,
+                        descriptionRes = R.string.controls_media_button_next,
+                        viewModel = viewModel,
+                        width = 40.dp,
+                        iconSize = 24.dp,
+                        tint = MediaChrome.ControlBare,
+                        interactive = interactive,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Progress as a row of dashes, filled up to [progress]. Indicator only — never interactive. */
+@Composable
+private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val segment = MinimalSegmentWidth.toPx()
+        val gap = MinimalSegmentGap.toPx()
+        val count = floor((size.width + gap) / (segment + gap)).toInt().coerceIn(1, 64)
+        val filled = (count * progress.coerceIn(0f, 1f)).roundToInt()
+        val radius = CornerRadius(segment / 2f, segment / 2f)
+        for (index in 0 until count) {
+            drawRoundRect(
+                color =
+                    if (index < filled) MediaChrome.OnGlass else MediaChrome.LockscreenProgressTrack,
+                topLeft = Offset(index * (segment + gap), 0f),
+                size = Size(segment, size.height),
+                cornerRadius = radius,
+            )
+        }
+    }
+}
+
+/**
  * Timeline for the Glass style: a quiet track, a played portion that fades in behind the thumb, and
  * a small round thumb. The platform [MediaSeekBar] cannot draw the trail — its progress drawable is
  * a flat fill or the squiggle — so this style owns its own bar.
@@ -413,17 +561,24 @@ private fun GlassSeekBar(
     }
 }
 
-/** Album art, or the app's own icon while the session has none. */
+/**
+ * Album art, or the app's own icon while the session has none. Bordered like the card, so art and
+ * body read as the same material — rounded square on Glass, a ringed circle on Minimal.
+ */
 @Composable
-private fun MediaArtThumbnail(session: MediaSessionModel?, size: Dp) {
-    val shape = RoundedCornerShape(MediaChrome.LockscreenArtCorner)
+private fun MediaArtPane(
+    session: MediaSessionModel?,
+    size: Dp,
+    shape: Shape,
+    borderWidth: Dp = MediaChrome.LockscreenGlassBorderWidth,
+    borderColor: Color = MediaChrome.LockscreenGlassBorder,
+) {
     Box(
         modifier =
             Modifier.size(size)
                 .clip(shape)
                 .background(MediaChrome.SkipNeutral)
-                // Same hairline as the card: the art reads as a second pane of the same glass.
-                .border(MediaChrome.LockscreenGlassBorderWidth, MediaChrome.LockscreenGlassBorder, shape),
+                .border(borderWidth, borderColor, shape),
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(targetState = session?.background, label = "AxLockscreenMediaArt") { artwork ->
@@ -475,3 +630,10 @@ private val TransportRowHeight = 56.dp
 private val GlassSeekBarHeight = 20.dp
 private val GlassSeekBarTrack = 3.dp
 private val GlassSeekBarThumb = 5.dp
+
+/** Half of `ax_lockscreen_media_height_minimal` (104dp) — keep the two in step. */
+private val MinimalPillCorner = 52.dp
+private val MinimalArtRingWidth = 2.dp
+private val MinimalSegmentWidth = 3.dp
+private val MinimalSegmentGap = 3.dp
+private val MinimalSegmentHeight = 4.dp
