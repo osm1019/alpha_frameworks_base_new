@@ -583,190 +583,6 @@ private fun MediaArtwork(
     }
 }
 
-/**
- * Lockscreen card: app icon + output chip above, title with the accent play control, and a
- * transport row where the seek bar sits between its elapsed / total labels and the extra session
- * actions. Element layout follows the Axion 2.8 card; chrome stays ours ([MediaChrome] glass,
- * accent play, tonal skips), and the art is full-bleed under the glass wash rather than a
- * thumbnail.
- */
-@Composable
-private fun LockscreenMediaContent(
-    session: MediaSessionModel?,
-    title: String,
-    subtitle: String,
-    viewModel: AxMediaViewModel,
-    colors: AxMediaColors,
-    interactive: Boolean,
-) {
-    val playPauseCornerRadius by
-        animateDpAsState(
-            targetValue = if (session?.state == MediaSessionState.Playing) 16.dp else 28.dp,
-            label = "AxLockscreenMediaPlayPauseCornerRadius",
-        )
-    val playPauseShape = RoundedCornerShape(playPauseCornerRadius)
-    val showCoreActions =
-        session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
-    val skipBg = MediaChrome.skipBackground(colors.primary)
-    val outputLabel =
-        session?.outputDevice?.name?.takeUnless { it.isBlank() || it == "null" }
-            ?: stringResource(R.string.ax_dynamic_bar_media_output)
-    val progress = session?.let(viewModel::progress) ?: 0f
-    val durationMs = session?.durationMs ?: 0L
-    val hasDuration = durationMs > 0L
-    val elapsedLabel =
-        if (hasDuration) DateUtils.formatElapsedTime((progress * durationMs).toLong() / 1000L)
-        else ""
-    val totalLabel = if (hasDuration) DateUtils.formatElapsedTime(durationMs / 1000L) else ""
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        // Extra actions only earn their place once the seek bar still has room to be scrubbable.
-        val cardWidth = maxWidth
-        val transportWidth = cardWidth - 24.dp
-        val extraActionCapacity =
-            ((transportWidth - ExpandedMediaMinSeekWidth - 88.dp) / 40.dp).toInt().coerceIn(0, 2)
-        val additionalActions = session?.additionalActions.orEmpty().take(extraActionCapacity)
-
-        // Height budget: qs_media_session_height_expanded = 184dp.
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Box(Modifier.fillMaxWidth()) {
-                MediaAppIcon(
-                    session = session,
-                    size = 24.dp,
-                    tint = colors.primary,
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp),
-                )
-                MediaOutputChip(
-                    session = session,
-                    viewModel = viewModel,
-                    colors = colors,
-                    interactive = interactive,
-                    showLabel = true,
-                    label = outputLabel,
-                    compact = false,
-                    modifier = Modifier.align(Alignment.CenterEnd).widthIn(max = cardWidth * 0.5f),
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            Row(
-                // Pinned so the row cannot grow with the font scale: the title and subtitle are
-                // single-line, but two stacked lines can still outgrow the play control at 2x and
-                // push the transport past the fixed card height.
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(start = 4.dp, end = 8.dp)) {
-                    AnimatedMediaText(
-                        text = title,
-                        color = colors.foreground,
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                    )
-                    if (subtitle.isNotEmpty()) {
-                        AnimatedMediaText(
-                            text = subtitle,
-                            color = MediaChrome.OnGlassSecondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                }
-                if (showCoreActions) {
-                    CoreMediaAction(
-                        action = session?.playPauseAction,
-                        imageVector = playPauseIcon(session),
-                        descriptionRes = playPauseDescription(session),
-                        animatedIconRes = R.drawable.ic_media_play_button,
-                        animatedIconAtEnd = session?.state == MediaSessionState.Playing,
-                        viewModel = viewModel,
-                        width = 72.dp,
-                        height = 48.dp,
-                        iconSize = 26.dp,
-                        tint = colors.onPrimary,
-                        background = colors.primary,
-                        shape = playPauseShape,
-                        interactive = interactive,
-                    )
-                }
-            }
-
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (showCoreActions) {
-                        CoreMediaAction(
-                            action = session?.leftAction,
-                            imageVector = Icons.Filled.SkipPrevious,
-                            descriptionRes = R.string.controls_media_button_prev,
-                            viewModel = viewModel,
-                            width = 40.dp,
-                            height = 40.dp,
-                            iconSize = 22.dp,
-                            tint = MediaChrome.OnGlass,
-                            background = skipBg,
-                            shape = CircleShape,
-                            interactive = interactive,
-                        )
-                    }
-                    if (hasDuration) {
-                        Text(
-                            text = elapsedLabel,
-                            color = MediaChrome.OnGlassSecondary,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                        )
-                    }
-                    MediaSeekBar(
-                        session = session,
-                        viewModel = viewModel,
-                        colors = colors,
-                        dense = true,
-                        interactive = interactive,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (hasDuration) {
-                        Text(
-                            text = totalLabel,
-                            color = MediaChrome.OnGlassHint,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                        )
-                    }
-                    if (showCoreActions) {
-                        CoreMediaAction(
-                            action = session?.rightAction,
-                            imageVector = Icons.Filled.SkipNext,
-                            descriptionRes = R.string.controls_media_button_next,
-                            viewModel = viewModel,
-                            width = 40.dp,
-                            height = 40.dp,
-                            iconSize = 22.dp,
-                            tint = MediaChrome.OnGlass,
-                            background = skipBg,
-                            shape = CircleShape,
-                            interactive = interactive,
-                        )
-                    }
-                    additionalActions.forEach { action ->
-                        MediaAction(
-                            action = action,
-                            viewModel = viewModel,
-                            width = 36.dp,
-                            height = 36.dp,
-                            iconSize = 20.dp,
-                            tint = MediaChrome.OnGlassSecondary,
-                            interactive = interactive,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun MediaGuts(
     session: MediaSessionModel,
@@ -1208,7 +1024,7 @@ private fun ExpandedNavigationAction(
 }
 
 @Composable
-private fun AnimatedMediaText(
+internal fun AnimatedMediaText(
     text: String,
     color: Color,
     style: TextStyle,
@@ -1234,7 +1050,7 @@ private fun AnimatedMediaText(
 }
 
 @Composable
-private fun MediaAppIcon(
+internal fun MediaAppIcon(
     session: MediaSessionModel?,
     size: Dp,
     tint: Color,
@@ -1253,7 +1069,7 @@ private fun MediaAppIcon(
 }
 
 @Composable
-private fun MediaOutputChip(
+internal fun MediaOutputChip(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     colors: AxMediaColors,
@@ -1362,7 +1178,7 @@ private fun mediaCompactActionSize(width: Dp, height: Dp): Dp {
 
 @Composable
 @SuppressLint("ClickableViewAccessibility")
-private fun MediaSeekBar(
+internal fun MediaSeekBar(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     colors: AxMediaColors,
@@ -1582,7 +1398,7 @@ private fun MediaControls(
 }
 
 @Composable
-private fun CoreMediaAction(
+internal fun CoreMediaAction(
     action: MediaActionModel?,
     imageVector: ImageVector,
     @StringRes descriptionRes: Int,
@@ -1686,7 +1502,7 @@ private fun PlaceholderMediaAction(
 }
 
 @Immutable
-private data class AxMediaColors(
+internal data class AxMediaColors(
     val primary: Color,
     val onPrimary: Color,
     val background: Color,
@@ -1701,13 +1517,13 @@ private enum class AxMediaLayout {
     Lockscreen,
 }
 
-private val ExpandedMediaMinSeekWidth = 40.dp
+internal val ExpandedMediaMinSeekWidth = 40.dp
 private val ExpandedMediaNavigationMaxWidth = 320.dp
 private val CompactMediaMaxHeight = 220.dp
 private val MediaNavigationIconSize = 16.dp
 
 @Composable
-private fun MediaAction(
+internal fun MediaAction(
     action: MediaActionModel,
     viewModel: AxMediaViewModel,
     width: Dp,
@@ -1817,7 +1633,7 @@ private fun MediaStyledSurface(
     }
 }
 
-private fun playPauseIcon(session: MediaSessionModel?): ImageVector {
+internal fun playPauseIcon(session: MediaSessionModel?): ImageVector {
     return if (session?.state == MediaSessionState.Playing) {
         Icons.Filled.Pause
     } else {
@@ -1826,7 +1642,7 @@ private fun playPauseIcon(session: MediaSessionModel?): ImageVector {
 }
 
 @StringRes
-private fun playPauseDescription(session: MediaSessionModel?): Int {
+internal fun playPauseDescription(session: MediaSessionModel?): Int {
     return if (session?.state == MediaSessionState.Playing) {
         R.string.controls_media_button_pause
     } else {

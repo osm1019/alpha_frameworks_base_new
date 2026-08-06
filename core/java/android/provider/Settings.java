@@ -8304,6 +8304,15 @@ public final class Settings {
         public static final String UI_STYLE = "ui_style";
 
         /**
+         * Look of the lockscreen media card.
+         * 0 - Glass (default)
+         * 1 - Minimal
+         * 2 - Waveform
+         * @hide
+         */
+        public static final String LOCKSCREEN_MEDIA_STYLE = "lockscreen_media_style";
+
+        /**
          * Ui style Outline parameters
          * @hide
          */

@@ -82,12 +82,20 @@ constructor(
         mutableStateOf(mediaSettingsRepository.isMediaResumptionEnabled.value)
         private set
 
+    /** Layout the lockscreen card renders with; other surfaces ignore it. */
+    var lockscreenMediaStyle by
+        mutableStateOf(mediaSettingsRepository.lockscreenMediaStyle.value)
+        private set
+
     init {
         mediaHistoryRepository.startListening()
         applicationScope.launch(context = mainDispatcher) {
             mediaSettingsRepository.isMediaResumptionEnabled.collect {
                 isMediaResumptionEnabled = it
             }
+        }
+        applicationScope.launch(context = mainDispatcher) {
+            mediaSettingsRepository.lockscreenMediaStyle.collect { lockscreenMediaStyle = it }
         }
     }
 

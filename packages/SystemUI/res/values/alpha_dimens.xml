@@ -36,4 +36,10 @@
     <dimen name="right_tri_state_up_bottom_right_radius">0.0dip</dimen>
     <dimen name="right_tri_state_up_top_left_radius">24.0dip</dimen>
     <dimen name="right_tri_state_up_top_right_radius">24.0dip</dimen>
+
+    <!-- Lockscreen media card height, per style. Kept apart from
+         qs_media_session_height_expanded, which QS and the media pipeline also read. -->
+    <dimen name="ax_lockscreen_media_height_glass">184dp</dimen>
+    <dimen name="ax_lockscreen_media_height_minimal">104dp</dimen>
+    <dimen name="ax_lockscreen_media_height_waveform">224dp</dimen>
 </resources>

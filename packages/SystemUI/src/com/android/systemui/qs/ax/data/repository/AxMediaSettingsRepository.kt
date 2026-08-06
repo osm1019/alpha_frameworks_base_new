@@ -21,8 +21,10 @@ import android.provider.Settings
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.qs.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
+import com.android.systemui.util.settings.SystemSettings
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +42,7 @@ class AxMediaSettingsRepository
 @Inject
 constructor(
     private val secureSettings: SecureSettings,
+    private val systemSettings: SystemSettings,
     @Application private val applicationScope: CoroutineScope,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
 ) {
@@ -58,6 +61,25 @@ constructor(
             .distinctUntilChanged()
             .flowOn(backgroundDispatcher)
             .stateIn(applicationScope, SharingStarted.Eagerly, readResumptionSetting())
+
+    /** Which lockscreen media card layout the user picked. */
+    val lockscreenMediaStyle: StateFlow<AxLockscreenMediaStyle> =
+        systemSettings
+            .observerFlow(UserHandle.USER_ALL, Settings.System.LOCKSCREEN_MEDIA_STYLE)
+            .onStart { emit(Unit) }
+            .map { readStyleSetting() }
+            .distinctUntilChanged()
+            .flowOn(backgroundDispatcher)
+            .stateIn(applicationScope, SharingStarted.Eagerly, readStyleSetting())
+
+    private fun readStyleSetting(): AxLockscreenMediaStyle =
+        AxLockscreenMediaStyle.fromSetting(
+            systemSettings.getIntForUser(
+                Settings.System.LOCKSCREEN_MEDIA_STYLE,
+                AxLockscreenMediaStyle.DEFAULT.settingValue,
+                UserHandle.USER_CURRENT,
+            )
+        )
 
     private fun readResumptionSetting(): Boolean =
         secureSettings.getBoolForUser(

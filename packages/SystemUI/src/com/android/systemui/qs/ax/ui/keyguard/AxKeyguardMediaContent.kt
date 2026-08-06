@@ -23,9 +23,11 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,10 +39,11 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.ui.compose.AxMediaPanel
+import com.android.systemui.qs.ax.ui.compose.effective
+import com.android.systemui.qs.ax.ui.compose.heightRes
 import com.android.systemui.qs.ax.ui.model.AxMediaSurface
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.ui.composable.QuickSettingsTheme
-import com.android.systemui.res.R
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.sign
@@ -84,12 +87,18 @@ constructor(
         composeView.setContent {
             PlatformTheme {
                 QuickSettingsTheme {
-                    Box(
-                        modifier =
-                            Modifier.fillMaxWidth()
-                                .height(
-                                    dimensionResource(R.dimen.qs_media_session_height_expanded)
+                    // Each style owns its card height; animated so switching it in Settings does not
+                    // snap the card while it is on screen.
+                    val cardHeight by
+                        animateDpAsState(
+                            targetValue =
+                                dimensionResource(
+                                    viewModel.lockscreenMediaStyle.effective.heightRes()
                                 ),
+                            label = "AxKeyguardMediaHeight",
+                        )
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(cardHeight),
                         contentAlignment = Alignment.Center,
                     ) {
                         AxMediaPanel(
