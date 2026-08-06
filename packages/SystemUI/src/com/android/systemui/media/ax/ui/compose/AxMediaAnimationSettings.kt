@@ -68,6 +68,39 @@ fun rememberSquiggleAnimationEnabled(): Boolean {
     return enabled
 }
 
+/**
+ * Whether system animations are on at all ([Settings.Global.ANIMATOR_DURATION_SCALE]).
+ *
+ * Media surfaces that run their own frame loop — the waveform badge and band — must idle when the
+ * user has animations off, the same way the seek bar stops its squiggle.
+ */
+@Composable
+fun rememberAnimationsEnabled(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    var enabled by remember(resolver) { mutableStateOf(areAnimationsEnabled(resolver)) }
+
+    DisposableEffect(resolver) {
+        val observer =
+            object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    enabled = areAnimationsEnabled(resolver)
+                }
+            }
+        resolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+            false,
+            observer,
+            UserHandle.USER_ALL,
+        )
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
+
+    return enabled
+}
+
+private fun areAnimationsEnabled(resolver: ContentResolver): Boolean =
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+
 private fun isSquiggleAnimationEnabled(resolver: ContentResolver): Boolean {
     val squiggleEnabled =
         Settings.Secure.getIntForUser(
@@ -76,7 +109,5 @@ private fun isSquiggleAnimationEnabled(resolver: ContentResolver): Boolean {
             1,
             UserHandle.USER_CURRENT,
         ) != 0
-    val animationsEnabled =
-        Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
-    return squiggleEnabled && animationsEnabled
+    return squiggleEnabled && areAnimationsEnabled(resolver)
 }

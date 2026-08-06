@@ -20,12 +20,16 @@ package com.android.systemui.qs.ax.ui.compose
 
 import android.annotation.SuppressLint
 import android.content.res.ColorStateList
+import android.graphics.drawable.ColorDrawable
 import android.service.quicksettings.Tile.STATE_ACTIVE
 import android.service.quicksettings.Tile.STATE_INACTIVE
 import android.text.format.DateUtils
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.SeekBar
+import java.util.function.Consumer
+import com.android.internal.graphics.drawable.BackgroundBlurDrawable
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
@@ -80,6 +84,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,10 +92,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -98,6 +107,11 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
@@ -109,10 +123,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlin.math.roundToInt
 import com.android.compose.animation.Expandable as ExpandableContainer
 import com.android.compose.animation.rememberExpandableController
 import com.android.systemui.alpha.style.qs.QSTileStyleWrapper
@@ -324,8 +341,8 @@ private fun AxMediaCard(
             else -> AxMediaLayout.Compact
         }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
-    // Lockscreen draws its own art thumbnail; full-bleed wash is optional under glass.
-    val artwork = session?.background?.takeIf { isLockscreen || span.columns > 1 }
+    // Lockscreen styles draw their own art; only QS washes it full-bleed behind the content.
+    val artwork = session?.background?.takeIf { !isLockscreen && span.columns > 1 }
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
@@ -335,7 +352,9 @@ private fun AxMediaCard(
             targetValue =
                 when {
                     artwork != null && !gutsVisible -> Color.Transparent
-                    isLockscreen && session != null -> MediaChrome.GlassBody
+                    // Lockscreen glass is drawn by [LockscreenGlassBackdrop] (open tint + blur);
+                    // keep the expandable colour transparent so it does not paint a denser slab.
+                    isLockscreen && session != null -> Color.Transparent
                     session != null -> mediaBackground
                     else -> tileBackground
                 },
@@ -395,20 +414,39 @@ private fun AxMediaCard(
         }
     val cardModifier =
         if (isLockscreen && session != null) {
+            // Depth first (shadow needs unclipped space), then clip + luminous rim. The frosted
+            // fill itself is [LockscreenGlassBackdrop] inside the expandable, not a solid
+            // Compose background — that is what made the first M1 cut read as a black slab.
             modifier
                 .fillMaxSize()
+                .shadow(
+                    elevation = MediaChrome.LockscreenGlassElevation,
+                    shape = shape,
+                    clip = false,
+                    ambientColor = Color.Black.copy(alpha = 0.30f),
+                    spotColor = Color.Black.copy(alpha = 0.42f),
+                )
                 .clip(shape)
-                .background(background)
-                .border(1.dp, MediaChrome.GlassBorder, shape)
+                .border(
+                    MediaChrome.LockscreenGlassBorderWidth,
+                    MediaChrome.LockscreenGlassBorder,
+                    shape,
+                )
         } else {
             modifier.fillMaxSize().clip(shape)
         }
     ExpandableContainer(
         // Empty cards paint their own styled fill; keep expandable transparent so the style
         // wrapper is the sole chrome. Session cards keep media/artwork colors for the morph.
+        // Lockscreen sessions stay transparent: glass is the dedicated backdrop below.
         controller =
             rememberExpandableController(
-                color = { if (session == null) Color.Transparent else background },
+                color = {
+                    when {
+                        session == null || isLockscreen -> Color.Transparent
+                        else -> background
+                    }
+                },
                 shape = shape,
             ),
         modifier = cardModifier,
@@ -418,6 +456,13 @@ private fun AxMediaCard(
         useModifierBasedImplementation = true,
     ) { expandable ->
         Box(Modifier.fillMaxSize()) {
+            if (isLockscreen && session != null) {
+                LockscreenGlassBackdrop(
+                    corner = MediaChrome.LockscreenCornerRadius,
+                    artwork =
+                        session.background.takeIf { viewModel.isLockscreenMediaArtEnabled },
+                )
+            }
             // (1) Empty / "not playing" card body — inactive small-tile UI Styles.
             if (session == null) {
                 MediaStyledSurface(
@@ -470,17 +515,8 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        // QS: full-bleed art. Lockscreen: soft wash under glass for depth (#7).
                         if (session != null && artwork != null) {
-                            if (isLockscreen) {
-                                MediaArtwork(
-                                    artwork = artwork,
-                                    overlayColor = MediaChrome.GlassBody,
-                                    washAlpha = 0.68f,
-                                )
-                            } else {
-                                MediaArtwork(artwork = artwork, overlayColor = colors.background)
-                            }
+                            MediaArtwork(artwork = artwork, overlayColor = colors.background)
                         }
                         AnimatedContent(
                             targetState = layout,
@@ -545,12 +581,9 @@ private fun AxMediaCard(
 }
 
 @Composable
-private fun MediaArtwork(
-    artwork: IconModel?,
-    overlayColor: Color,
-    /** Higher = more overlay (glass wash). QS uses the default radial mask. */
-    washAlpha: Float = 0.65f,
-) {
+private fun MediaArtwork(artwork: IconModel?, overlayColor: Color) {
+    // Radial mask that keeps QS text legible over the full-bleed art.
+    val washAlpha = 0.65f
     Crossfade(targetState = artwork, label = "AxMediaArtwork", modifier = Modifier.fillMaxSize()) {
         currentArtwork ->
         val modifier =
@@ -1176,6 +1209,134 @@ private fun mediaCompactActionSize(width: Dp, height: Dp): Dp {
     }
 }
 
+/**
+ * Frosted glass fill for the lockscreen media card. Uses the same cross-window path as the volume
+ * dialog: [ViewRootImpl.createBackgroundBlurDrawable] with a translucent tint and corner radius.
+ * Compose colour alone cannot blur what sits behind the window.
+ *
+ * When blur is unavailable (detached, policy, power save) the open body colour is kept as a plain
+ * [ColorDrawable] so the card still tints instead of turning into a black slab.
+ */
+@Composable
+private fun LockscreenGlassBackdrop(
+    corner: Dp,
+    /**
+     * Set when "lockscreen media art" is on. The art is an `ImageView` in **this** window
+     * (`CentralSurfacesImpl.attachCustomOverlays`), and cross-window blur only samples what is
+     * behind the window — so the card would frost the wallpaper while everything around it shows
+     * the art. When art is on we blur our own copy of it instead.
+     */
+    artwork: IconModel?,
+    modifier: Modifier = Modifier,
+) {
+    val blurEnabled = rememberCrossWindowBlurEnabled()
+    Box(modifier.fillMaxSize()) {
+        if (artwork != null) {
+            InWindowArtBackdrop(artwork)
+        } else {
+            CrossWindowBlurBackdrop(corner = corner)
+        }
+        // Tint sits above whatever backdrop we got. Without frost behind it, an open body leaves
+        // white text on bare wallpaper, so fall back to the dense one.
+        val body =
+            if (blurEnabled || artwork != null) MediaChrome.LockscreenGlassBody
+            else MediaChrome.LockscreenGlassBodyNoBlur
+        Box(Modifier.fillMaxSize().background(body))
+    }
+}
+
+/** True while the compositor is willing to blur (developer option, power save, GPU support). */
+@Composable
+private fun rememberCrossWindowBlurEnabled(): Boolean {
+    val context = LocalContext.current
+    val windowManager = remember(context) { context.getSystemService(WindowManager::class.java) }
+    var enabled by remember(windowManager) {
+        mutableStateOf(windowManager?.isCrossWindowBlurEnabled ?: false)
+    }
+    DisposableEffect(windowManager) {
+        val listener = Consumer<Boolean> { value -> enabled = value }
+        // Called back immediately with the current state on registration.
+        windowManager?.addCrossWindowBlurEnabledListener(listener)
+        onDispose { windowManager?.removeCrossWindowBlurEnabledListener(listener) }
+    }
+    return enabled
+}
+
+/** Frost over whatever is behind the window — the volume dialog's path. */
+@Composable
+private fun CrossWindowBlurBackdrop(corner: Dp) {
+    val density = LocalDensity.current
+    val cornerPx = with(density) { corner.toPx() }
+    val blurPx = with(density) { MediaChrome.LockscreenGlassBlurRadius.toPx().toInt() }
+    AndroidView(
+        factory = { context ->
+            View(context).apply {
+                addOnAttachStateChangeListener(
+                    object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(v: View) {
+                            val root = v.viewRootImpl ?: return
+                            v.background =
+                                root.createBackgroundBlurDrawable().apply {
+                                    // Tint is drawn in Compose above this; blur only here.
+                                    setColor(Color.Transparent.toArgb())
+                                    setBlurRadius(blurPx)
+                                    setCornerRadius(cornerPx)
+                                }
+                        }
+
+                        override fun onViewDetachedFromWindow(v: View) {
+                            v.background = ColorDrawable(Color.Transparent.toArgb())
+                        }
+                    }
+                )
+            }
+        },
+        update = { view ->
+            (view.background as? BackgroundBlurDrawable)?.apply {
+                setBlurRadius(blurPx)
+                setCornerRadius(cornerPx)
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
+/**
+ * Frost over the lockscreen media art. Draws the same art at window size, offset so it lines up
+ * with the copy behind the card, then blurs it — the card becomes a pane over the art instead of a
+ * window onto the wallpaper.
+ */
+@Composable
+private fun InWindowArtBackdrop(artwork: IconModel) {
+    var cardOffset by remember { mutableStateOf(IntOffset.Zero) }
+    var rootSize by remember { mutableStateOf(IntSize.Zero) }
+    Box(
+        Modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+            rootSize = coordinates.findRootCoordinates().size
+            val position = coordinates.positionInRoot()
+            cardOffset = IntOffset(-position.x.roundToInt(), -position.y.roundToInt())
+        }
+    ) {
+        if (rootSize.width > 0 && artwork is IconModel.Loaded) {
+            val bitmap = remember(artwork) { artwork.asImageBitmap() }
+            with(LocalDensity.current) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier =
+                        Modifier.size(rootSize.width.toDp(), rootSize.height.toDp())
+                            .offset { cardOffset }
+                            .blur(
+                                MediaChrome.LockscreenGlassBlurRadius,
+                                BlurredEdgeTreatment.Unbounded,
+                            ),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 @SuppressLint("ClickableViewAccessibility")
 internal fun MediaSeekBar(
@@ -1262,6 +1423,7 @@ internal fun MediaSeekBar(
                 seekBar.isEnabled = interactive && session?.canBeScrubbed == true
                 seekBar.contentDescription = seekDescription
                 // Progress uses art accent (Phase 1/2 language); track stays on-glass neutral.
+                // The Glass lockscreen style draws its own bar (GlassSeekBar) and never lands here.
                 val progressColor = colors.primary.toArgb()
                 val trackColor = MediaChrome.ProgressTrack.toArgb()
                 seekBar.setMediaColor(progressColor)

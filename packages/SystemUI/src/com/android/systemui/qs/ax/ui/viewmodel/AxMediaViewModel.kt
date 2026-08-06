@@ -87,6 +87,11 @@ constructor(
         mutableStateOf(mediaSettingsRepository.lockscreenMediaStyle.value)
         private set
 
+    /** Whether the album art is painted over the keyguard, which changes what the card frosts. */
+    var isLockscreenMediaArtEnabled by
+        mutableStateOf(mediaSettingsRepository.isLockscreenMediaArtEnabled.value)
+        private set
+
     init {
         mediaHistoryRepository.startListening()
         applicationScope.launch(context = mainDispatcher) {
@@ -96,6 +101,11 @@ constructor(
         }
         applicationScope.launch(context = mainDispatcher) {
             mediaSettingsRepository.lockscreenMediaStyle.collect { lockscreenMediaStyle = it }
+        }
+        applicationScope.launch(context = mainDispatcher) {
+            mediaSettingsRepository.isLockscreenMediaArtEnabled.collect {
+                isLockscreenMediaArtEnabled = it
+            }
         }
     }
 

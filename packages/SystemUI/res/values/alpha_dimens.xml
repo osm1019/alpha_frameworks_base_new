@@ -39,7 +39,8 @@
 
     <!-- Lockscreen media card height, per style. Kept apart from
          qs_media_session_height_expanded, which QS and the media pipeline also read. -->
-    <dimen name="ax_lockscreen_media_height_glass">184dp</dimen>
+    <!-- Glass: shorter than the first M1 cut so the card ratio reads closer to the mockup. -->
+    <dimen name="ax_lockscreen_media_height_glass">192dp</dimen>
     <dimen name="ax_lockscreen_media_height_minimal">104dp</dimen>
     <dimen name="ax_lockscreen_media_height_waveform">224dp</dimen>
 </resources>

@@ -72,6 +72,27 @@ constructor(
             .flowOn(backgroundDispatcher)
             .stateIn(applicationScope, SharingStarted.Eagerly, readStyleSetting())
 
+    /**
+     * "Lockscreen media art" — [MediaViewController] paints the album art over the keyguard, in the
+     * shade window. The Glass card has to know: cross-window blur cannot see a surface drawn in its
+     * own window, so it frosts its own copy of the art instead.
+     */
+    val isLockscreenMediaArtEnabled: StateFlow<Boolean> =
+        systemSettings
+            .observerFlow(UserHandle.USER_ALL, Settings.System.LS_MEDIA_ART_ENABLED)
+            .onStart { emit(Unit) }
+            .map { readMediaArtSetting() }
+            .distinctUntilChanged()
+            .flowOn(backgroundDispatcher)
+            .stateIn(applicationScope, SharingStarted.Eagerly, readMediaArtSetting())
+
+    private fun readMediaArtSetting(): Boolean =
+        systemSettings.getIntForUser(
+            Settings.System.LS_MEDIA_ART_ENABLED,
+            0,
+            UserHandle.USER_CURRENT,
+        ) != 0
+
     private fun readStyleSetting(): AxLockscreenMediaStyle =
         AxLockscreenMediaStyle.fromSetting(
             systemSettings.getIntForUser(
