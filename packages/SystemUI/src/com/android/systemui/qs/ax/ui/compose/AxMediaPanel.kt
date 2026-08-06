@@ -45,6 +45,7 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -1584,6 +1585,8 @@ internal fun CoreMediaAction(
     tint: Color,
     background: Color = Color.Transparent,
     shape: Shape = CircleShape,
+    /** Optional outline, drawn over [background]. Lockscreen chrome only; QS passes nothing. */
+    border: BorderStroke? = null,
     interactive: Boolean,
 ) {
     when (action) {
@@ -1597,6 +1600,7 @@ internal fun CoreMediaAction(
                 tint = tint,
                 background = background,
                 shape = shape,
+                border = border,
                 interactive = interactive,
                 imageVector = imageVector,
                 animatedIconRes = animatedIconRes,
@@ -1615,6 +1619,7 @@ internal fun CoreMediaAction(
                 tint = tint,
                 background = background,
                 shape = shape,
+                border = border,
             )
     }
 }
@@ -1630,6 +1635,7 @@ private fun PlaceholderMediaAction(
     tint: Color,
     background: Color = Color.Transparent,
     shape: Shape = CircleShape,
+    border: BorderStroke? = null,
 ) {
     val description = stringResource(descriptionRes)
     val buttonWidth by
@@ -1652,6 +1658,7 @@ private fun PlaceholderMediaAction(
             Modifier.size(width = buttonWidth, height = buttonHeight)
                 .clip(shape)
                 .background(buttonBackground)
+                .then(if (border != null) Modifier.border(border, shape) else Modifier)
                 .semantics {
                     contentDescription = description
                     disabled()
@@ -1705,6 +1712,7 @@ internal fun MediaAction(
     tint: Color,
     background: Color = Color.Transparent,
     shape: Shape = CircleShape,
+    border: BorderStroke? = null,
     interactive: Boolean,
     imageVector: ImageVector? = null,
     @DrawableRes animatedIconRes: Int? = null,
@@ -1733,6 +1741,7 @@ internal fun MediaAction(
                     Modifier.size(width = buttonWidth, height = buttonHeight)
                         .clip(shape)
                         .background(buttonBackground)
+                        .then(if (border != null) Modifier.border(border, shape) else Modifier)
                         .clickable(enabled = interactive && action.onClick != null) {
                             viewModel.runAction(action)
                         },

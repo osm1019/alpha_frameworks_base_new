@@ -105,13 +105,12 @@ object MediaChrome {
     val SkipNeutral = Color.White.copy(alpha = 0.12f)
 
     /**
-     * Lockscreen card controls are neutral, not accent: white play fill with a dark glyph, and
-     * skips drawn bare on the glass. Progress on the Glass style is also neutral (see
-     * [LockscreenProgress] / [LockscreenProgressTrack]) — the mockup is a quiet white timeline,
+     * Lockscreen card controls are neutral except the play button, which takes the artwork scheme
+     * (`primary` / `onPrimary`) so the card has exactly one accented element. Everything else —
+     * skips, heart, output switcher — is drawn bare on the glass, and Glass progress stays neutral
+     * (see [LockscreenProgress] / [LockscreenProgressTrack]): the mockup is a quiet white timeline,
      * not an accent squiggle.
      */
-    val PlayNeutralFill = Color.White.copy(alpha = 0.95f)
-    val OnPlayNeutral = Color(0xFF1C1C1E)
     val ControlBare = OnGlass
     val LockscreenProgress = Color.White.copy(alpha = 0.92f)
     val LockscreenProgressTrack = Color.White.copy(alpha = 0.22f)

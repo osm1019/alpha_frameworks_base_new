@@ -21,6 +21,7 @@ package com.android.systemui.qs.ax.ui.compose
 import android.text.format.DateUtils
 import androidx.annotation.DimenRes
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -301,9 +302,17 @@ private fun GlassLockscreenMedia(
                             viewModel = viewModel,
                             width = PlayButtonSize,
                             iconSize = 26.dp,
-                            tint = MediaChrome.OnPlayNeutral,
-                            background = MediaChrome.PlayNeutralFill,
+                            // The one accented control on an otherwise neutral card: fill and glyph
+                            // both come from the artwork scheme, and it carries the same hairline as
+                            // the card and the art thumbnail.
+                            tint = colors.onPrimary,
+                            background = colors.primary,
                             shape = CircleShape,
+                            border =
+                                BorderStroke(
+                                    MediaChrome.LockscreenGlassBorderWidth,
+                                    MediaChrome.LockscreenGlassBorder,
+                                ),
                             interactive = interactive,
                         )
                         CoreMediaAction(
@@ -840,16 +849,26 @@ private fun WaveformBadge(playing: Boolean, seed: Int, size: Dp) {
         AxWaveform(
             playing = playing,
             color = SolidColor(MediaChrome.OnGlass),
-            barCount = 13,
+            // Count is derived from the width so the row always fits the inset. A fixed 13 bars did
+            // not: 13 × 2dp + 12 × 2dp = 50dp of bars in a 37dp box, overflowing to the circle's
+            // clip and leaving the badge looking edge to edge.
+            barCount = null,
             barWidth = 2.dp,
             barGap = 2.dp,
             seed = seed,
-            modifier = Modifier.size(width = size * 0.62f, height = size * 0.46f),
+            // Horizontal inset only — bar height still tracks the badge, so this narrows the
+            // animation without flattening it.
+            modifier =
+                Modifier.size(width = size - WaveformBadgeInset * 2, height = size * 0.46f),
         )
     }
 }
 
 private val WaveformBadgeSize = 60.dp
+
+/** Side padding inside the badge: 60 − 2 × 13 = 34dp of bars, i.e. 9 at the current width + gap. */
+private val WaveformBadgeInset = 13.dp
+
 private val PlayButtonSize = 56.dp
 private val TransportRowHeight = 56.dp
 private val GlassSeekBarHeight = 20.dp
