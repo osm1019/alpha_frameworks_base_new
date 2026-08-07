@@ -63,15 +63,16 @@ public final class PlayIntegritySpoofService {
     private static PlayIntegritySpoofService sInstance;
 
     private volatile int mVerboseLogs = 0;
+    // Wallet-safe defaults when a config omits spoof* keys (identity-only canary
+    // payloads). Explicit keys in the config always override via processKeyValue.
     private volatile boolean mSpoofBuild = true;
-    private volatile boolean mSpoofProps = true;
-    private volatile boolean mSpoofProvider = true;
+    private volatile boolean mSpoofProps = false;
+    private volatile boolean mSpoofProvider = false;
     private volatile boolean mSpoofSignature = false;
-    // Replaces the old all-or-nothing "spoofVendingBuild" boolean. This now matches
-    // upstream PlayIntegrityFork semantics: "0"/empty = disabled (default), "1"/"true" =
-    // spoof the configured FINGERPRINT field only, or any other value = use that literal
-    // string as a custom FINGERPRINT to serve to Play Store instead of the DroidGuard one.
-    private volatile String mSpoofVendingFinger = "0";
+    // PlayIntegrityFork semantics: "0"/empty = disabled, "1"/"true" = use the
+    // configured FINGERPRINT for Play Store, anything else = literal FP string.
+    // Default "1" matches the Wallet-working PIF profile (spoofVendingBuild=true).
+    private volatile String mSpoofVendingFinger = "1";
     private volatile boolean mSpoofVendingSdk = false;
     private volatile boolean mDebug = false;
 
@@ -91,10 +92,27 @@ public final class PlayIntegritySpoofService {
         return sInstance;
     }
 
+    /**
+     * Reset spoof flags to Wallet-safe defaults before each parse so missing
+     * keys are deterministic (not leftover from a previous config).
+     */
+    private void resetSpoofFlags() {
+        mVerboseLogs = 0;
+        mSpoofBuild = true;
+        mSpoofProps = false;
+        mSpoofProvider = false;
+        mSpoofSignature = false;
+        mSpoofVendingFinger = "1";
+        mSpoofVendingSdk = false;
+        mDebug = false;
+        mSignatureSpoofed = false;
+    }
+
     public void loadConfig() {
         mBuildFields.clear();
         mSystemProps.clear();
         mConfigLoaded = false;
+        resetSpoofFlags();
 
         IActivityManager am = ActivityManager.getService();
         if (am == null) {
@@ -125,10 +143,15 @@ public final class PlayIntegritySpoofService {
 
             mConfigLoaded = true;
             Log.i(TAG, "PIF config loaded, fields=" + mBuildFields.size()
-                + ", props=" + mSystemProps.size());
+                + ", props=" + mSystemProps.size()
+                + ", spoofBuild=" + mSpoofBuild
+                + ", spoofProps=" + mSpoofProps
+                + ", spoofProvider=" + mSpoofProvider
+                + ", spoofVendingFinger=" + mSpoofVendingFinger);
 
             // Sync SECURITY_PATCH to system props so apps reading these directly
             // see the spoofed date, matching what the upstream module does via resetprop.
+            // Only served when spoofProps is enabled (see getSpoofedProperty).
             String secPatch = mBuildFields.get("SECURITY_PATCH");
             if (secPatch != null && !secPatch.isEmpty()) {
                 mSystemProps.put("ro.build.version.security_patch", secPatch);
