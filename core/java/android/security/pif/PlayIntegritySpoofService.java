@@ -20,6 +20,9 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,6 +34,22 @@ public final class PlayIntegritySpoofService {
     private static final String DROIDGUARD_PACKAGE = "com.google.android.gms.unstable";
     private static final String VENDING_PACKAGE = "com.android.vending";
     private static final String GMS_PACKAGE = "com.google.android.gms";
+
+    /**
+     * Build fields DroidGuard / Wallet-path attestation is allowed to see.
+     * Matches the sparse imported prop that passes Wallet: anything else in the
+     * stored canary dump (BRAND, PRODUCT, DEVICE, DEVICE_INITIAL_SDK_INT, …)
+     * stays in config for UI/fetch but is not applied to the process. Order is
+     * the apply order (FINGERPRINT first).
+     */
+    private static final String[] WALLET_SAFE_BUILD_FIELDS = {
+            "FINGERPRINT",
+            "MANUFACTURER",
+            "MODEL",
+            "SECURITY_PATCH",
+    };
+    private static final Set<String> WALLET_SAFE_BUILD_FIELD_SET =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(WALLET_SAFE_BUILD_FIELDS)));
 
     private static final String ROM_SIGNATURE_DATA = "MIIFyTCCA7GgAwIBAgIVALyxxl+zDS9SL68SzOr48309eAZyMA0GCSqGSIb3DQEBCwUAMHQxCzAJ" +
             "BgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQw" +
@@ -257,6 +276,11 @@ public final class PlayIntegritySpoofService {
                 mDebug = "1".equals(value) || "true".equalsIgnoreCase(value);
                 break;
             default:
+                // Underscore keys are UI/meta only (e.g. _canary_month) — never
+                // feed them into Build spoofing.
+                if (key.startsWith("_")) {
+                    break;
+                }
                 if (key.contains(".") || key.startsWith("*")) {
                     mSystemProps.put(key, value);
                 } else {
@@ -307,13 +331,25 @@ public final class PlayIntegritySpoofService {
             return;
         }
 
-        for (Map.Entry<String, String> entry : mBuildFields.entrySet()) {
-            spoofField(entry.getKey(), entry.getValue(), "DG");
+        // Wallet-safe view: only apply the sparse identity set, even if the
+        // stored pif.json is a full canary dump. Extra keys remain available
+        // for Settings UI but DroidGuard never sees them as Build fields.
+        for (String key : WALLET_SAFE_BUILD_FIELDS) {
+            String value = mBuildFields.get(key);
+            if (value == null || value.isEmpty()) continue;
+            spoofField(key, value, "DG");
+        }
+        if (mVerboseLogs > 0 || mDebug) {
+            for (String key : mBuildFields.keySet()) {
+                if (!WALLET_SAFE_BUILD_FIELD_SET.contains(key)) {
+                    Log.d(TAG, "DG skip non-Wallet field: " + key);
+                }
+            }
         }
 
         // spoofVendingSdk when enabled applies an additional SDK_INT override
         // specifically for DroidGuard to match legacy attestation paths.
-        // It has no effect on Vending.
+        // It has no effect on Vending. Default off (Wallet-safe).
         if (mSpoofVendingSdk) {
             spoofSdkInt();
         }
