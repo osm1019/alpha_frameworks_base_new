@@ -63,12 +63,18 @@ import com.android.systemui.res.R
 @Composable
 internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandActions) {
     val accent = if (event.isPowerSave) OrangeAccent else GreenAccent
-    
+    // PrimaryCard paints CardBg (surfaceBright). ExpandedCardLayout only tints the
+    // inner row with accent@AlphaFaint. White text worked on dark CardBg but washed
+    // out to unreadable on light theme — match every other expanded card and use
+    // theme on-surface tokens so both day and night stay legible.
+    val onCard = OnCardText
+    val onCardSecondary = OnCardSecondary
+
     ExpandedCardLayout(
         accentColor = accent,
         iconBackground = false,
         icon = {
-            CPRBatteryIcon(level = event.level)
+            CPRBatteryIcon(level = event.level, outline = onCard)
         },
         title = {
             // Row 1: Charging Type (VOOC, Charging slowly, etc.)
@@ -76,7 +82,7 @@ internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandAct
                 val displayText = if (event.level == 100) stringResource(R.string.ax_dynamic_bar_fully_charged) else chargeType
                 Text(
                     displayText,
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = onCard.copy(alpha = 0.9f),
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
@@ -88,7 +94,7 @@ internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandAct
             // Row 2: Large Battery Percentage
             Text(
                 "${event.level}%",
-                color = Color.White,
+                color = onCard,
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Black,
@@ -100,7 +106,7 @@ internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandAct
             event.timeRemaining?.let {
                 Text(
                     it,
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = onCardSecondary,
                     style = MaterialTheme.typography.labelMedium.copy(
                         platformStyle = PlatformTextStyle(includeFontPadding = false)
                     ),
@@ -122,14 +128,18 @@ internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandAct
 }
 
 @Composable
-private fun CPRBatteryIcon(level: Int?, modifier: Modifier = Modifier) {
+private fun CPRBatteryIcon(
+    level: Int?,
+    outline: Color,
+    modifier: Modifier = Modifier,
+) {
     val progress = (level ?: 0) / 100f
     val fillColor = when {
         progress < 0.30f -> Color(0xCCF44336)
         progress < 0.60f -> Color(0xCCFF9800)
         else -> Color(0xCC4CAF50)
     }
-    
+
     val transition = rememberInfiniteTransition(label = "charging_pulse")
     val pulseMultiplier by transition.animateFloat(
         initialValue = 0.6f,
@@ -149,28 +159,28 @@ private fun CPRBatteryIcon(level: Int?, modifier: Modifier = Modifier) {
             val barH = 36.dp.toPx()
             val capW = 8.dp.toPx()
             val capH = 2.5f.dp.toPx()
-            
+
             val barLeft = (size.width - barW) / 2f
             val barTop = (size.height - barH) / 2f + capH / 2f
-            
+
             // Cap
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.31f),
+                color = outline.copy(alpha = 0.31f),
                 topLeft = Offset(barLeft + (barW - capW) / 2f, barTop - capH),
                 size = Size(capW, capH),
                 cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx()),
                 style = Stroke(width = 1.5f.dp.toPx())
             )
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.08f),
+                color = outline.copy(alpha = 0.08f),
                 topLeft = Offset(barLeft + (barW - capW) / 2f, barTop - capH),
                 size = Size(capW, capH),
                 cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
             )
-            
+
             // Body outline
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.31f),
+                color = outline.copy(alpha = 0.31f),
                 topLeft = Offset(barLeft, barTop),
                 size = Size(barW, barH),
                 cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
@@ -178,7 +188,7 @@ private fun CPRBatteryIcon(level: Int?, modifier: Modifier = Modifier) {
             )
             // Body subtle fill
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.08f),
+                color = outline.copy(alpha = 0.08f),
                 topLeft = Offset(barLeft, barTop),
                 size = Size(barW, barH),
                 cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
@@ -209,9 +219,20 @@ private fun StatLine(label: String, value: String) {
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color.LightGray, style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
+        Text(
+            text = label,
+            color = OnCardSecondary,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+        )
         Spacer(Modifier.width(4.dp))
-        Text(text = value, color = Color.White, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp))
+        Text(
+            text = value,
+            color = OnCardText,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+            ),
+        )
     }
 }
 
