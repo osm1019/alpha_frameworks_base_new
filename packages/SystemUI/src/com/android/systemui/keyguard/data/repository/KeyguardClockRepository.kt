@@ -80,6 +80,29 @@ interface KeyguardClockRepository {
     val areLockscreenWidgetsEnabled: Boolean
     val isDynamicBarLockscreenActive: Flow<Boolean>
     fun setClockSize(size: ClockSize)
+
+    /**
+     * Masks [clockSize] to SMALL while the Dynamic Bar keyguard panel is expanded — the panel
+     * top-anchors to the small-clock slot, and ClockSection GONs the non-target face, so a large
+     * clock would leave that anchor collapsed.
+     *
+     * This is a mask rather than a [setClockSize] call on purpose: the panel is not the owner of the
+     * clock size, notificationPanelViewController is. Writing SMALL directly would clobber the size
+     * it computed and leave the clock stuck small once the panel collapses, since nothing tells NPVC
+     * to recompute. Clearing the mask re-exposes whatever NPVC last computed.
+     */
+    fun setDynamicBarKeyguardExpanded(expanded: Boolean)
+
+    /** True while [setDynamicBarKeyguardExpanded] is masking [clockSize] to SMALL. */
+    val isDynamicBarKeyguardExpanded: StateFlow<Boolean>
+
+    /**
+     * True if the next (or just-emitted) [clockSize] change was caused by
+     * [setDynamicBarKeyguardExpanded] rather than NPVC. Consumed by the clock binder so both
+     * expand (LARGE→SMALL) and collapse (SMALL→LARGE) can snap instead of running
+     * [ClockSizeTransition]. Call once per emission.
+     */
+    fun consumeMaskDrivenClockSizeChange(): Boolean
 }
 
 @SysUISingleton
@@ -98,6 +121,14 @@ constructor(
     /** Receive SMALL or LARGE clock should be displayed on keyguard. */
     private val _clockSize: MutableStateFlow<ClockSize> = MutableStateFlow(ClockSize.LARGE)
     override val clockSize: StateFlow<ClockSize> = _clockSize.asStateFlow()
+
+    /** Size notificationPanelViewController last computed, before the Dynamic Bar mask. */
+    @Volatile private var desiredClockSize: ClockSize = ClockSize.LARGE
+    private val _isDynamicBarKeyguardExpanded = MutableStateFlow(false)
+    override val isDynamicBarKeyguardExpanded: StateFlow<Boolean> =
+        _isDynamicBarKeyguardExpanded.asStateFlow()
+    /** One-shot: the pending/last [clockSize] publish was from the Dynamic Bar expand mask. */
+    @Volatile private var maskDrivenClockSizeChange: Boolean = false
     override val forcedClockSize: Flow<ClockSize?> =
         if (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE)) {
             configurationRepository.onAnyConfigurationChange.map {
@@ -115,7 +146,30 @@ constructor(
 
     override fun setClockSize(size: ClockSize) {
         SceneContainerFlag.assertInLegacyMode()
-        _clockSize.value = size
+        desiredClockSize = size
+        publishClockSize()
+    }
+
+    override fun setDynamicBarKeyguardExpanded(expanded: Boolean) {
+        // Flag first, then publish. The clock binder reads isDynamicBarKeyguardExpanded when
+        // clockSize arrives; swap these and a mask flip silently re-runs ClockSizeTransition.
+        _isDynamicBarKeyguardExpanded.value = expanded
+        val next = if (expanded) ClockSize.SMALL else desiredClockSize
+        if (_clockSize.value != next) {
+            maskDrivenClockSizeChange = true
+        }
+        publishClockSize()
+    }
+
+    override fun consumeMaskDrivenClockSizeChange(): Boolean {
+        val pending = maskDrivenClockSizeChange
+        maskDrivenClockSizeChange = false
+        return pending
+    }
+
+    private fun publishClockSize() {
+        _clockSize.value =
+            if (_isDynamicBarKeyguardExpanded.value) ClockSize.SMALL else desiredClockSize
     }
 
     override val selectedClockSize: StateFlow<ClockSizeSetting> =

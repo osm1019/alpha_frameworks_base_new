@@ -3,7 +3,6 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -288,6 +287,8 @@ private fun KeyguardMediaCard(
                 .padding(horizontal = KeyguardPanelSideMargin),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Art takes leftover height; everything below is fixed height so this slot cannot breathe
+        // when metadata updates on skip.
         BoxWithConstraints(
             modifier = Modifier.weight(1f, fill = true).fillMaxWidth(),
             contentAlignment = Alignment.Center,
@@ -296,11 +297,13 @@ private fun KeyguardMediaCard(
             AnimatedContent(
                 targetState = event.albumArt,
                 transitionSpec = {
+                    // No SizeTransform: a default size anim feeds back into artSide via weight.
                     fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                        fadeOut(motionScheme.fastEffectsSpec()) using SizeTransform(clip = true)
+                        fadeOut(motionScheme.fastEffectsSpec()) using null
                 },
                 contentKey = { it?.hashCode() ?: 0 },
                 label = "kg_media_album_art",
+                contentAlignment = Alignment.Center,
             ) { art ->
                 Box(
                     modifier =
@@ -336,39 +339,42 @@ private fun KeyguardMediaCard(
             targetState = trackText,
             transitionSpec = {
                 fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                    fadeOut(motionScheme.fastEffectsSpec()) using SizeTransform(clip = false)
+                    fadeOut(motionScheme.fastEffectsSpec()) using null
             },
             label = "kg_media_track",
+            contentAlignment = Alignment.Center,
         ) { title ->
             Text(
                 title,
                 color = MediaChrome.OnGlass,
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
+                minLines = 1,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
 
-        if (event.artist.isNotEmpty()) {
-            Spacer(Modifier.height(SpaceSm))
-            AnimatedContent(
-                targetState = event.artist,
-                transitionSpec = {
-                    fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                        fadeOut(motionScheme.fastEffectsSpec()) using SizeTransform(clip = false)
-                },
-                label = "kg_media_artist",
-            ) { artist ->
-                Text(
-                    artist,
-                    color = MediaChrome.OnGlassSecondary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        // Always laid out, blank or not: dropping the row hands height to the art weight slot.
+        Spacer(Modifier.height(SpaceSm))
+        AnimatedContent(
+            targetState = event.artist,
+            transitionSpec = {
+                fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
+                    fadeOut(motionScheme.fastEffectsSpec()) using null
+            },
+            label = "kg_media_artist",
+            contentAlignment = Alignment.Center,
+        ) { artist ->
+            Text(
+                artist,
+                color = MediaChrome.OnGlassSecondary,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                minLines = 1,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         Spacer(Modifier.height(SpaceXxl))
@@ -433,23 +439,23 @@ private fun KeyguardMediaCard(
 
             Spacer(Modifier.height(SpaceMd))
 
-            if (event.duration > 0L) {
-                when (style) {
-                    AxLockscreenMediaStyle.MINIMAL ->
-                        KeyguardMediaSegmentedProgress(event, interactor)
-                    AxLockscreenMediaStyle.GLASS ->
-                        KeyguardMediaLinearProgress(event, interactor)
-                    AxLockscreenMediaStyle.WAVEFORM ->
-                        KeyguardMediaWaveformProgress(
-                            event = event,
-                            interactor = interactor,
-                            playing = event.isPlaying,
-                            waveformBrush = waveformBrush,
-                            seed = seed,
-                        )
-                }
-                Spacer(Modifier.height(SpaceMd))
+            // Always reserve the progress slot. Duration often blips to 0 on skip while metadata
+            // reloads; gating on duration>0 is what made the sheet shrink then grow.
+            when (style) {
+                AxLockscreenMediaStyle.MINIMAL ->
+                    KeyguardMediaSegmentedProgress(event, interactor)
+                AxLockscreenMediaStyle.GLASS ->
+                    KeyguardMediaLinearProgress(event, interactor)
+                AxLockscreenMediaStyle.WAVEFORM ->
+                    KeyguardMediaWaveformProgress(
+                        event = event,
+                        interactor = interactor,
+                        playing = event.isPlaying,
+                        waveformBrush = waveformBrush,
+                        seed = seed,
+                    )
             }
+            Spacer(Modifier.height(SpaceMd))
 
             // Centred, not distributed: the transport holds its place whatever the edges carry.
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -553,9 +559,10 @@ private fun KeyguardPlayButton(
             targetState = isPlaying,
             transitionSpec = {
                 fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                    fadeOut(motionScheme.fastEffectsSpec())
+                    fadeOut(motionScheme.fastEffectsSpec()) using null
             },
             label = "kg_media_playpause",
+            contentAlignment = Alignment.Center,
         ) { playing ->
             Icon(
                 if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,

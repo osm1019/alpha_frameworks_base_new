@@ -106,7 +106,19 @@ object KeyguardClockViewBinder {
                     launch {
                         viewModel.clockSize.collect { clockSize ->
                             updateBurnInLayer(keyguardRootView, viewModel, clockSize)
-                            blueprintInteractor.refreshBlueprint(Type.ClockSize)
+                            // Mask-driven size flips (expand LARGE→SMALL and collapse SMALL→LARGE)
+                            // are not notif-stack changes. ClockSizeTransition always walks the
+                            // small face through a smartspace-offset mid station by design
+                            // (initTargets) — correct for notifs, wrong for the media panel.
+                            // Snap both ways; the one-shot is set before publishClockSize so this
+                            // collector sees it on the same emission.
+                            val type =
+                                if (viewModel.consumeMaskDrivenClockSizeChange()) {
+                                    Type.ClockSizeSnap
+                                } else {
+                                    Type.ClockSize
+                                }
+                            blueprintInteractor.refreshBlueprint(type)
                         }
                     }
 
@@ -118,6 +130,14 @@ object KeyguardClockViewBinder {
                             .collect { (isCentered, isLargeVisible) ->
                                 viewModel.currentClock.value?.let { clock ->
                                     clock.events.onClockLayoutChanged(isCentered, isLargeVisible)
+                                    // While expanded, DefaultTransition would re-run
+                                    // ClockSizeTransition. Still apply constraints (centered
+                                    // flips, etc.) — NoTransition, not an early return that
+                                    // would leave the blueprint stale.
+                                    if (viewModel.isDynamicBarKeyguardExpanded.value) {
+                                        blueprintInteractor.refreshBlueprint(Type.NoTransition)
+                                        return@collect
+                                    }
                                     if (clock.largeClock.config.hasCustomPositionUpdatedAnimation) {
                                         blueprintInteractor.refreshBlueprint(Type.DefaultClockStepping)
                                     } else {

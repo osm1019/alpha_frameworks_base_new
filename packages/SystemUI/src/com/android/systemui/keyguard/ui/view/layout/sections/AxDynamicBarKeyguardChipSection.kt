@@ -13,7 +13,6 @@ import com.android.compose.theme.PlatformTheme
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.compose.AxDynamicBarKeyguardChip
 import com.android.systemui.keyguard.domain.interactor.KeyguardClockInteractor
-import com.android.systemui.keyguard.shared.model.ClockSize
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
@@ -23,7 +22,6 @@ import com.android.systemui.statusbar.KeyguardIndicationController
 import com.android.systemui.util.ScrimUtils
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -31,13 +29,13 @@ private const val CHIP_ABOVE_LOCK_MARGIN_DP = 12f
 private const val EXPANDED_BOTTOM_PROTECTION_DP = 16f
 private const val UNSET = -1
 
+/** Notifications and smartspace only. The clock stays put — the card sits below it. */
 private val HIDDEN_VIEW_IDS = listOf(
     R.id.shared_notification_container,
     R.id.notificationShelf,
     R.id.bc_smartspace_view,
     R.id.smartspace_card_pager,
     R.id.smartspace_page_indicator,
-    ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
 )
 
 private fun Float.dpToPx(context: Context): Int =
@@ -94,17 +92,6 @@ constructor(
                         }
                     }
                 }
-                scope.launch {
-                    viewModel.isKeyguardExpanded.collectLatest { expanded ->
-                        if (expanded) {
-                            clockInteractor.clockSize.collect { size ->
-                                if (size != ClockSize.SMALL) {
-                                    clockInteractor.setClockSize(ClockSize.SMALL)
-                                }
-                            }
-                        }
-                    }
-                }
                 combine(viewModel.isKeyguardExpanded, viewModel.isLowUdfps) { expanded, lowUdfps ->
                     expanded to lowUdfps
                 }.collect { (expanded, lowUdfps) ->
@@ -120,6 +107,10 @@ constructor(
         expanded: Boolean,
         lowUdfps: Boolean,
     ) {
+        // Not about hiding the clock — the panel top-anchors to the small-clock slot, and
+        // ClockSection sets the non-target face GONE, so a large clock leaves that anchor pointing
+        // at a collapsed view. Masking the size keeps the small face the target while we are up.
+        clockInteractor.setDynamicBarKeyguardExpanded(expanded)
         rebindPreDrawAction(constraintLayout, expanded)
         TransitionManager.endTransitions(constraintLayout)
         if (expanded) {
@@ -142,7 +133,6 @@ constructor(
 
     private fun setHiddenViewsVisibility(constraintLayout: ConstraintLayout, visibility: Int) {
         hiddenTargets(constraintLayout).forEach { v ->
-            v.alpha = 1f
             if (v.visibility != visibility) v.visibility = visibility
         }
     }
@@ -164,6 +154,7 @@ constructor(
                 expanded -> {
                     constrainWidth(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
                     constrainHeight(chipViewId, ConstraintSet.MATCH_CONSTRAINT)
+                    // Clock stays visible above the panel — masked to SMALL, never hidden.
                     connect(chipViewId, ConstraintSet.TOP, ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, ConstraintSet.BOTTOM)
                     connect(chipViewId, ConstraintSet.BOTTOM, R.id.device_entry_icon_view, ConstraintSet.TOP, bottomProtectionPx)
                     connect(chipViewId, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
@@ -234,6 +225,7 @@ constructor(
 
     override fun removeViews(constraintLayout: ConstraintLayout) {
         TransitionManager.endTransitions(constraintLayout)
+        clockInteractor.setDynamicBarKeyguardExpanded(false)
         enforceAction?.let { ScrimUtils.get().removeKeyguardPreDrawAction(it) }
         enforceAction = null
         expansionHandle?.dispose()

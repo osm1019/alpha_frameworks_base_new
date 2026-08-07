@@ -213,6 +213,19 @@ constructor(
         keyguardClockRepository.setClockSize(size)
     }
 
+    /** See [KeyguardClockRepository.setDynamicBarKeyguardExpanded]. */
+    fun setDynamicBarKeyguardExpanded(expanded: Boolean) {
+        keyguardClockRepository.setDynamicBarKeyguardExpanded(expanded)
+    }
+
+    /** See [KeyguardClockRepository.isDynamicBarKeyguardExpanded]. */
+    val isDynamicBarKeyguardExpanded: StateFlow<Boolean> =
+        keyguardClockRepository.isDynamicBarKeyguardExpanded
+
+    /** See [KeyguardClockRepository.consumeMaskDrivenClockSizeChange]. */
+    fun consumeMaskDrivenClockSizeChange(): Boolean =
+        keyguardClockRepository.consumeMaskDrivenClockSizeChange()
+
     val renderedClockId: ClockId
         get() {
             return clock?.config?.id

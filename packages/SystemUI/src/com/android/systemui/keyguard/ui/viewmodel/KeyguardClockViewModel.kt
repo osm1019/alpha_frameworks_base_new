@@ -56,7 +56,7 @@ class KeyguardClockViewModel
 @Inject
 constructor(
     private val context: Context,
-    keyguardClockInteractor: KeyguardClockInteractor,
+    private val keyguardClockInteractor: KeyguardClockInteractor,
     @Application private val applicationScope: CoroutineScope,
     @Background private val backgroundScope: CoroutineScope,
     aodNotificationIconViewModel: NotificationIconContainerAlwaysOnDisplayViewModel,
@@ -71,6 +71,18 @@ constructor(
     var burnInLayer: Layer? = null
 
     val clockSize: StateFlow<ClockSize> = keyguardClockInteractor.clockSize
+
+    /**
+     * True while the Dynamic Bar expand panel is forcing [clockSize] to SMALL for its top anchor.
+     * Size flips driven by this mask must not run [ClockSizeTransition] — see
+     * [IntraBlueprintTransition.Type.ClockSizeSnap].
+     */
+    val isDynamicBarKeyguardExpanded: StateFlow<Boolean> =
+        keyguardClockInteractor.isDynamicBarKeyguardExpanded
+
+    /** See [KeyguardClockInteractor.consumeMaskDrivenClockSizeChange]. */
+    fun consumeMaskDrivenClockSizeChange(): Boolean =
+        keyguardClockInteractor.consumeMaskDrivenClockSizeChange()
 
     val isLargeClockVisible: StateFlow<Boolean> =
         clockSize

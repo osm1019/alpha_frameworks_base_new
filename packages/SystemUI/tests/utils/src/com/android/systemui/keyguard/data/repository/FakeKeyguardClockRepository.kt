@@ -28,6 +28,7 @@ import dagger.Module
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class FakeKeyguardClockRepository() : KeyguardClockRepository {
 
@@ -53,9 +54,39 @@ class FakeKeyguardClockRepository() : KeyguardClockRepository {
     override val clockEventController: ClockEventController = mock()
 
     override val areLockscreenWidgetsEnabled: Boolean = false
+
+    private val _isDynamicBarLockscreenActive = MutableStateFlow(false)
+    override val isDynamicBarLockscreenActive: Flow<Boolean> = _isDynamicBarLockscreenActive
+
+    private var desiredClockSize = ClockSize.LARGE
+    private val _isDynamicBarKeyguardExpanded = MutableStateFlow(false)
+    override val isDynamicBarKeyguardExpanded = _isDynamicBarKeyguardExpanded.asStateFlow()
+    private var maskDrivenClockSizeChange = false
+
     override fun setClockSize(size: ClockSize) {
-        _clockSize.value = size
+        desiredClockSize = size
         _forcedClockSize.value = size
+        publishClockSize()
+    }
+
+    override fun setDynamicBarKeyguardExpanded(expanded: Boolean) {
+        _isDynamicBarKeyguardExpanded.value = expanded
+        val next = if (expanded) ClockSize.SMALL else desiredClockSize
+        if (_clockSize.value != next) {
+            maskDrivenClockSizeChange = true
+        }
+        publishClockSize()
+    }
+
+    override fun consumeMaskDrivenClockSizeChange(): Boolean {
+        val pending = maskDrivenClockSizeChange
+        maskDrivenClockSizeChange = false
+        return pending
+    }
+
+    private fun publishClockSize() {
+        _clockSize.value =
+            if (_isDynamicBarKeyguardExpanded.value) ClockSize.SMALL else desiredClockSize
     }
 
     fun setSelectedClockSize(size: ClockSizeSetting) {

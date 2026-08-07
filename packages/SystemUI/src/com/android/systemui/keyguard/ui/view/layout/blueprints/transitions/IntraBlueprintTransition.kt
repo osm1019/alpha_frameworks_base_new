@@ -33,6 +33,13 @@ class IntraBlueprintTransition(
 
     enum class Type(val priority: Int, val animateNotifChanges: Boolean) {
         ClockSize(100, true),
+        /**
+         * Same priority as [ClockSize] so it is not overwritten by [DefaultTransition], but no
+         * [ClockSizeTransition] — used when the Dynamic Bar expand mask flips the face and the
+         * smartspace-coupled LARGE→SMALL intro would walk the small face through intermediate
+         * positions.
+         */
+        ClockSizeSnap(100, false),
         ClockCenter(99, false),
         DefaultClockStepping(98, false),
         SmartspaceVisibility(3, true),
@@ -61,6 +68,7 @@ class IntraBlueprintTransition(
         when (config.type) {
             Type.Init -> {}
             Type.NoTransition -> {}
+            Type.ClockSizeSnap -> {}
             Type.DefaultClockStepping ->
                 addTransition(
                     clockViewModel.currentClock.value?.let { DefaultClockSteppingTransition(it) }
