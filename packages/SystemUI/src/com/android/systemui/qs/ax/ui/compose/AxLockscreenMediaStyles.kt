@@ -407,10 +407,13 @@ private fun MinimalLockscreenMedia(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            SegmentedProgress(
-                progress = progress,
-                modifier = Modifier.fillMaxWidth().height(MinimalSegmentHeight),
+            // No spacer: the touch box is taller than the dots and centres them, so the row sits
+            // where the old 8dp spacer + 4dp canvas put it while being big enough to hit.
+            SegmentedSeekBar(
+                session = session,
+                viewModel = viewModel,
+                interactive = interactive,
+                modifier = Modifier.fillMaxWidth().height(MinimalSeekHeight),
             )
         }
         if (showCoreActions) {
@@ -675,17 +678,109 @@ private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
         val count = floor((size.width + gap) / (segment + gap)).toInt().coerceIn(1, 64)
         val filled = (count * progress.coerceIn(0f, 1f)).roundToInt()
         val radius = CornerRadius(segment / 2f, segment / 2f)
+        // The dots keep their own height inside a taller touch box, centred.
+        val barHeight = MinimalSegmentHeight.toPx().coerceAtMost(size.height)
+        val top = (size.height - barHeight) / 2f
         for (index in 0 until count) {
             drawRoundRect(
                 color =
                     if (index < filled) MediaChrome.OnGlass else MediaChrome.LockscreenProgressTrack,
-                topLeft = Offset(index * (segment + gap), 0f),
-                size = Size(segment, size.height),
+                topLeft = Offset(index * (segment + gap), top),
+                size = Size(segment, barHeight),
                 cornerRadius = radius,
             )
         }
     }
 }
+
+/**
+ * Minimal's timeline. Same scrubbing as [LockscreenSeekBar] — the dots were previously a bare
+ * [SegmentedProgress] canvas with no gestures at all, so this was the one style you could not seek in.
+ *
+ * Segments are drawn flush to both edges, so the tap mapping takes no inset.
+ */
+@Composable
+private fun SegmentedSeekBar(
+    session: MediaSessionModel?,
+    viewModel: AxMediaViewModel,
+    interactive: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val progress = session?.let(viewModel::progress) ?: 0f
+    val gestures = rememberScrubGestures(session, viewModel, interactive, inset = 0.dp)
+    val description = seekBarDescription(session, progress)
+    SegmentedProgress(
+        progress = progress,
+        modifier =
+            modifier
+                .then(gestures)
+                .then(
+                    if (description != null) {
+                        Modifier.semantics { contentDescription = description }
+                    } else {
+                        Modifier
+                    }
+                ),
+    )
+}
+
+/**
+ * Tap-and-drag scrubbing, shared by every lockscreen timeline.
+ *
+ * [inset] is the horizontal margin the track is painted with, so the mapping matches the canvas at
+ * both extremes — the thumb radius for a line, zero for a segment row that runs edge to edge.
+ */
+@Composable
+private fun rememberScrubGestures(
+    session: MediaSessionModel?,
+    viewModel: AxMediaViewModel,
+    interactive: Boolean,
+    inset: Dp,
+): Modifier {
+    var dragged by remember(session?.key) { mutableStateOf(Offset.Zero) }
+    if (!interactive || session == null || !session.canBeScrubbed) return Modifier
+    return Modifier.pointerInput(session.key) {
+            val insetPx = inset.toPx()
+            fun progressAt(x: Float): Float {
+                val usable = (size.width - insetPx * 2f).coerceAtLeast(1f)
+                return ((x - insetPx) / usable).coerceIn(0f, 1f)
+            }
+            detectHorizontalDragGestures(
+                onDragStart = { start ->
+                    dragged = Offset.Zero
+                    viewModel.onScrubChange(session, progressAt(start.x))
+                },
+                onHorizontalDrag = { change, delta ->
+                    dragged += Offset(delta, 0f)
+                    viewModel.onScrubChange(session, progressAt(change.position.x))
+                },
+                onDragEnd = { viewModel.onScrubFinished(session, dragged) },
+                onDragCancel = { viewModel.onScrubFinished(session, Offset.Zero) },
+            )
+        }
+        .pointerInput(session.key) {
+            val insetPx = inset.toPx()
+            detectTapGestures { tap ->
+                val usable = (size.width - insetPx * 2f).coerceAtLeast(1f)
+                viewModel.onScrubChange(session, ((tap.x - insetPx) / usable).coerceIn(0f, 1f))
+                // A tap has no drag vector; hand the falsing check a horizontal one.
+                viewModel.onScrubFinished(session, Offset(size.width.toFloat(), 0f))
+            }
+        }
+}
+
+/** Elapsed-of-total announcement, shared by the timelines. Null when the session has no duration. */
+@Composable
+private fun seekBarDescription(session: MediaSessionModel?, progress: Float): String? =
+    if (session != null && session.durationMs > 0L) {
+        stringResource(
+            R.string.controls_media_seekbar_description,
+            DateUtils.formatElapsedTime((progress * session.durationMs).toLong() / 1000L),
+            DateUtils.formatElapsedTime(session.durationMs / 1000L),
+        )
+    } else {
+        null
+    }
 
 /**
  * Timeline for the lockscreen styles: a quiet track, a played portion and a small round thumb. The
@@ -703,52 +798,10 @@ private fun LockscreenSeekBar(
     trail: (Float) -> Brush = MediaChrome::lockscreenProgressTrail,
 ) {
     val progress = session?.let(viewModel::progress) ?: 0f
-    val scrubbable = interactive && session != null && session.canBeScrubbed
-    val description =
-        if (session != null && session.durationMs > 0L) {
-            stringResource(
-                R.string.controls_media_seekbar_description,
-                DateUtils.formatElapsedTime((progress * session.durationMs).toLong() / 1000L),
-                DateUtils.formatElapsedTime(session.durationMs / 1000L),
-            )
-        } else {
-            null
-        }
-    var dragged by remember(session?.key) { mutableStateOf(Offset.Zero) }
-    val gestures =
-        if (scrubbable && session != null) {
-            Modifier.pointerInput(session.key) {
-                    // Same mapping the canvas uses, so the thumb tracks the finger at both ends.
-                    fun progressAt(x: Float): Float {
-                        val inset = GlassSeekBarThumb.toPx()
-                        val usable = (size.width - inset * 2f).coerceAtLeast(1f)
-                        return ((x - inset) / usable).coerceIn(0f, 1f)
-                    }
-                    detectHorizontalDragGestures(
-                        onDragStart = { start ->
-                            dragged = Offset.Zero
-                            viewModel.onScrubChange(session, progressAt(start.x))
-                        },
-                        onHorizontalDrag = { change, delta ->
-                            dragged += Offset(delta, 0f)
-                            viewModel.onScrubChange(session, progressAt(change.position.x))
-                        },
-                        onDragEnd = { viewModel.onScrubFinished(session, dragged) },
-                        onDragCancel = { viewModel.onScrubFinished(session, Offset.Zero) },
-                    )
-                }
-                .pointerInput(session.key) {
-                    detectTapGestures { tap ->
-                        val inset = GlassSeekBarThumb.toPx()
-                        val usable = (size.width - inset * 2f).coerceAtLeast(1f)
-                        viewModel.onScrubChange(session, ((tap.x - inset) / usable).coerceIn(0f, 1f))
-                        // A tap has no drag vector; hand the falsing check a horizontal one.
-                        viewModel.onScrubFinished(session, Offset(size.width.toFloat(), 0f))
-                    }
-                }
-        } else {
-            Modifier
-        }
+    val description = seekBarDescription(session, progress)
+    // Inset by the thumb radius, the same margin the canvas paints with, so it tracks the finger at
+    // both ends.
+    val gestures = rememberScrubGestures(session, viewModel, interactive, inset = GlassSeekBarThumb)
 
     Box(
         modifier =
@@ -890,3 +943,6 @@ private val MinimalArtRingWidth = 2.dp
 private val MinimalSegmentWidth = 3.dp
 private val MinimalSegmentGap = 3.dp
 private val MinimalSegmentHeight = 4.dp
+
+/** Touch box around the 4dp dots. Centres them where the old 8dp spacer + canvas put them. */
+private val MinimalSeekHeight = 20.dp
