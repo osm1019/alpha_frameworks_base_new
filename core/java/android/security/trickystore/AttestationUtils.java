@@ -30,7 +30,85 @@ public final class AttestationUtils {
     private static byte[] sBootHash;
     private static volatile boolean sTeeBroken = false;
 
+    /**
+     * Device identity fields used in key attestation (tags 710–717).
+     * @hide
+     */
+    public static final class DeviceIdentity {
+        public final String brand;
+        public final String device;
+        public final String product;
+        public final String manufacturer;
+        public final String model;
+
+        public DeviceIdentity(String brand, String device, String product,
+                String manufacturer, String model) {
+            this.brand = brand;
+            this.device = device;
+            this.product = product;
+            this.manufacturer = manufacturer;
+            this.model = model;
+        }
+    }
+
     private AttestationUtils() {}
+
+    /**
+     * When {@link Build#FINGERPRINT} is a Google/Pixel spoof (vendor
+     * {@code BuildFingerprint} override) but OEM {@code Build.BRAND}/{@code MODEL}
+     * still report the real device (e.g. OnePlus), return Pixel identity parsed
+     * from the fingerprint so software-generated attestation (TEE-broken /
+     * GENERATE path) does not leak the OEM props next to a Google FP.
+     *
+     * @return parsed identity, or {@code null} when FP is not a google/ spoof
+     * @hide
+     */
+    public static DeviceIdentity identityFromGoogleFingerprint() {
+        final String fp = Build.FINGERPRINT;
+        if (fp == null || !fp.startsWith("google/")) {
+            return null;
+        }
+        // google/product/device:tag/id/incremental:type/tags
+        final String[] parts = fp.split("/");
+        if (parts.length < 3) {
+            return null;
+        }
+        final String product = parts[1];
+        String device = parts[2];
+        final int colon = device.indexOf(':');
+        if (colon >= 0) {
+            device = device.substring(0, colon);
+        }
+        // product is often "husky_beta"; prefer bare codename for DEVICE
+        final String codename = device.isEmpty()
+                ? product.replaceAll("_beta$", "").replaceAll("_user$", "")
+                : device;
+        final String model = modelForPixelCodename(codename);
+        return new DeviceIdentity("google", codename, product, "Google", model);
+    }
+
+    /** Best-effort Pixel marketing name for known codenames. @hide */
+    public static String modelForPixelCodename(String codename) {
+        if (codename == null) return "Pixel";
+        switch (codename) {
+            case "husky": return "Pixel 8 Pro";
+            case "shiba": return "Pixel 8";
+            case "akita": return "Pixel 8a";
+            case "felix": return "Pixel Fold";
+            case "tokay": return "Pixel 9";
+            case "caiman": return "Pixel 9 Pro";
+            case "komodo": return "Pixel 9 Pro XL";
+            case "comet": return "Pixel 9 Pro Fold";
+            case "tegu": return "Pixel 9a";
+            case "frankel": return "Pixel 10";
+            case "blazer": return "Pixel 10 Pro";
+            case "mustang": return "Pixel 10 Pro XL";
+            case "rango": return "Pixel 10 Pro Fold";
+            case "stallion": return "Pixel 10a";
+            case "tangorpro": return "Pixel Tablet";
+            default: return "Pixel";
+        }
+    }
 
     public static void setTeeBroken(boolean broken) {
         sTeeBroken = broken;
