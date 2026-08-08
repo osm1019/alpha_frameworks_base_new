@@ -90,6 +90,9 @@ constructor(
 
     private val dismissedEventIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    /** Keys of progress notifications already announced as an alert card, cleared on removal. */
+    private val alertedProgressKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     override var onFocusableRequested: ((Boolean) -> Unit)? = null
 
     var onCollapseRequested: (() -> Unit)? = null
@@ -315,6 +318,7 @@ constructor(
 
         applicationScope.launch {
             repository.notification.notificationRemovedFlow.collect { key ->
+                alertedProgressKeys.remove(key)
                 val alert = _uiState.value.notificationAlert ?: return@collect
                 if (alert.sbn.key == key) dismissNotificationAlert()
             }
@@ -406,6 +410,7 @@ constructor(
                     autoDismissJobs.values.forEach { it.cancel() }
                     autoDismissJobs.clear()
                     dismissedEventIds.clear()
+                    alertedProgressKeys.clear()
                     repository.clearAllIndicationEvents()
                 }
             }
@@ -683,14 +688,18 @@ constructor(
         val isSameKey = existingAlert != null && existingAlert.sbn.key == notification.sbn.key
 
         if (isSameKey && hasProgress) {
+            // Refresh the card's contents as the transfer advances, but leave the running
+            // dismissal timer alone so a steady stream of progress updates can't pin the card.
             _uiState.value = current.copy(notificationAlert = notification)
             return
         }
 
+        // A transfer is announced once. Later updates arriving after the card has been dismissed
+        // must not pop it back up — the progress keeps showing on the chip.
+        if (hasProgress && !alertedProgressKeys.add(notification.sbn.key)) return
+
         notifAlertJob?.cancel()
         _uiState.value = current.copy(notificationAlert = notification)
-
-        if (hasProgress) return
 
         val duration =
             if (!notification.isActiveCall()) NOTIF_ALERT_DURATION_MS else null
