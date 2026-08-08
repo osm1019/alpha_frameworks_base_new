@@ -7835,11 +7835,6 @@ public final class Settings {
         /**
          * @hide
          */
-        public static final String WIFI_STANDARD_ICON = "wifi_standard_icon";
-
-        /**
-         * @hide
-         */
         public static final String STATUSBAR_EXTRA_PADDING_START = "statusbar_extra_padding_start";
 
         /**
