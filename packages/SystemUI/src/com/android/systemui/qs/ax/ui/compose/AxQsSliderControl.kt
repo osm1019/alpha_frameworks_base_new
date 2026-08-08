@@ -124,6 +124,10 @@ import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.QSTileIconShapes
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.cappedProportionalCornerShape
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.proportionalCornerShape
 import com.android.systemui.res.R
 import com.android.systemui.utils.PolicyRestriction
 import com.android.systemui.volume.dialog.sliders.ui.compose.SliderTrack
@@ -210,9 +214,22 @@ internal fun axQsControlShape(
     control: AxQsControl,
     span: AxQsSpan,
     verticalStyle: AxQsVerticalSliderStyle = AxQsVerticalSliderStyle.M3_EXPRESSIVE,
-    tileShape: Shape = CircleShape,
+    tileShape: Shape? = null,
+    cornerFraction: Float? = null,
 ): Shape {
     return when {
+        // Capped: the fraction would give this card a lozenge at the round end.
+        control == AxQsControl.MEDIA ->
+            cornerFraction?.let {
+                cappedProportionalCornerShape(it, QSTileIconShapes.MEDIA_CORNER_MAX)
+            } ?: RoundedCornerShape(QSTileIconShapes.MEDIA_CORNER_MAX)
+        // Buttons: the silhouette when their cell can carry it, else the roundness, else inactive.
+        span == AxQsSpan.TileDefault ->
+            tileShape
+                ?: cornerFraction?.let { proportionalCornerShape(it) }
+                ?: RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
+        // Wider surfaces would smear a silhouette, so only the roundness carries over.
+        cornerFraction != null -> proportionalCornerShape(cornerFraction)
         control == AxQsControl.RINGER -> CircleShape
         control.isVerticalSlider ->
             when (verticalStyle) {
@@ -220,8 +237,6 @@ internal fun axQsControlShape(
                 AxQsVerticalSliderStyle.PLATFORM -> CircleShape
             }
         control.isHorizontalSlider -> HorizontalSliderShape
-        // 1x1 controls are the buttons, which follow the user's tile shape.
-        span == AxQsSpan.TileDefault && control != AxQsControl.MEDIA -> tileShape
         else -> RoundedCornerShape(AxQsControlCornerRadius)
     }
 }
@@ -356,10 +371,20 @@ private fun AxQsSlider(
             thumbSize
         }
     val visualAlongTrack = visualPillSize.width
+    // A bar's roundness is governed by its height, which is also its shorter side, so the custom
+    // corner fraction resolves here exactly as proportionalCornerShape resolves it elsewhere. Both
+    // the track's own background and the drawn segments have to use the one radius.
+    val customTrackCorner = LocalQSTileCornerFraction.current?.let { sliderHeight * it }
     val trackCornerSize =
-        if (vertical) sliderHeight / VERTICAL_SLIDER_CORNER_DIVISOR
-        else HorizontalSliderCornerRadius
-    val trackShape = if (vertical) VerticalSliderShape else HorizontalSliderShape
+        customTrackCorner
+            ?: if (vertical) sliderHeight / VERTICAL_SLIDER_CORNER_DIVISOR
+            else HorizontalSliderCornerRadius
+    val trackShape =
+        when {
+            customTrackCorner != null -> RoundedCornerShape(customTrackCorner)
+            vertical -> VerticalSliderShape
+            else -> HorizontalSliderShape
+        }
     val trackInsideCorner = if (isStyled) 0.dp else AxSliderTrackInsideCornerRadius
     val thumbGap = if (isStyled) 0.dp else AxSliderThumbTrackGap
     Slider(

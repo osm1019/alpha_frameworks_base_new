@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,7 @@ import com.android.systemui.qs.ax.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
 import com.android.systemui.qs.panels.ui.compose.TileListener
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.Tile
@@ -84,9 +86,13 @@ internal fun ContentScope.AxQsMixedGrid(
     modifier: Modifier = Modifier,
 ) {
     val tiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels
-    val values = LinkedHashMap<String, AxQsGridValue>()
-    tiles.forEach { tile -> values[tile.spec.spec] = AxQsGridValue.Tile(tile) }
-    AxQsControl.entries.forEach { control -> values[control.id] = AxQsGridValue.Control(control) }
+    val values =
+        remember(tiles) {
+            LinkedHashMap<String, AxQsGridValue>().apply {
+                tiles.forEach { tile -> put(tile.spec.spec, AxQsGridValue.Tile(tile)) }
+                AxQsControl.entries.forEach { put(it.id, AxQsGridValue.Control(it)) }
+            }
+        }
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     LaunchedEffect(landscape) {
@@ -101,7 +107,7 @@ internal fun ContentScope.AxQsMixedGrid(
     val tileColumns = axQsViewModel.columns(tileGridLayout)
     val tileRows = axQsViewModel.rows(tileGridLayout)
     val showTileLabels = axQsViewModel.showTileLabels(tileGridLayout)
-    val allowCircleCells =
+    val allowCustomShapeCells =
         controlColumns >= axQsViewModel.defaultColumns(controlGridLayout) &&
             (landscape || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
     val layout =
@@ -133,7 +139,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         id = id,
                         span =
                             axQsViewModel
-                                .span(id, layout, AxQsSpan.TileWideDefault)
+                                .span(id, layout, axQsViewModel.defaultControlTileSpan(id))
                                 .coerceForControlTile(controlColumns),
                         minSpan = AxQsSpan.ControlTileMin,
                         maxSpan = AxQsSpan.controlTileMax(controlColumns),
@@ -249,12 +255,12 @@ internal fun ContentScope.AxQsMixedGrid(
                 } else {
                     maxWidth - portraitPadding * 2
                 }
-            val circleCells =
-                useAxQsCircleCells(
+            val customShapeCells =
+                useAxQsCustomShapeCells(
                     gridWidth = gridWidth,
                     tileColumns = tileColumns,
                     spacing = spacing,
-                    allowCircles = allowCircleCells,
+                    allowCustomShapes = allowCustomShapeCells,
                 )
             when {
                 qqs ->
@@ -276,7 +282,7 @@ internal fun ContentScope.AxQsMixedGrid(
                             showTileLabels = showTileLabels,
                             rowHeight = rowHeight,
                             spacing = spacing,
-                            circleCells = circleCells,
+                            customShapeCells = customShapeCells,
                             isFullyVisible = {
                                 viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing
                             },
@@ -330,7 +336,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         showTileLabels = showTileLabels,
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        circleCells = circleCells,
+                        customShapeCells = customShapeCells,
                         editButtonProgress = { qsEntranceProgress },
                         modifier = Modifier.fillMaxSize(),
                         controlContent = controlContent,
@@ -351,7 +357,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         showTileLabels = showTileLabels,
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        circleCells = circleCells,
+                        customShapeCells = customShapeCells,
                         editButtonProgress = { qsEntranceProgress },
                         scrollState = scrollState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = portraitPadding),
@@ -386,7 +392,7 @@ private fun ContentScope.AxLiveTile(
             fillHeight = true,
             compactIconSize = axQsTileIconSize(minOf(maxWidth, maxHeight)),
             tileShapeOverride =
-                LocalQSTileShape.current.takeIf {
+                LocalQSTileShape.current?.takeIf {
                     item.span == AxQsSpan.TileDefault &&
                         abs(maxWidth.value - maxHeight.value) < 1f
                 },
@@ -446,7 +452,12 @@ private fun AxLiveControl(
                 )
             AxQsControl.RINGER ->
                 RingerSliderTileContent(
-                    shape = axQsControlShape(AxQsControl.RINGER, span),
+                    shape =
+                        axQsControlShape(
+                            AxQsControl.RINGER,
+                            span,
+                            cornerFraction = LocalQSTileCornerFraction.current,
+                        ),
                     modifier = Modifier.fillMaxSize(),
                 )
             AxQsControl.MEDIA ->

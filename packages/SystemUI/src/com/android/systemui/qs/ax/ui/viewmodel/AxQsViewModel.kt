@@ -470,6 +470,17 @@ constructor(
         else portraitDefaultColumns
     }
 
+    /**
+     * Entry span for a tile in the controls zone. The two tiles that ship there are laid out wide;
+     * one the user moves in starts compact, so it fits a single free cell.
+     */
+    fun defaultControlTileSpan(id: String): AxQsSpan =
+        if (id in DEFAULT_NETWORK_IDS || id == BLUETOOTH_TILE_ID) {
+            AxQsSpan.TileWideDefault
+        } else {
+            AxQsSpan.TileDefault
+        }
+
     private fun defaultControlIds(available: Set<String>): List<String> {
         val network = DEFAULT_NETWORK_IDS.firstOrNull(available::contains)
         return listOfNotNull(

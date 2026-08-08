@@ -598,6 +598,11 @@ fun rememberTileHaptic(): Boolean {
     return hapticEnabled
 }
 
+/** The state-driven tile shape, for the 1x1 control buttons that share a cell with the tiles. */
+@Composable
+fun animateQSTileShapeAsState(state: Int): State<RoundedCornerShape> =
+    TileDefaults.animateTileShapeAsState(state)
+
 private object TileDefaults {
     val ActiveIconCornerRadius = 16.dp
     val ActiveTileCornerRadius = 24.dp
@@ -727,12 +732,23 @@ private object TileDefaults {
         )
     }
 
+    /**
+     * The AOSP morph: a stadium while inactive, [activeCornerRadius] while active. A custom shape
+     * replaces it with a proportional radius held steady across states.
+     */
     @Composable
     fun animateShapeAsState(
         state: Int,
         activeCornerRadius: Dp,
         label: String,
     ): State<RoundedCornerShape> {
+        val cornerFraction = LocalQSTileCornerFraction.current
+        if (cornerFraction != null) {
+            return remember(cornerFraction) {
+                mutableStateOf(proportionalCornerShape(cornerFraction))
+            }
+        }
+
         val animatedCornerRadius by
             animateDpAsState(
                 targetValue =

@@ -124,7 +124,6 @@ import com.android.systemui.alpha.style.common.LocalAlphaColorScheme
 import com.android.systemui.alpha.style.common.defaultAlphaColorScheme
 import com.android.systemui.alpha.style.qs.LocalQSFragmentComposeViewModel
 import com.android.systemui.alpha.style.qs.rememberQsTileStyleRenderer
-import com.android.systemui.brightness.ui.compose.BrightnessSliderContainer
 import com.android.systemui.brightness.ui.compose.ContainerColors
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.compose.modifiers.sysUiResTagContainer
@@ -165,9 +164,11 @@ import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewMo
 import com.android.systemui.qs.flags.QSComposeFragment
 import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTableLog
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.QSTileIconShapes
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileScale
-import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileShape
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.rememberQSTileShapeKey
 import com.android.systemui.qs.panels.ui.viewmodel.DetailsViewModel
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.tiles.ringer.LocalRingerSliderViewModel
@@ -375,10 +376,17 @@ constructor(
                     val alphaColorScheme = remember(defaultScheme, styleRenderer) {
                         styleRenderer?.produceColorScheme(defaultScheme) ?: defaultScheme
                     }
-                    val qsTileShape = rememberQSTileShape()
+                    val qsTileShapeKey = rememberQSTileShapeKey()
+                    val qsTileShape =
+                        remember(qsTileShapeKey) { QSTileIconShapes.shapeForKey(qsTileShapeKey) }
+                    val qsTileCornerFraction =
+                        remember(qsTileShapeKey) {
+                            QSTileIconShapes.cornerFractionForKey(qsTileShapeKey)
+                        }
                     CompositionLocalProvider(
                         LocalAlphaColorScheme provides alphaColorScheme,
                         LocalQSTileShape provides qsTileShape,
+                        LocalQSTileCornerFraction provides qsTileCornerFraction,
                         LocalTileScale provides tileScale,
                         LocalBlurEnabled provides blurEnabled,
                         LocalQsScrolling provides scrollState.isScrollInProgress,

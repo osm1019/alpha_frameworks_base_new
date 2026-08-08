@@ -69,6 +69,7 @@ import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.SmallTileContent
@@ -111,7 +112,7 @@ internal fun AxAvailableControls(
     currentIds: Set<String>,
     controlColumns: Int,
     tileColumns: Int,
-    circleCells: Boolean,
+    customShapeCells: Boolean,
     verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
     onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
@@ -144,7 +145,7 @@ internal fun AxAvailableControls(
             iconId = TileCategory.UTILITIES.iconId,
             items = controls,
             columns = controlColumns,
-            circleCells = circleCells,
+            customShapeCells = customShapeCells,
             verticalSliderStyle = verticalSliderStyle,
             onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
             first = true,
@@ -161,7 +162,7 @@ internal fun AxAvailableControls(
                 iconId = category.iconId,
                 items = items,
                 columns = tileColumns,
-                circleCells = circleCells,
+                customShapeCells = customShapeCells,
                 verticalSliderStyle = verticalSliderStyle,
                 onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
                 first = false,
@@ -181,7 +182,7 @@ private fun AxAvailableItemGroup(
     iconId: Int,
     items: List<AxAddItem>,
     columns: Int,
-    circleCells: Boolean,
+    customShapeCells: Boolean,
     verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
     onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
     first: Boolean,
@@ -230,7 +231,7 @@ private fun AxAvailableItemGroup(
         ) {
             val cellWidth = axQsGridCellWidth(maxWidth, columns, spacing)
             val aospTileHeight = CommonTileDefaults.TileHeight * LocalTileScale.current
-            val rowHeight = if (circleCells) cellWidth else aospTileHeight
+            val rowHeight = if (customShapeCells) cellWidth else aospTileHeight
             Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
                 rows.forEach { row ->
                     Row(
@@ -251,7 +252,7 @@ private fun AxAvailableItemGroup(
                                 item = item,
                                 span = span,
                                 rowHeight = rowHeight,
-                                circleTile = circleCells,
+                                customShapeTile = customShapeCells,
                                 verticalSliderStyle = verticalSliderStyle,
                                 onVerticalSliderStyleChanged = onVerticalSliderStyleChanged,
                                 controlPreview = controlPreview,
@@ -344,7 +345,15 @@ private fun VerticalSliderStylePager(
                     }
                     Box(
                         Modifier.fillMaxSize()
-                            .clip(axQsControlShape(control, span, style, LocalQSTileShape.current))
+                            .clip(
+                                axQsControlShape(
+                                    control,
+                                    span,
+                                    style,
+                                    LocalQSTileShape.current,
+                                    LocalQSTileCornerFraction.current,
+                                )
+                            )
                             .clickable(
                                 enabled = canAdd,
                                 onClickLabel = clickLabel,
@@ -381,7 +390,7 @@ private fun AxAddItemCell(
     item: AxAddItem,
     span: AxQsSpan,
     rowHeight: Dp,
-    circleTile: Boolean,
+    customShapeTile: Boolean,
     verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle,
     onVerticalSliderStyleChanged: (AxQsControl, AxQsVerticalSliderStyle) -> Unit,
     controlPreview: @Composable (AxQsControl, AxQsSpan, AxQsVerticalSliderStyle) -> Unit,
@@ -419,13 +428,16 @@ private fun AxAddItemCell(
     val previewShape =
         when (item) {
             is AxAddItem.Tile ->
-                if (circleTile) {
-                    tileShape
-                } else {
-                    RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
-                }
+                tileShape?.takeIf { customShapeTile }
+                    ?: RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
             is AxAddItem.Control ->
-                axQsControlShape(item.control, span, sliderStyle, tileShape)
+                axQsControlShape(
+                    item.control,
+                    span,
+                    sliderStyle,
+                    tileShape,
+                    LocalQSTileCornerFraction.current,
+                )
         }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -463,7 +475,7 @@ private fun AxAddItemCell(
                             AxQsEditTile(
                                 tile = item.viewModel,
                                 span = AxQsSpan.TileDefault,
-                                circle = circleTile,
+                                customShape = customShapeTile,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         is AxAddItem.Control ->
@@ -502,12 +514,7 @@ private fun AxAddItem.pickerSpan(columns: Int): AxQsSpan {
     return when (this) {
         is AxAddItem.Tile -> AxQsSpan.TileDefault
         is AxAddItem.Control -> {
-            val span =
-                if (control == AxQsControl.RINGER) {
-                    AxQsSpan.TileWideDefault
-                } else {
-                    control.spans(columns).default
-                }
+            val span = control.spans(columns).default
             span.copy(columns = span.columns.coerceAtMost(columns))
         }
     }
@@ -539,7 +546,7 @@ private fun packAvailableItems(items: List<AxAddItem>, columns: Int): List<List<
 fun AxQsEditTile(
     tile: EditTileViewModel,
     span: AxQsSpan,
-    circle: Boolean,
+    customShape: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val colors =
@@ -552,11 +559,8 @@ fun AxQsEditTile(
             outline = MaterialTheme.colorScheme.onSurface,
         )
     val shape =
-        if (circle && span == AxQsSpan.TileDefault) {
-            LocalQSTileShape.current
-        } else {
-            RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
-        }
+        LocalQSTileShape.current?.takeIf { customShape && span == AxQsSpan.TileDefault }
+            ?: RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
     BoxWithConstraints(
         modifier = modifier.clip(shape).background(colors.background),
         contentAlignment = Alignment.Center,

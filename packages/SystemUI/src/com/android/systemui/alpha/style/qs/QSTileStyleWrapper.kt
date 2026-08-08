@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -53,22 +52,14 @@ fun QSTileStyleWrapper(
 
     val density = LocalDensity.current
 
-    // Keyed on the shape itself, so state-animated shapes (which allocate a new instance per
-    // frame) recompute while user-selected shapes stay cached.
-    val cornerRadiusPx = remember(shape, density) {
-        computeCornerRadius(shape, density)
-    }
-
     val styledModifier = modifier
         .clip(shape)
         .drawWithContent {
             drawContent()
 
-            val actualCornerRadius = if (cornerRadiusPx == -1f) {
-                min(size.width, size.height) / 2f
-            } else {
-                cornerRadiusPx
-            }
+            // Resolved here rather than cached: a shape can animate its corner with the tile state,
+            // and a proportional one only knows its radius once it has been given a size.
+            val actualCornerRadius = computeCornerRadius(shape, size, density)
 
             val bounds = Rect(
                 left = 0f,
@@ -107,19 +98,16 @@ fun QSTileStyleWrapper(
 }
 
 /**
- * Computes corner radius from shape for any radius-based fallbacks.
- * Returns -1f for CircleShape / path shapes (resolved to half min side at draw time).
- * Path silhouettes should prefer outline drawing via drawShapeStroke; this is only a
- * stand-in when a renderer still needs a single radius.
+ * Corner radius of [shape] at [size], for any radius-based fallback a renderer still needs.
+ * CircleShape and path silhouettes resolve to half the min side; path silhouettes should prefer
+ * outline drawing via drawShapeStroke, this is only a stand-in.
  */
-private fun computeCornerRadius(shape: Shape, density: Density): Float {
+private fun computeCornerRadius(shape: Shape, size: Size, density: Density): Float {
     return when {
-        shape === CircleShape -> -1f
-        shape is RoundedCornerShape -> {
-            with(density) { shape.topStart.toPx(Size.Unspecified, this) }
-        }
+        shape === CircleShape -> min(size.width, size.height) / 2f
+        shape is RoundedCornerShape -> with(density) { shape.topStart.toPx(size, this) }
         // Path shapes (Outline.Generic): treat like a full pill so leftover round-rect
         // code paths don't stroke a sharp square over a curved clip.
-        else -> -1f
+        else -> min(size.width, size.height) / 2f
     }
 }

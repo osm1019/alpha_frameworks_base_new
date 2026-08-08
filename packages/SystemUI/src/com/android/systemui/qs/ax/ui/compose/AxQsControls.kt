@@ -22,6 +22,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon as MaterialIcon
@@ -47,10 +48,13 @@ import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.animateQSTileShapeAsState
 import com.android.systemui.qs.tiles.ringer.RingerSliderTileContent
 import com.android.systemui.res.R
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
+import kotlin.math.abs
 
 @Composable
 internal fun AxQsBrightnessButton(
@@ -131,9 +135,10 @@ private fun AxQsButtonControl(
 ) {
     // Same pipeline as 1x1 QS tiles: UI Styles + user tile shape on a small cell.
     val styleRenderer = rememberQsTileStyleRenderer()
-    val shape = LocalQSTileShape.current
+    val userShape = LocalQSTileShape.current
     val scheme = LocalAlphaColorScheme.current
     val tileState = if (active) STATE_ACTIVE else STATE_INACTIVE
+    val stateShape by animateQSTileShapeAsState(tileState)
     val background by
         animateColorAsState(
             targetValue = if (active) scheme.accent else AxTileDefaults.backgroundColor(),
@@ -144,7 +149,7 @@ private fun AxQsButtonControl(
             targetValue = if (active) scheme.onAccent else scheme.onNeutral,
             label = "AxQsButtonForeground",
         )
-    Box(
+    BoxWithConstraints(
         contentAlignment = Alignment.Center,
         modifier =
             modifier
@@ -152,6 +157,9 @@ private fun AxQsButtonControl(
                 .clickable(enabled = interactive, role = Role.Switch, onClick = onClick)
                 .semantics { contentDescription = description },
     ) {
+        // Same cell rule as AxLiveTile: a silhouette only claims a 1:1 cell.
+        val shape =
+            userShape?.takeIf { abs(maxWidth.value - maxHeight.value) < 1f } ?: stateShape
         QSTileStyleWrapper(
             renderer = styleRenderer,
             shape = shape,
@@ -210,7 +218,12 @@ fun AxQsControlPreview(
         AxQsControl.RINGER ->
             RingerSliderTileContent(
                 interactable = false,
-                shape = axQsControlShape(AxQsControl.RINGER, span),
+                shape =
+                    axQsControlShape(
+                        AxQsControl.RINGER,
+                        span,
+                        cornerFraction = LocalQSTileCornerFraction.current,
+                    ),
                 modifier = modifier.fillMaxSize(),
             )
         AxQsControl.MEDIA ->

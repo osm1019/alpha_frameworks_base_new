@@ -153,6 +153,7 @@ import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.ax.shared.model.AxQsControl
 import com.android.systemui.qs.ax.shared.model.AxQsSpan
 import com.android.systemui.qs.ax.ui.gesture.mediaOverscrollToDismiss
@@ -230,7 +231,11 @@ fun AxMediaPanel(
         if (surface == AxMediaSurface.LOCKSCREEN) {
             RoundedCornerShape(viewModel.lockscreenMediaStyle.effective.cornerRadius())
         } else {
-            axQsControlShape(AxQsControl.MEDIA, span)
+            axQsControlShape(
+                AxQsControl.MEDIA,
+                span,
+                cornerFraction = LocalQSTileCornerFraction.current,
+            )
         }
     val gesturesEnabled = !viewModel.hasVisibleGuts()
     val carouselScrollingEnabled =
@@ -338,7 +343,11 @@ private fun AxMediaCard(
         if (isLockscreen) {
             RoundedCornerShape(lockscreenCorner)
         } else {
-            axQsControlShape(AxQsControl.MEDIA, span)
+            axQsControlShape(
+                AxQsControl.MEDIA,
+                span,
+                cornerFraction = LocalQSTileCornerFraction.current,
+            )
         }
     val layout =
         when {

@@ -55,7 +55,8 @@ internal fun <T> AxQsGrid(
     spacing: Dp,
     modifier: Modifier = Modifier,
     maxRows: Int? = null,
-    squareCells: Boolean = false,
+    // Lays cells out 1:1, so custom silhouettes keep their proportions.
+    customShapeCells: Boolean = false,
     minimumRows: Int = 0,
     animateItemBounds: Boolean = false,
     staticItemId: String? = null,
@@ -89,7 +90,8 @@ internal fun <T> AxQsGrid(
             val horizontalSpacingPx = spacing.roundToPx()
             val verticalSpacingPx = horizontalSpacingPx
             val availableWidth = (width - horizontalSpacingPx * (columns - 1)).coerceAtLeast(0)
-            val rowHeightPx = if (squareCells) availableWidth / columns else rowHeight.roundToPx()
+            val rowHeightPx =
+                if (customShapeCells) availableWidth / columns else rowHeight.roundToPx()
 
             fun columnStart(column: Int): Int {
                 return availableWidth * column / columns + horizontalSpacingPx * column
@@ -252,7 +254,7 @@ internal fun <T> AxQsTileGrid(
     rows: Int,
     spacing: Dp,
     showLabels: Boolean,
-    circleCells: Boolean,
+    customShapeCells: Boolean,
     pagerState: PagerState,
     modifier: Modifier = Modifier,
     content: @Composable (AxQsGridItem<T>) -> Unit,
@@ -268,7 +270,7 @@ internal fun <T> AxQsTileGrid(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val cellWidth = axQsGridCellWidth(maxWidth, columns, spacing)
         val aospTileHeight = CommonTileDefaults.TileHeight * LocalTileScale.current
-        val tileHeight = if (circleCells) cellWidth else aospTileHeight
+        val tileHeight = if (customShapeCells) cellWidth else aospTileHeight
         val itemHeight = tileHeight + if (showLabels) AX_TILE_LABEL_HEIGHT else 0.dp
         val pageHeight = itemHeight * rows + spacing * (rows - 1)
         val pagerPadding = if (pageCount > 1) spacing else 0.dp
@@ -290,7 +292,7 @@ internal fun <T> AxQsTileGrid(
                 columns = columns,
                 rowHeight = itemHeight,
                 spacing = spacing,
-                squareCells = false,
+                customShapeCells = false,
                 modifier = Modifier.fillMaxSize(),
             ) { item ->
                 Column(
@@ -321,13 +323,18 @@ internal fun axQsTileGridPageCount(itemCount: Int, columns: Int, rows: Int): Int
     return ((itemCount + columns * rows - 1) / (columns * rows)).coerceAtLeast(1)
 }
 
-internal fun useAxQsCircleCells(
+/**
+ * Whether cells in this grid can carry a **custom silhouette**: they have to come out 1:1, or a
+ * 100x100 path (pebble, teardrop) smears when stretched across a wide cell. Callers that say no
+ * fall back to the default shape, which morphs with the tile state.
+ */
+internal fun useAxQsCustomShapeCells(
     gridWidth: Dp,
     tileColumns: Int,
     spacing: Dp,
-    allowCircles: Boolean,
+    allowCustomShapes: Boolean,
 ): Boolean =
-    allowCircles &&
+    allowCustomShapes &&
         axQsGridCellWidth(gridWidth, tileColumns, spacing) <= AX_TILE_MAX_SIZE
 
 internal fun axQsTileIconSize(tileSize: Dp): Dp =

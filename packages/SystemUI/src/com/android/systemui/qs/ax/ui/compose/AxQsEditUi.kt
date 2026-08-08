@@ -92,6 +92,7 @@ import com.android.systemui.qs.ax.shared.model.AxQsVerticalSliderStyle
 import com.android.systemui.qs.ax.ui.model.AxQsGridItem
 import com.android.systemui.qs.ax.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileScale
 import com.android.systemui.qs.panels.ui.compose.selection.TileState
@@ -304,7 +305,7 @@ private fun AxEditableGrid(
     val verticalSliderStyle: (AxQsControl) -> AxQsVerticalSliderStyle = { control ->
         axQsViewModel.verticalSliderStyle(layout, control)
     }
-    val allowCircleCells =
+    val allowCustomShapeCells =
         controlColumns >= defaultControlColumns && (landscape || tileColumns >= defaultTileColumns)
     val savedControlOrder = axQsViewModel.order(layout, AxQsGridSection.CONTROLS)
     val savedTileOrder = axQsViewModel.order(layout, AxQsGridSection.TILES)
@@ -410,7 +411,7 @@ private fun AxEditableGrid(
                         if (section == AxQsGridSection.CONTROLS) {
                             (item.span.takeIf { item.section == AxQsGridSection.CONTROLS }
                                     ?: savedSpans[item.id]
-                                    ?: AxQsSpan.TileWideDefault)
+                                    ?: axQsViewModel.defaultControlTileSpan(item.id))
                                 .coerceForControlTile(controlColumns)
                         } else {
                             AxQsSpan.TileDefault
@@ -449,19 +450,19 @@ private fun AxEditableGrid(
             } else {
                 maxWidth
             }
-        val circleCells =
-            useAxQsCircleCells(
+        val customShapeCells =
+            useAxQsCustomShapeCells(
                 gridWidth = gridWidth,
                 tileColumns = tileColumns,
                 spacing = spacing,
-                allowCircles = allowCircleCells,
+                allowCustomShapes = allowCustomShapeCells,
             )
-        val pickerCircleCells =
-            useAxQsCircleCells(
+        val pickerCustomShapeCells =
+            useAxQsCustomShapeCells(
                 gridWidth = (maxWidth - 32.dp).coerceAtLeast(0.dp),
                 tileColumns = pickerTileColumns,
                 spacing = spacing,
-                allowCircles = allowCircleCells,
+                allowCustomShapes = allowCustomShapeCells,
             )
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -482,7 +483,7 @@ private fun AxEditableGrid(
                         maxRows = controlRows,
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        circleCells = circleCells,
+                        customShapeCells = customShapeCells,
                         animateItemBounds = animateItemBounds,
                         selectedId = selectedId,
                         onSelected = { selectedId = it },
@@ -510,7 +511,7 @@ private fun AxEditableGrid(
                         maxRows = tileRows.takeIf { qqs },
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        circleCells = circleCells,
+                        customShapeCells = customShapeCells,
                         animateItemBounds = animateItemBounds,
                         selectedId = selectedId,
                         onSelected = { selectedId = it },
@@ -576,7 +577,7 @@ private fun AxEditableGrid(
                 currentIds = listState.items.mapTo(mutableSetOf()) { it.id },
                 controlColumns = pickerControlColumns,
                 tileColumns = pickerTileColumns,
-                circleCells = pickerCircleCells,
+                customShapeCells = pickerCustomShapeCells,
                 verticalSliderStyle = verticalSliderStyle,
                 onVerticalSliderStyleChanged = { control, style ->
                     axQsViewModel.setVerticalSliderStyle(layout, control, style)
@@ -632,7 +633,7 @@ private fun AxEditableGridSection(
     maxRows: Int?,
     rowHeight: Dp,
     spacing: Dp,
-    circleCells: Boolean,
+    customShapeCells: Boolean,
     animateItemBounds: Boolean,
     selectedId: String?,
     onSelected: (String?) -> Unit,
@@ -650,7 +651,7 @@ private fun AxEditableGridSection(
         val gridPadding = if (section == AxQsGridSection.CONTROLS) EditGridPadding else 0.dp
         val availableWidth = (maxWidth - gridPadding * 2).coerceAtLeast(0.dp)
         val cellWidth = axQsGridCellWidth(availableWidth, columns, spacing)
-        val measuredRowHeight = if (circleCells) cellWidth else rowHeight
+        val measuredRowHeight = if (customShapeCells) cellWidth else rowHeight
         val contentRows = axQsGridRowCount(items, columns, maxRows)
         val visibleRows =
             if (
@@ -696,7 +697,7 @@ private fun AxEditableGridSection(
                 rowHeight = rowHeight,
                 spacing = spacing,
                 maxRows = maxRows,
-                squareCells = circleCells,
+                customShapeCells = customShapeCells,
                 minimumRows = visibleRows,
                 animateItemBounds = animateItemBounds,
                 staticItemId = listState.draggedId,
@@ -772,15 +773,20 @@ private fun AxEditableGridSection(
                 val selectionShape =
                     when (value) {
                         is AxEditGridValue.Tile ->
-                            // Mirrors the panel's rule in AxQsMixedGrid: a tile takes the user's
-                            // shape when its cell is actually square, in either section.
-                            if (circleCells && item.span == AxQsSpan.TileDefault) {
-                                tileShape
-                            } else {
-                                RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
-                            }
+                            // Mirrors the panel's rule in AxQsMixedGrid: a tile takes the custom
+                            // silhouette when its cell is 1:1, in either section. Null is the
+                            // default shape, which outlines as the inactive tile.
+                            tileShape?.takeIf {
+                                customShapeCells && item.span == AxQsSpan.TileDefault
+                            } ?: RoundedCornerShape(CommonTileDefaults.InactiveCornerRadius)
                         is AxEditGridValue.Control ->
-                            axQsControlShape(value.control, item.span, controlStyle, tileShape)
+                            axQsControlShape(
+                                value.control,
+                                item.span,
+                                controlStyle,
+                                tileShape,
+                                LocalQSTileCornerFraction.current,
+                            )
                     }
                 val selectionColor =
                     if (sliderControl != null) {
@@ -954,9 +960,9 @@ private fun AxEditableGridSection(
                                         AxQsEditTile(
                                             tile = value.viewModel,
                                             span = item.span,
-                                            circle =
+                                            customShape =
                                                 section == AxQsGridSection.TILES &&
-                                                    circleCells,
+                                                    customShapeCells,
                                             modifier = Modifier.fillMaxSize(),
                                         )
                                     is AxEditGridValue.Control ->
@@ -1050,7 +1056,7 @@ private fun buildEditItems(
                         id = id,
                         span =
                             viewModel
-                                .span(id, layout, AxQsSpan.TileWideDefault)
+                                .span(id, layout, viewModel.defaultControlTileSpan(id))
                                 .coerceForControlTile(controlColumns),
                         minSpan = AxQsSpan.ControlTileMin,
                         maxSpan = AxQsSpan.controlTileMax(controlColumns),

@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -206,9 +205,8 @@ private fun DrawScope.renderButton(
 
     val cornerRadius = when (shape) {
         CircleShape -> min(size.width, size.height) / 2f
-        is RoundedCornerShape -> {
-            with(density) { shape.topStart.toPx(Size.Unspecified, this) }
-        }
+        // Resolved against the real size: a proportional corner only knows its radius from it.
+        is RoundedCornerShape -> with(density) { shape.topStart.toPx(size, this) }
         else -> 0f
     }
 

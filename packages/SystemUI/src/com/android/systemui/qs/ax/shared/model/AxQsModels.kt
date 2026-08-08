@@ -55,10 +55,14 @@ data class AxQsSpan(val columns: Int, val rows: Int) {
         val MediaMin = AxQsSpan(2, 1)
         val Max = AxQsSpan(4, 4)
 
+        /**
+         * A tile has two layouts, compact and wide, selected by `span.columns == 1`. Anything past
+         * 2x1 just stretches the wide one.
+         */
         fun controlTileMax(columns: Int): AxQsSpan {
             return AxQsSpan(
-                columns.coerceAtLeast(ControlTileMin.columns).coerceAtMost(Max.columns),
-                Max.rows,
+                columns.coerceIn(ControlTileMin.columns, TileWideDefault.columns),
+                TileWideDefault.rows,
             )
         }
 
@@ -117,9 +121,9 @@ enum class AxQsControl(
     ),
     RINGER(
         id = "control:ringer",
-        defaultSpan = AxQsSpan(4, 1),
+        defaultSpan = AxQsSpan.TileWideDefault,
         minSpan = AxQsSpan.TileWideDefault,
-        maxSpan = AxQsSpan.Max,
+        maxSpan = AxQsSpan.TileWideDefault,
     ),
     MEDIA(
         id = "control:media",
@@ -130,7 +134,7 @@ enum class AxQsControl(
 
     fun spans(columns: Int): AxQsControlSpans {
         val resolvedMax =
-            if (this == MEDIA || this == RINGER || isHorizontalSlider) {
+            if (this == MEDIA || isHorizontalSlider) {
                 maxSpan.copy(columns = columns.coerceIn(minSpan.columns, AxQsSpan.MAX_COLUMNS))
             } else {
                 maxSpan
