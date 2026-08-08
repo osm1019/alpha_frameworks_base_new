@@ -15,6 +15,7 @@
  */
 package com.android.systemui.statusbar.pipeline.ims.data.model
 
+import android.telephony.AccessNetworkConstants
 import android.telephony.ims.feature.MmTelFeature
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
@@ -25,14 +26,24 @@ data class ImsStateModel(
     val activeSubCount: Int = 0,
     val registered: Boolean = false,
     val capabilities: MmTelFeature.MmTelCapabilities? = null,
-    val registrationTech: Int = REGISTRATION_TECH_NONE
+    val registrationTech: Int = REGISTRATION_TECH_NONE,
+    /** [AccessNetworkConstants.TransportType]; invalid if unknown. */
+    val transportType: Int = AccessNetworkConstants.TRANSPORT_TYPE_INVALID,
 ) {
 
     fun isHdVoiceCapable(): Boolean =
         registered && capabilities
             ?.isCapable(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE) ?: false
 
+    /**
+     * VoWiFi when voice is capable and IMS is on WLAN.
+     *
+     * Some stacks (incl. OEM) report WLAN via [transportType] while leaving
+     * [registrationTech] as LTE/NR — accept either signal.
+     */
     fun isVoWifiAvailable(): Boolean =
-        isHdVoiceCapable() && registrationTech == REGISTRATION_TECH_IWLAN
+        isHdVoiceCapable() &&
+            (registrationTech == REGISTRATION_TECH_IWLAN ||
+                transportType == AccessNetworkConstants.TRANSPORT_TYPE_WLAN)
 
 }

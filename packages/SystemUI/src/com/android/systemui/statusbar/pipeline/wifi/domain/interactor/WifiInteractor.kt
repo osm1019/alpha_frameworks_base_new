@@ -132,21 +132,23 @@ constructor(
     override val voWifiState: StateFlow<VoWifiState> =
         wifiRepository.imsStates.map { states ->
             val voWifiEnabled = states.filter { it.isVoWifiAvailable() }
-            if (voWifiEnabled.isNotEmpty()) {
-                // Get the VoWifi enabled slots
-                val slots = voWifiEnabled.map { it.slotIndex }
-                // Get the active subscription count from any one of the states
-                // (All states are being collected at the same time so doesn't matter)
-                val activeSubCount = voWifiEnabled.first().activeSubCount
-                VoWifiState.Enabled(slots, activeSubCount)
-            } else {
+            if (voWifiEnabled.isEmpty()) {
                 VoWifiState.Disabled
+            } else {
+                // Slot badges and dual-SIM count come from the same imsStates snapshot so a
+                // stale SubscriptionManager.activeSubscriptionInfoCount on one model cannot
+                // force the dual-SIM icon path while slots are still invalid (-1).
+                val slots = voWifiEnabled.map { it.slotIndex }.filter { it >= 0 }
+                val activeSubCount = states.size
+                VoWifiState.Enabled(slots, activeSubCount)
             }
         }
-        .stateIn(scope, SharingStarted.WhileSubscribed(), VoWifiState.Disabled)
+        .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), VoWifiState.Disabled)
 
     override val isVoWifiForceHidden: Flow<Boolean> =
-        commonImsRepo.imsIconState.map { !it.showVowifiIcon }
+        commonImsRepo.imsIconState
+            .map { !it.showVowifiIcon }
+            .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), true)
 
     private fun anyNonMatchingNetworkExists(
         currentNetwork: WifiNetworkModel.Active,

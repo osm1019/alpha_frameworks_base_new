@@ -52,6 +52,7 @@ import com.android.systemui.util.leak.LeakDetector;
 
 import dagger.Lazy;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -403,13 +404,33 @@ public class TunerServiceImpl extends TunerService {
         }
 
         @Override
+        public void onChange(boolean selfChange) {
+            // Fallback path used by some dispatchers; reload everything we listen on.
+            // Copy keys first: onTuningChanged can re-enter addTunable and mutate the map.
+            for (Uri u : new ArrayList<>(mListeningUris.keySet())) {
+                reloadSetting(u);
+            }
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            if (uri != null && mListeningUris.containsKey(uri)) {
+                reloadSetting(uri);
+            } else if (uri == null) {
+                onChange(selfChange);
+            }
+        }
+
+        @Override
         public void onChange(boolean selfChange, java.util.Collection<Uri> uris,
                 int flags, int userId) {
+            // USER_ALL (-1) is used by some Settings notify paths; accept our user too.
+            if (userId != mUserTracker.getUserId()
+                    && userId != UserHandle.USER_ALL) {
+                return;
+            }
             for (Uri u : uris) {
-                String key = mListeningUris.get(u);
-                if (userId == mUserTracker.getUserId()) {
-                    reloadSetting(u);
-                }
+                reloadSetting(u);
             }
         }
 

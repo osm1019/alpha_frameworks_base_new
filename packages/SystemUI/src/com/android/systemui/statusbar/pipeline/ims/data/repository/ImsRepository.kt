@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.pipeline.ims.data.repository
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.telephony.AccessNetworkConstants
 import android.telephony.SubscriptionManager
 import android.telephony.ims.ImsException
 import android.telephony.ims.ImsManager
@@ -28,6 +29,7 @@ import android.telephony.ims.ImsStateCallback
 import android.telephony.ims.RegistrationManager.RegistrationCallback
 import android.telephony.ims.feature.MmTelFeature
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NONE
+import android.util.Log
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.statusbar.pipeline.ims.data.model.ImsStateModel
@@ -69,10 +71,7 @@ class ImsRepositoryImpl(
             return@run kotlinx.coroutines.flow.MutableStateFlow(initial)
         }
 
-        if (!SubscriptionManager.isValidSubscriptionId(subId) ||
-            subscriptionManager == null ||
-            subscriptionManager.activeSubscriptionInfoCount == 0
-        ) {
+        if (!SubscriptionManager.isValidSubscriptionId(subId) || subscriptionManager == null) {
             return@run kotlinx.coroutines.flow.MutableStateFlow(initial)
         }
 
@@ -97,6 +96,7 @@ class ImsRepositoryImpl(
 
             val stateCallback = object : ImsStateCallback() {
                 var registered = false
+
                 override fun onAvailable() {
                     if (registered) return
                     runCatching<Unit> {
@@ -107,23 +107,43 @@ class ImsRepositoryImpl(
                             bgDispatcher.asExecutor(), capabilityCallback
                         )
                         registered = true
-                    }.onFailure { close(it) }
+                    }.onFailure {
+                        // Don't close the flow here. This ImsStateCallback is still
+                        // registered and healthy — only the MmTel feature went away
+                        // mid-registration, which is routine during boot. Closing would
+                        // make retryWhen register a *second* ImsStateCallback, and
+                        // telephony keeps the stale wrapper for the life of the process.
+                        // Drop whatever half registered and wait for the next
+                        // onAvailable().
+                        unregisterFeatureCallbacks()
+                        registered = false
+                    }
                 }
+
                 override fun onUnavailable(reason: Int) {
                     if (!registered) return
-                    runCatching<Unit> {
-                        imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
-                        imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
-                    }
+                    unregisterFeatureCallbacks()
                     registered = false
                 }
+
                 override fun onError() {
-                    if (!registered) return
+                    // Telephony has thrown this ImsStateCallback away; it will never fire
+                    // again. Unwind and let retryWhen register a fresh one.
+                    if (registered) {
+                        unregisterFeatureCallbacks()
+                        registered = false
+                    }
+                    close(ImsStateCallbackInvalidException())
+                }
+
+                private fun unregisterFeatureCallbacks() {
+                    // One runCatching each: a throw on the first must not skip the second.
                     runCatching<Unit> {
                         imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
+                    }
+                    runCatching<Unit> {
                         imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
                     }
-                    registered = false
                 }
             }
 
@@ -136,28 +156,38 @@ class ImsRepositoryImpl(
             }
 
             awaitClose {
+                // One runCatching each: the state callback is the one that must always
+                // come off, so a throw unwinding the feature callbacks can't skip it.
+                runCatching<Unit> { imsMmTelManager.unregisterImsStateCallback(stateCallback) }
                 runCatching<Unit> {
-                    imsMmTelManager.unregisterImsStateCallback(stateCallback)
                     imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
+                }
+                runCatching<Unit> {
                     imsMmTelManager.unregisterMmTelCapabilityCallback(capabilityCallback)
                 }
             }
         }
         imsEvents
-            .retryWhen { cause: Throwable, _: Long ->
-                // Retry the flow with 1 second delay
-                // only if service not available.
-                // This state is temporary and service may be available after sometime.
-                delay(1000)
-                cause is ImsException && cause.code == ImsException.CODE_ERROR_SERVICE_UNAVAILABLE
+            .retryWhen { cause: Throwable, attempt: Long ->
+                // Registration throws until telephony is up, which on boot happens after
+                // SystemUI starts. Every ImsException is retried: giving up on one leaves the
+                // sub with no IMS state until SystemUI restarts. Anything else would duplicate
+                // a registration we already hold.
+                val retry = cause is ImsStateCallbackInvalidException || cause is ImsException
+                if (retry) {
+                    delay(retryDelayMs(attempt))
+                }
+                retry
             }
-            .catch { _: Throwable ->
-                // Nothing
+            .catch { cause: Throwable ->
+                Log.w(TAG, "No IMS state for sub $subId", cause)
             }
             .scan(initial = initial) { state: ImsCallbackState, event: CallbackEvent ->
                 state.applyEvent(event)
             }
-            .stateIn(scope = scope, started = SharingStarted.WhileSubscribed(), initial)
+            // stopTimeout survives brief unsubscribes without leaking IMS callbacks for
+            // dead subs after SIM/eSIM changes (Eagerly would pin them forever).
+            .stateIn(scope = scope, started = WhileSubscribedWithTimeout, initial)
     }
 
     override val imsState: StateFlow<ImsStateModel> =
@@ -172,18 +202,36 @@ class ImsRepositoryImpl(
                 } else {
                     SubscriptionManager.INVALID_SIM_SLOT_INDEX
                 }
+                val attrs = registrationChanged?.attributes
                 ImsStateModel(
                     subId = subId,
                     slotIndex = slotIndex,
                     activeSubCount = subscriptionManager.activeSubscriptionInfoCount,
                     registered = registered,
                     capabilities = capabilities,
-                    registrationTech = registrationChanged?.attributes?.registrationTechnology
-                        ?: REGISTRATION_TECH_NONE
+                    registrationTech = attrs?.registrationTechnology
+                        ?: REGISTRATION_TECH_NONE,
+                    transportType = attrs?.transportType
+                        ?: AccessNetworkConstants.TRANSPORT_TYPE_INVALID,
                 )
             }
             .catch { emit(ImsStateModel()) /* on exception, just return default value */ }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), ImsStateModel())
+            .stateIn(scope, WhileSubscribedWithTimeout, ImsStateModel())
+
+    private companion object {
+        const val TAG = "ImsRepository"
+
+        const val FLOW_STOP_TIMEOUT_MS = 5_000L
+        val WhileSubscribedWithTimeout: SharingStarted =
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = FLOW_STOP_TIMEOUT_MS)
+
+        const val RETRY_BASE_MS = 1_000L
+        const val RETRY_MAX_MS = 30_000L
+
+        /** Backs off so a sub whose IMS service never comes up does not retry at 1 Hz forever. */
+        fun retryDelayMs(attempt: Long): Long =
+            (RETRY_BASE_MS shl attempt.coerceAtMost(5L).toInt()).coerceAtMost(RETRY_MAX_MS)
+    }
 
     private class NoOpImsRepository(override val subId: Int) : ImsRepository {
         override val imsState: StateFlow<ImsStateModel> =
@@ -200,15 +248,15 @@ class ImsRepositoryImpl(
     ) {
         fun build(subId: Int): ImsRepository {
             val pm = context.packageManager
-            val hasTelephony =
-                pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+            // Only durable conditions belong here: the repository is cached per sub, so a
+            // transient one would keep IMS state dead for the rest of the process.
+            val hasIms = pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_IMS)
             val hasValidSub = SubscriptionManager.isValidSubscriptionId(subId)
-            val hasActiveSubs = subscriptionManager.activeSubscriptionInfoCount > 0
 
             val imsManager: ImsManager? =
                 context.getSystemService(ImsManager::class.java)
 
-            if (!hasTelephony || imsManager == null || !hasValidSub || !hasActiveSubs) {
+            if (!hasIms || imsManager == null || !hasValidSub) {
                 return NoOpImsRepository(SubscriptionManager.INVALID_SUBSCRIPTION_ID)
             }
 
@@ -222,6 +270,12 @@ class ImsRepositoryImpl(
         }
     }
 }
+
+/**
+ * Telephony dropped our [ImsStateCallback] (see [ImsStateCallback.onError]); it will never fire
+ * again, so the flow has to be re-collected to register a new one.
+ */
+private class ImsStateCallbackInvalidException : Exception("ImsStateCallback invalidated")
 
 sealed interface CallbackEvent {
     data class OnImsRegistrationChanged(

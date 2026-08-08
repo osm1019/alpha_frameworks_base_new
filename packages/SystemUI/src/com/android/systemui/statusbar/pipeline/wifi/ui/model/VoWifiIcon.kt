@@ -25,33 +25,42 @@ sealed interface VoWifiIcon {
     object Hidden : VoWifiIcon
 }
 
+/**
+ * Maps [VoWifiState] to a status-bar icon.
+ *
+ * [VoWifiState.Enabled] always yields [VoWifiIcon.Visible] with a real drawable. Invalid or
+ * unknown SIM slot indexes must not collapse to Hidden — that used to blank VoWiFi while the
+ * mobile pipeline also suppressed HD for the same IMS state (dual-gone).
+ */
 val VoWifiState.icon: VoWifiIcon
-    get() = when (this) {
-        is VoWifiState.Enabled -> {
-            val ic = if (activeSubCount == 2) {
-                if (slots.size >= 2) {
-                    R.drawable.ic_vowifi_dual
-                } else {
-                    val id = slots.firstOrNull() ?: -1
-                    when (id) {
-                        0 -> R.drawable.ic_vowifi_one // Sim 1
-                        1 -> R.drawable.ic_vowifi_two // Sim 2
-                        else -> 0
-                    }
-                }
-            } else {
-                R.drawable.ic_vowifi
-            }
-            if (ic == 0) {
-                VoWifiIcon.Hidden
-            } else {
+    get() =
+        when (this) {
+            is VoWifiState.Enabled ->
                 VoWifiIcon.Visible(
                     Icon.Resource(
-                        ic, null /* Content description */
+                        resolveVoWifiDrawable(slots, activeSubCount),
+                        /* contentDescription= */ null,
                     )
                 )
-            }
+            else -> VoWifiIcon.Hidden
         }
 
-        else -> VoWifiIcon.Hidden
+/**
+ * Picks a VoWiFi glyph for the enabled state.
+ *
+ * Dual-SIM badges (sim1 / sim2 / dual) only when slot indexes are known (>= 0). Anything else
+ * falls back to the generic [R.drawable.ic_vowifi] so Enabled is never undrawable.
+ */
+internal fun resolveVoWifiDrawable(slots: List<Int>, activeSubCount: Int): Int {
+    val validSlots = slots.filter { it >= 0 }
+    if (activeSubCount >= 2) {
+        if (validSlots.size >= 2) {
+            return R.drawable.ic_vowifi_dual
+        }
+        when (validSlots.firstOrNull()) {
+            0 -> return R.drawable.ic_vowifi_one
+            1 -> return R.drawable.ic_vowifi_two
+        }
     }
+    return R.drawable.ic_vowifi
+}

@@ -441,15 +441,17 @@ constructor(
             .map { it.contains(ConnectivitySlot.ROAMING) }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
+    // stopTimeout bridges brief unsubscribes; imsIconState itself is Eagerly observed
+    // so live Secure toggles still apply without a SystemUI restart.
     override val isMobileHdForceHidden: Flow<Boolean> =
         commonImsRepo.imsIconState
             .map { !it.showHdIcon }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), true)
+            .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), true)
 
     override val isVoWifiForceHidden: Flow<Boolean> =
         commonImsRepo.imsIconState
             .map { !it.showVowifiIcon }
-            .stateIn(scope, SharingStarted.WhileSubscribed(), true)
+            .stateIn(scope, SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), true)
 
     override val isDeviceInEmergencyCallsOnlyMode: Flow<Boolean> =
         mobileConnectionsRepo.isDeviceEmergencyCallCapable

@@ -58,6 +58,8 @@ interface MobileIconViewModelKairosCommon {
     val activityInVisible: KairosState<Boolean>
     val activityOutVisible: KairosState<Boolean>
     val activityContainerVisible: KairosState<Boolean>
+    /** True when this sub should show the HD (VoLTE/VoNR) status-bar indicator. */
+    val showHd: KairosState<Boolean>
 }
 
 /**
@@ -134,6 +136,8 @@ class MobileIconViewModelKairos(
 
     override val activityContainerVisible: KairosState<Boolean> =
         vmProvider.flatMap { it.activityContainerVisible }
+
+    override val showHd: KairosState<Boolean> = vmProvider.flatMap { it.showHd }
 }
 
 /** Representation of this network when it is non-terrestrial (e.g., satellite) */
@@ -157,6 +161,7 @@ private class CarrierBasedSatelliteViewModelKairosImpl(
     override val activityInVisible: KairosState<Boolean> = stateOf(false)
     override val activityOutVisible: KairosState<Boolean> = stateOf(false)
     override val activityContainerVisible: KairosState<Boolean> = stateOf(false)
+    override val showHd: KairosState<Boolean> = stateOf(false)
 }
 
 /** Terrestrial (cellular) icon. */
@@ -343,5 +348,20 @@ private class CellularIconViewModelKairos(
             stateOf(constants.shouldShowActivityConfig)
         } else {
             activity.map { it != null && (it.hasActivityIn || it.hasActivityOut) }
+        }
+
+    /**
+     * Same exclusive policy as the non-Kairos [CellularIconViewModel]: suppress HD when this
+     * sub would show VoWiFi and the user has not force-hidden VoWiFi.
+     */
+    override val showHd: KairosState<Boolean> =
+        combine(
+            iconInteractor.isMobileHd,
+            iconInteractor.isMobileHdForceHidden,
+            iconInteractor.isVoWifi,
+            iconInteractor.isVoWifiForceHidden,
+        ) { isHd, hdHidden, isVoWifi, voWifiHidden ->
+            val voWifiWouldShow = isVoWifi && !voWifiHidden
+            isHd && !hdHidden && !voWifiWouldShow
         }
 }

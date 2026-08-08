@@ -201,6 +201,7 @@ constructor(
             override val activityOutVisible: State<Boolean> = latest(false) { activityOutVisible }
             override val activityContainerVisible: State<Boolean> =
                 latest(false) { activityContainerVisible }
+            override val showHd: State<Boolean> = latest(false) { showHd }
         }
 
     private fun BuildScope.commonViewModel(subId: Int, iconInteractor: MobileIconInteractorKairos) =

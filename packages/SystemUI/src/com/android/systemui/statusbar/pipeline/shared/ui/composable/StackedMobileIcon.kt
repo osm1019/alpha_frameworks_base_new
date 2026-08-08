@@ -121,6 +121,20 @@ fun StackedMobileIcon(viewModel: StackedMobileIconViewModel, modifier: Modifier 
             }
         }
 
+        if (viewModel.showHd) {
+            // Ported HD (VoLTE/VoNR) lives on ModernStatusBarMobileView for single-SIM. Dual-SIM
+            // uses this stacked slot instead, so draw HD here with the same exclusive policy.
+            val height = with(LocalDensity.current) { IconHeightSp.toDp() }
+            val paddingEnd = with(LocalDensity.current) { RatIndicatorPaddingSp.toDp() }
+            Image(
+                painter = painterResource(R.drawable.ic_hd_calling),
+                contentDescription = stringResource(R.string.status_bar_hd_calling),
+                modifier = Modifier.height(height).padding(end = paddingEnd),
+                colorFilter = ColorFilter.tint(contentColor, BlendMode.SrcIn),
+                contentScale = ContentScale.FillHeight,
+            )
+        }
+
         StackedMobileIcon(
             viewModel = dualSim,
             color = contentColor,

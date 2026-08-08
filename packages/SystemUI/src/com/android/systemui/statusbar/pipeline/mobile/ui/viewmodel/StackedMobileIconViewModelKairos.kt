@@ -148,6 +148,22 @@ constructor(
             initialValue = false,
         )
 
+    override val showHd: Boolean by
+        hydratedComposeStateOf(
+            name = "showHd",
+            source =
+                iconList.flatMap { icons ->
+                    if (icons.isEmpty()) {
+                        stateOf(false)
+                    } else {
+                        icons
+                            .map { it.showHd }
+                            .combine { values -> values.any { it } }
+                    }
+                },
+            initialValue = false,
+        )
+
     override val isIconVisible: Boolean
         get() = isStackable && dualSim != null
 

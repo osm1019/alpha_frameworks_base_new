@@ -37,6 +37,13 @@ import java.util.Set;
 
 public class StatusBarSwitch extends SwitchPreferenceCompat implements Tunable {
 
+    /**
+     * Live hide-list from Settings / TunerService. Null until first load.
+     *
+     * Preference restore can call {@link #persistBoolean} before {@link #onTuningChanged}.
+     * Never seed an empty set — that would rewrite {@code icon_blacklist} to a single key
+     * and wipe the user's other hidden icons. Load the current Secure value instead.
+     */
     private Set<String> mHideList;
 
     public StatusBarSwitch(Context context, AttributeSet attrs) {
@@ -67,21 +74,38 @@ public class StatusBarSwitch extends SwitchPreferenceCompat implements Tunable {
 
     @Override
     protected boolean persistBoolean(boolean value) {
+        Set<String> hideList = ensureHideList();
         if (!value) {
             // If not enabled add to hideList.
-            if (!mHideList.contains(getKey())) {
+            if (!hideList.contains(getKey())) {
                 MetricsLogger.action(getContext(), MetricsEvent.TUNER_STATUS_BAR_DISABLE,
                         getKey());
-                mHideList.add(getKey());
-                setList(mHideList);
+                hideList.add(getKey());
+                setList(hideList);
             }
         } else {
-            if (mHideList.remove(getKey())) {
+            if (hideList.remove(getKey())) {
                 MetricsLogger.action(getContext(), MetricsEvent.TUNER_STATUS_BAR_ENABLE, getKey());
-                setList(mHideList);
+                setList(hideList);
             }
         }
         return true;
+    }
+
+    /**
+     * Returns the hide list, seeding from the current Secure setting if TunerService has not
+     * delivered a value yet (e.g. preference restore → setChecked → persistBoolean).
+     */
+    private Set<String> ensureHideList() {
+        if (mHideList == null) {
+            ContentResolver cr = getContext().getContentResolver();
+            String current = Settings.Secure.getStringForUser(
+                    cr,
+                    StatusBarIconController.ICON_HIDE_LIST,
+                    ActivityManager.getCurrentUser());
+            mHideList = StatusBarIconController.getIconHideList(getContext(), current);
+        }
+        return mHideList;
     }
 
     private void setupTheme() {

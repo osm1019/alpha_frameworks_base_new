@@ -378,13 +378,19 @@ private class CellularIconViewModel(
             }
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)
 
-    private val showVoWifi: StateFlow<Boolean> =
+    /**
+     * True when **this subscription** would show VoWiFi in the wifi group: IMS reports VoWiFi
+     * for the sub and the user has not force-hidden the VoWiFi icon.
+     *
+     * Used only to suppress HD. The wifi pipeline owns the actual VoWiFi glyph; after the
+     * VoWifiIcon fallback, Enabled always maps to a real drawable, so suppressing HD here
+     * cannot leave both icons blank for the same IMS state.
+     */
+    private val thisSubWouldShowVoWifi: StateFlow<Boolean> =
         combine(
                 iconInteractor.isVoWifi,
                 iconInteractor.isVoWifiForceHidden
             ) { isVoWifi, isHidden ->
-                // If it's force hidden, just hide.
-                // Otherwise follow VoWifi state
                 isVoWifi && !isHidden
             }
             .distinctUntilChanged()
@@ -394,11 +400,10 @@ private class CellularIconViewModel(
         combine(
                 iconInteractor.isMobileHd,
                 iconInteractor.isMobileHdForceHidden,
-                showVoWifi,
-            ) { isHd, isHidden, voWifi ->
-                // If it's force hidden or VoWifi available, just hide.
-                // Otherwise follow HD state
-                isHd && !(isHidden || voWifi)
+                thisSubWouldShowVoWifi,
+            ) { isHd, isHidden, voWifiWouldShow ->
+                // Exclusive with VoWiFi for this sub: force-hide HD, or VoWiFi wins the slot.
+                isHd && !isHidden && !voWifiWouldShow
             }
             .distinctUntilChanged()
             .stateIn(scope, SharingStarted.WhileSubscribed(), false)

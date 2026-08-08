@@ -49,6 +49,12 @@ interface StackedMobileIconViewModel {
     /** [Context] to use when loading the [networkTypeIcon] */
     val mobileContext: Context?
     val isRoamingVisible: Boolean
+    /**
+     * True when any stackable subscription would show the HD (VoLTE/VoNR) icon on the
+     * single-SIM mobile path. Dual-SIM uses this compose slot instead of
+     * [ModernStatusBarMobileView], so HD must be drawn here or it disappears from the bar.
+     */
+    val showHd: Boolean
     val isIconVisible: Boolean
 }
 
@@ -226,6 +232,32 @@ constructor(
             initialValue = false,
         )
 
+    override val showHd: Boolean by
+        hydrator.hydratedStateOf(
+            traceName = "showHd",
+            source =
+                flowIfIconIsVisible(
+                        iconViewModelFlow.flatMapLatest { viewModels ->
+                            if (viewModels.isEmpty()) {
+                                flowOf(false)
+                            } else {
+                                // One HD glyph for the stack: any sub that would show HD on the
+                                // single-SIM path (already exclusive with that sub's VoWiFi).
+                                combine(viewModels.map { it.showHd }) { values ->
+                                    values.any { it }
+                                }
+                            }
+                        }
+                    )
+                    .map { it == true }
+                    .logDiffsForTable(
+                        tableLogBuffer = tableLogger,
+                        columnName = COL_SHOW_HD,
+                        initialValue = false,
+                    ),
+            initialValue = false,
+        )
+
     override val isIconVisible: Boolean by
         hydrator.hydratedStateOf(
             traceName = "isIconVisible",
@@ -261,5 +293,6 @@ constructor(
         const val COL_IS_ICON_VISIBLE = "isIconVisible"
         const val COL_ROAMING = "roam"
         const val COL_ROAMING_VISIBLE = "roamVisible"
+        const val COL_SHOW_HD = "showHd"
     }
 }

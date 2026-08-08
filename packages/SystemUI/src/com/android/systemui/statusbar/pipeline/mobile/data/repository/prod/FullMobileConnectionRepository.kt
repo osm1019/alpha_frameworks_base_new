@@ -22,7 +22,7 @@ import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.TableLogBufferFactory
 import com.android.systemui.log.table.logDiffsForTable
-import com.android.systemui.statusbar.pipeline.ims.data.repository.ImsRepositoryImpl
+import com.android.systemui.statusbar.pipeline.ims.data.repository.CommonImsRepository
 import com.android.systemui.statusbar.pipeline.mobile.data.model.NetworkNameModel
 import com.android.systemui.statusbar.pipeline.mobile.data.model.SubscriptionModel
 import com.android.systemui.statusbar.pipeline.mobile.data.repository.MobileConnectionRepository
@@ -56,7 +56,7 @@ class FullMobileConnectionRepository(
     @Background scope: CoroutineScope,
     private val mobileRepoFactory: MobileConnectionRepositoryImpl.Factory,
     private val carrierMergedRepoFactory: CarrierMergedConnectionRepository.Factory,
-    private val imsRepoFactory: ImsRepositoryImpl.Factory,
+    private val commonImsRepo: CommonImsRepository,
 ) : MobileConnectionRepository {
     /**
      * Sets whether this connection is a typical mobile connection or a carrier merged connection.
@@ -87,7 +87,8 @@ class FullMobileConnectionRepository(
             subscriptionModel,
             defaultNetworkName,
             networkNameSeparator,
-            imsRepoFactory.build(subId)
+            // Shared with the wifi pipeline: one ImsStateCallback per sub, not one each.
+            commonImsRepo.getRepoForSubId(subId),
         )
     }
 
@@ -404,7 +405,7 @@ class FullMobileConnectionRepository(
         private val logFactory: TableLogBufferFactory,
         private val mobileRepoFactory: MobileConnectionRepositoryImpl.Factory,
         private val carrierMergedRepoFactory: CarrierMergedConnectionRepository.Factory,
-        private val imsRepoFactory: ImsRepositoryImpl.Factory
+        private val commonImsRepo: CommonImsRepository,
     ) {
         fun build(
             subId: Int,
@@ -426,7 +427,7 @@ class FullMobileConnectionRepository(
                 scope,
                 mobileRepoFactory,
                 carrierMergedRepoFactory,
-                imsRepoFactory,
+                commonImsRepo,
             )
         }
 

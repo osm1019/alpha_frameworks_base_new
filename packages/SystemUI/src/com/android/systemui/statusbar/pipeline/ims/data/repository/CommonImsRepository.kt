@@ -19,15 +19,25 @@ package com.android.systemui.statusbar.pipeline.ims.data.repository
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.UserHandle
+import android.provider.Settings
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
 import com.android.systemui.common.coroutine.ConflatedCallbackFlow.conflatedCallbackFlow
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dagger.qualifiers.Main
+import com.android.systemui.settings.UserTracker
 import com.android.systemui.statusbar.pipeline.ims.data.model.ImsIconModel
 import com.android.systemui.statusbar.pipeline.ims.data.model.ImsStateModel
-import com.android.systemui.tuner.TunerService
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,7 +48,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -46,7 +55,6 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
 
 interface CommonImsRepository {
     val imsStates: StateFlow<List<ImsStateModel>>
@@ -63,12 +71,14 @@ constructor(
     @Background private val bgDispatcher: CoroutineDispatcher,
     @Application private val scope: CoroutineScope,
     private val imsRepoFactory: ImsRepositoryImpl.Factory,
-    tunerService: TunerService,
     @Application private val context: Context,
+    private val userTracker: UserTracker,
+    @Main private val mainExecutor: Executor,
 ) : CommonImsRepository {
 
-    private var subIdRepositoryCache: MutableMap<Int, ImsRepository> =
-        mutableMapOf()
+    // Reached from both the wifi and the mobile pipelines: computeIfAbsent is what keeps a sub
+    // to one repository, and so to one ImsStateCallback.
+    private val subIdRepositoryCache = ConcurrentHashMap<Int, ImsRepository>()
 
     private val mobileSubscriptionsChangeEvent: Flow<Unit> =
         if (!hasTelephony()) {
@@ -92,13 +102,13 @@ constructor(
             .mapLatest { fetchSubscriptionsList().map { it.subscriptionId } }
             .onEach { ids -> dropUnusedReposFromCache(ids) }
             .distinctUntilChanged()
-            .stateIn(scope, started = SharingStarted.WhileSubscribed(), listOf())
+            // stopTimeout bridges brief unsubscribes without pinning telephony forever.
+            .stateIn(scope, started = WhileSubscribedWithTimeout, listOf())
 
     private fun dropUnusedReposFromCache(newIds: List<Int>) {
-        // Remove any connection repository from the cache that isn't in the new set of IDs. They
-        // will get garbage collected once their subscribers go away
-        val keep = newIds.toSet()
-        subIdRepositoryCache = subIdRepositoryCache.filterKeys { it in keep }.toMutableMap()
+        // Drop repos for subs that no longer exist. With WhileSubscribed(+timeout) their
+        // stateIn collectors stop and IMS callbacks are unregistered after the timeout.
+        subIdRepositoryCache.keys.retainAll(newIds.toSet())
     }
 
     private fun hasTelephony(): Boolean =
@@ -140,54 +150,93 @@ constructor(
                 if (repos.isEmpty()) flowOf(emptyList())
                 else combine(repos.map { it.imsState }) { it.toList() }
             }
-            .stateIn(scope, started = SharingStarted.WhileSubscribed(), listOf())
+            .stateIn(scope, started = WhileSubscribedWithTimeout, listOf())
 
+    /**
+     * User toggles for HD / VoWiFi status-bar icons.
+     *
+     * Observed **directly** from Settings.Secure (not via TunerService) so live writes from
+     * the :tuner process apply without a SystemUI restart. Uses [UserTracker.userId] (not
+     * process user 0) and re-reads on user switch.
+     *
+     * Started eagerly: a cheap ContentObserver is fine to keep for the SysUI lifetime and
+     * guarantees the force-hide flags stay current even when no icon binder is collecting.
+     */
     override val imsIconState: StateFlow<ImsIconModel> = conflatedCallbackFlow {
-        var showHdIcon = false
-        var showVowifiIcon = false
-        val callback =
-            object : TunerService.Tunable {
-                override fun onTuningChanged(key: String, newValue: String?) {
-                    when (key) {
-                        KEY_HD_ICON -> {
-                            showHdIcon =
-                                TunerService.parseIntegerSwitch(newValue, false)
-                        }
+        val cr = context.contentResolver
 
-                        KEY_VOWIFI_ICON -> {
-                            showVowifiIcon =
-                                TunerService.parseIntegerSwitch(newValue, false)
-                        }
+        fun readIconState(): ImsIconModel {
+            val userId = userTracker.userId
+            val showHd =
+                Settings.Secure.getIntForUser(cr, KEY_HD_ICON, /* def= */ 0, userId) != 0
+            val showVowifi =
+                Settings.Secure.getIntForUser(cr, KEY_VOWIFI_ICON, /* def= */ 0, userId) != 0
+            return ImsIconModel(showHdIcon = showHd, showVowifiIcon = showVowifi)
+        }
 
-                        else -> return
+        val observer =
+            object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    trySend(readIconState())
+                }
+
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    trySend(readIconState())
+                }
+
+                override fun onChange(
+                    selfChange: Boolean,
+                    uris: Collection<Uri>,
+                    flags: Int,
+                    userId: Int,
+                ) {
+                    if (userId != UserHandle.USER_ALL && userId != userTracker.userId) {
+                        return
                     }
-                    trySend(
-                        ImsIconModel(
-                            showHdIcon = showHdIcon,
-                            showVowifiIcon = showVowifiIcon
-                        )
-                    )
+                    trySend(readIconState())
                 }
             }
 
-        tunerService.run {
-            addTunable(callback, KEY_HD_ICON)
-            addTunable(callback, KEY_VOWIFI_ICON)
-        }
+        // USER_ALL so notify from any settings write path reaches us; we re-read for the
+        // current UserTracker user in readIconState().
+        cr.registerContentObserver(
+            Settings.Secure.getUriFor(KEY_HD_ICON),
+            /* notifyForDescendants= */ false,
+            observer,
+            UserHandle.USER_ALL,
+        )
+        cr.registerContentObserver(
+            Settings.Secure.getUriFor(KEY_VOWIFI_ICON),
+            /* notifyForDescendants= */ false,
+            observer,
+            UserHandle.USER_ALL,
+        )
 
-        awaitClose { tunerService.removeTunable(callback) }
+        val userCallback =
+            object : UserTracker.Callback {
+                override fun onUserChanged(newUser: Int, userContext: Context) {
+                    trySend(readIconState())
+                }
+            }
+        userTracker.addCallback(userCallback, mainExecutor)
+
+        trySend(readIconState())
+
+        awaitClose {
+            cr.unregisterContentObserver(observer)
+            userTracker.removeCallback(userCallback)
+        }
     }.stateIn(
         scope,
-        started = SharingStarted.WhileSubscribed(),
-        initialValue = ImsIconModel()
+        started = SharingStarted.Eagerly,
+        initialValue = ImsIconModel(),
     )
 
     override fun getRepoForSubId(subId: Int): ImsRepository =
         getOrCreateRepoForSubId(subId)
 
-    private fun getOrCreateRepoForSubId(subId: Int) =
-        subIdRepositoryCache[subId]
-            ?: createRepositoryForSubId(subId).also { subIdRepositoryCache[subId] = it }
+    private fun getOrCreateRepoForSubId(subId: Int): ImsRepository =
+        subIdRepositoryCache.computeIfAbsent(subId) { createRepositoryForSubId(it) }
 
     private fun createRepositoryForSubId(subId: Int): ImsRepository {
         return imsRepoFactory.build(subId)
@@ -196,5 +245,10 @@ constructor(
     private companion object {
         const val KEY_HD_ICON = "status_bar_show_hd_calling"
         const val KEY_VOWIFI_ICON = "status_bar_show_vowifi"
+
+        /** Survive collector flaps without pinning IMS callbacks for the process lifetime. */
+        const val FLOW_STOP_TIMEOUT_MS = 5_000L
+        val WhileSubscribedWithTimeout: SharingStarted =
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = FLOW_STOP_TIMEOUT_MS)
     }
 }
