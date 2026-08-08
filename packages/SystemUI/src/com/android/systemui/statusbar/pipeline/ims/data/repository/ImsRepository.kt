@@ -108,13 +108,8 @@ class ImsRepositoryImpl(
                         )
                         registered = true
                     }.onFailure {
-                        // Don't close the flow here. This ImsStateCallback is still
-                        // registered and healthy — only the MmTel feature went away
-                        // mid-registration, which is routine during boot. Closing would
-                        // make retryWhen register a *second* ImsStateCallback, and
-                        // telephony keeps the stale wrapper for the life of the process.
-                        // Drop whatever half registered and wait for the next
-                        // onAvailable().
+                        // Only the MmTel feature went away; this callback is still live. Closing
+                        // would register a second one, which telephony never reaps.
                         unregisterFeatureCallbacks()
                         registered = false
                     }
@@ -127,8 +122,7 @@ class ImsRepositoryImpl(
                 }
 
                 override fun onError() {
-                    // Telephony has thrown this ImsStateCallback away; it will never fire
-                    // again. Unwind and let retryWhen register a fresh one.
+                    // Telephony has dropped this callback; retryWhen registers a fresh one.
                     if (registered) {
                         unregisterFeatureCallbacks()
                         registered = false
@@ -137,7 +131,6 @@ class ImsRepositoryImpl(
                 }
 
                 private fun unregisterFeatureCallbacks() {
-                    // One runCatching each: a throw on the first must not skip the second.
                     runCatching<Unit> {
                         imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
                     }
@@ -156,8 +149,7 @@ class ImsRepositoryImpl(
             }
 
             awaitClose {
-                // One runCatching each: the state callback is the one that must always
-                // come off, so a throw unwinding the feature callbacks can't skip it.
+                // Separate runCatching: the state callback must come off even if the others throw.
                 runCatching<Unit> { imsMmTelManager.unregisterImsStateCallback(stateCallback) }
                 runCatching<Unit> {
                     imsMmTelManager.unregisterImsRegistrationCallback(registrationCallback)
@@ -271,10 +263,7 @@ class ImsRepositoryImpl(
     }
 }
 
-/**
- * Telephony dropped our [ImsStateCallback] (see [ImsStateCallback.onError]); it will never fire
- * again, so the flow has to be re-collected to register a new one.
- */
+/** Telephony dropped the [ImsStateCallback]; the flow must be re-collected to register a new one. */
 private class ImsStateCallbackInvalidException : Exception("ImsStateCallback invalidated")
 
 sealed interface CallbackEvent {

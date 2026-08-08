@@ -396,10 +396,8 @@ constructor(
                             progressMax > 0 &&
                             progressRaw >= 0)
 
-                // A transfer in flight is a chip, whether or not the app flagged it ongoing —
-                // downloaders and messengers post progress both ways, and without this the
-                // non-ongoing ones only ever exist as an alert card. A finished bar on a
-                // non-ongoing post is a result ("Download complete"), so it stays an alert.
+                // A transfer in flight is a chip whether or not the app flagged it ongoing. A
+                // finished bar on a non-ongoing post is a result, so that stays an alert.
                 val transferInFlight =
                     hasProgress && (sbn.isOngoing || indeterminate || progressRaw < progressMax)
                 if (transferInFlight) {

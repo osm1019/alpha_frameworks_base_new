@@ -198,7 +198,7 @@ final class AppErrorDialog extends BaseErrorDialog implements View.OnClickListen
                 mHandler.obtainMessage(FORCE_QUIT_AND_REPORT).sendToTarget();
                 break;
             case com.android.internal.R.id.aerr_copy:
-                postToMkrBinAndCopyURL();
+                postPasteAndCopyURL();
                 mHandler.obtainMessage(FORCE_QUIT).sendToTarget();
                 break;
             case com.android.internal.R.id.aerr_close:
@@ -215,22 +215,22 @@ final class AppErrorDialog extends BaseErrorDialog implements View.OnClickListen
         }
     }
 
-    private void postToMkrBinAndCopyURL() {
-        // Post to MkrBin
+    private void postPasteAndCopyURL() {
+        // Upload the stacktrace and copy the URL; MkrBinUtils picks the host.
         MkrBinUtils.upload(mPaste, new MkrBinUtils.UploadResultCallback() {
             @Override
             public void onSuccess(String url) {
-                // Copy to clipboard
-                ClipboardManager clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipboardManager clipboard = (ClipboardManager) getContext()
+                        .getSystemService(Context.CLIPBOARD_SERVICE);
                 clipboard.setPrimaryClip(ClipData.newPlainText("Log URL", url));
-
-                // Show toast
-                Toast.makeText(getContext(), com.android.internal.R.string.url_copy_success, Toast.LENGTH_LONG).show();
+                Toast.makeText(getContext(), com.android.internal.R.string.url_copy_success,
+                        Toast.LENGTH_LONG).show();
             }
 
             @Override
             public void onFail(String message, Exception e) {
-                Toast.makeText(getContext(), com.android.internal.R.string.url_copy_failed, Toast.LENGTH_LONG).show();
+                Toast.makeText(getContext(), com.android.internal.R.string.url_copy_failed,
+                        Toast.LENGTH_LONG).show();
                 Log.e(TAG, message, e);
             }
         });

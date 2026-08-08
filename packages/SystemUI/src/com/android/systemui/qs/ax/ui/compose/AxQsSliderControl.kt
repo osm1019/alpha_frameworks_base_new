@@ -371,9 +371,8 @@ private fun AxQsSlider(
             thumbSize
         }
     val visualAlongTrack = visualPillSize.width
-    // A bar's roundness is governed by its height, which is also its shorter side, so the custom
-    // corner fraction resolves here exactly as proportionalCornerShape resolves it elsewhere. Both
-    // the track's own background and the drawn segments have to use the one radius.
+    // The track's height is its shorter side, so the fraction resolves here as it does elsewhere.
+    // Background and drawn segments must share the one radius.
     val customTrackCorner = LocalQSTileCornerFraction.current?.let { sliderHeight * it }
     val trackCornerSize =
         customTrackCorner
