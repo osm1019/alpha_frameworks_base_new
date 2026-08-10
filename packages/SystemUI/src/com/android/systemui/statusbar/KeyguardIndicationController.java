@@ -42,6 +42,7 @@ import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewCont
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_BIOMETRIC_MESSAGE_FOLLOW_UP;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_DISCLOSURE;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_LOGOUT;
+import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_NOW_PLAYING;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_OWNER_INFO;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_PERSISTENT_UNLOCK_MESSAGE;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_SECURE_LOCK_DEVICE;
@@ -163,6 +164,19 @@ public class KeyguardIndicationController {
     public static final String TAG = "KeyguardIndication";
     private static final boolean DEBUG_CHARGING_SPEED = false;
 
+    private static final String ACTION_AMBIENT_INDICATION_SHOW =
+            "com.google.android.ambientindication.action.AMBIENT_INDICATION_SHOW";
+    private static final String ACTION_AMBIENT_INDICATION_HIDE =
+            "com.google.android.ambientindication.action.AMBIENT_INDICATION_HIDE";
+    private static final String PERMISSION_AMBIENT_INDICATION =
+            "com.google.android.ambientindication.permission.AMBIENT_INDICATION";
+    private static final String EXTRA_AMBIENT_TEXT =
+            "com.google.android.ambientindication.extra.TEXT";
+    private static final String EXTRA_AMBIENT_SONG_TITLE =
+            "com.google.android.ambientindication.extra.SONG_TITLE";
+    private static final String EXTRA_AMBIENT_ARTIST_NAME =
+            "com.google.android.ambientindication.extra.ARTIST_NAME";
+
     private static final int MSG_SHOW_ACTION_TO_UNLOCK = 1;
     private static final int MSG_RESET_ERROR_MESSAGE_ON_SCREEN_ON = 2;
     private static final int MSG_SHOW_RECOGNIZING_FACE = 3;
@@ -215,6 +229,9 @@ public class KeyguardIndicationController {
     private boolean mForceIsDismissible;
     private CharSequence mTrustGrantedIndication;
     private CharSequence mTransientIndication;
+    /** Song title for Ambient Now Playing, shown in the keyguard indication area (Charged). */
+    private CharSequence mNowPlayingText;
+    private BroadcastReceiver mAmbientIndicationReceiver;
     private CharSequence mTrustAgentErrorMessage;
     private CharSequence mBiometricMessage;
     private CharSequence mBiometricMessageFollowUp;
@@ -546,6 +563,7 @@ public class KeyguardIndicationController {
             intentFilter.addAction(Intent.ACTION_USER_REMOVED);
             mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, intentFilter);
         }
+        registerAmbientIndicationReceiver();
 
         collectFlow(mIndicationArea,
                 mBiometricMessageInteractor.getCoExFaceAcquisitionMsgIdsToShow(),
@@ -574,6 +592,92 @@ public class KeyguardIndicationController {
         mHideBiometricMessageHandler.cancel();
         mHideTransientMessageHandler.cancel();
         mBroadcastDispatcher.unregisterReceiver(mBroadcastReceiver);
+        if (mAmbientIndicationReceiver != null) {
+            try {
+                mContext.unregisterReceiver(mAmbientIndicationReceiver);
+            } catch (IllegalArgumentException ignored) {
+                // already unregistered
+            }
+            mAmbientIndicationReceiver = null;
+        }
+    }
+
+    private void registerAmbientIndicationReceiver() {
+        if (mAmbientIndicationReceiver != null) {
+            return;
+        }
+        mAmbientIndicationReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || intent.getAction() == null) {
+                    return;
+                }
+                final String action = intent.getAction();
+                mHandler.post(() -> handleAmbientIndication(action, intent));
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_AMBIENT_INDICATION_SHOW);
+        filter.addAction(ACTION_AMBIENT_INDICATION_HIDE);
+        mContext.registerReceiverAsUser(
+                mAmbientIndicationReceiver,
+                UserHandle.ALL,
+                filter,
+                PERMISSION_AMBIENT_INDICATION,
+                mHandler,
+                Context.RECEIVER_EXPORTED);
+    }
+
+    private void handleAmbientIndication(String action, Intent intent) {
+        if (ACTION_AMBIENT_INDICATION_HIDE.equals(action)) {
+            mNowPlayingText = null;
+            updateNowPlayingIndication();
+            return;
+        }
+        if (!ACTION_AMBIENT_INDICATION_SHOW.equals(action)) {
+            return;
+        }
+        CharSequence text = intent.getCharSequenceExtra(EXTRA_AMBIENT_TEXT);
+        CharSequence title = intent.getCharSequenceExtra(EXTRA_AMBIENT_SONG_TITLE);
+        CharSequence artist = intent.getCharSequenceExtra(EXTRA_AMBIENT_ARTIST_NAME);
+        CharSequence message = null;
+        if (!TextUtils.isEmpty(title) && !TextUtils.isEmpty(artist)) {
+            message = title + " • " + artist;
+        } else if (!TextUtils.isEmpty(title)) {
+            message = title;
+        } else if (!TextUtils.isEmpty(text)) {
+            message = text;
+        } else if (!TextUtils.isEmpty(artist)) {
+            message = artist;
+        }
+        if (TextUtils.isEmpty(message)) {
+            mNowPlayingText = null;
+        } else {
+            mNowPlayingText = message;
+        }
+        updateNowPlayingIndication();
+    }
+
+    private void updateNowPlayingIndication() {
+        if (mDozing) {
+            updateDeviceEntryIndication(false);
+            return;
+        }
+        if (mRotateTextViewController == null) {
+            return;
+        }
+        if (!TextUtils.isEmpty(mNowPlayingText)) {
+            mRotateTextViewController.updateIndication(
+                    INDICATION_TYPE_NOW_PLAYING,
+                    new KeyguardIndication.Builder()
+                            .setMessage(mNowPlayingText)
+                            .setTextColor(getInitialTextColorState())
+                            .setMinVisibilityMillis(IMPORTANT_MSG_MIN_DURATION)
+                            .build(),
+                    true);
+        } else {
+            mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
+        }
     }
 
     public String getPowerChargingString() {
@@ -616,6 +720,7 @@ public class KeyguardIndicationController {
         // update transient messages:
         updateBiometricMessage();
         updateTransient();
+        updateNowPlayingIndication();
 
         // Update persistent messages. The following methods should only be called if we're on the
         // lock screen:
@@ -1261,6 +1366,9 @@ public class KeyguardIndicationController {
                 newIndication = mBiometricMessage; // note: doesn't show mBiometricMessageFollowUp
             } else if (!TextUtils.isEmpty(mTransientIndication)) {
                 newIndication = mTransientIndication;
+            } else if (!TextUtils.isEmpty(mNowPlayingText)) {
+                // Show Now Playing in the same keyguard strip as Charged while dozing.
+                newIndication = mNowPlayingText;
             } else if (!mBatteryPresent) {
                 // If there is no battery detected, hide the indication area and bail
                 mIndicationArea.setVisibility(GONE);
