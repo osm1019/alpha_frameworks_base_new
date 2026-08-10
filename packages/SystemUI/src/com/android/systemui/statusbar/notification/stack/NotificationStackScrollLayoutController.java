@@ -1772,6 +1772,10 @@ public class NotificationStackScrollLayoutController implements Dumpable {
         return mView;
     }
 
+    public View getNotificationStackScrollLayoutView() {
+        return mView;
+    }
+
     NotificationRoundnessManager getNotificationRoundnessManager() {
         return mNotificationRoundnessManager;
     }

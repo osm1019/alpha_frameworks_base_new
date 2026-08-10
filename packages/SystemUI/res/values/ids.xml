@@ -319,4 +319,8 @@
     <!-- Lockscreen widgets -->
     <item type="id" name="keyguard_widgets_area" />
     <item type="id" name="clock_bottom_barrier" />
+
+    <item type="id" name="bc_smartspace_view" />
+    <item type="id" name="smartspace_card_pager" />
+    <item type="id" name="smartspace_page_indicator" />
 </resources>

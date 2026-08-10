@@ -4623,4 +4623,14 @@ public final class NotificationPanelViewController implements
             mQsHeaderImageView.setImageDrawable(dw);
         }
     }
+
+    @Override
+    public NotificationStackScrollLayoutController getScrollerLayoutController() {
+        return mNotificationStackScrollLayoutController;
+    }
+
+    @Override
+    public com.android.systemui.statusbar.phone.KeyguardBottomAreaView getKeyguardBottomAreaView() {
+        return null;
+    }
 }
