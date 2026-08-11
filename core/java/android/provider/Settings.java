@@ -5443,6 +5443,7 @@ public final class Settings {
 
         /**
          * Whether refresh rate should be switched to 60Hz on power save mode.
+         * Opt-in (default 0). Only applied while {@link #LOW_POWER_MODE} is enabled.
          * @hide
          */
         public static final String LOW_POWER_REFRESH_RATE = "low_power_rr_switch";

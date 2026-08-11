@@ -1117,8 +1117,9 @@ public class DisplayModeDirector {
         private void updateLowPowerModeSettingLocked() {
             mIsLowPower = Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.LOW_POWER_MODE, 0 /*default*/) != 0;
+            // Default off (opt-in): only force 60 Hz when Settings enables low_power_rr_switch.
             boolean shouldSwitchRefreshRate = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.LOW_POWER_REFRESH_RATE, 1 /*default*/) != 0;
+                    Settings.System.LOW_POWER_REFRESH_RATE, 0 /*default*/) != 0;
             final Vote vote;
             if (mIsLowPower && shouldSwitchRefreshRate) {
                 vote = Vote.forRenderFrameRates(0f, 60f);
