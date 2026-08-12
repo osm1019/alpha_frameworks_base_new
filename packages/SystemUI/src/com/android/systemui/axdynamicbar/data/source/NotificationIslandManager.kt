@@ -71,6 +71,8 @@ constructor(
             Regex("""(.+?)\s+(?:vs\.?|v\.?|at)\s+(.+)""", RegexOption.IGNORE_CASE)
 
         private const val NOW_PLAYING_PACKAGE = "com.google.android.as"
+        /** 26Q1 standalone Pixel Now Playing app. */
+        private const val NOW_PLAYING_APP_PACKAGE = "com.google.android.apps.pixel.nowplaying"
         private const val NOW_PLAYING_CHANNEL = "ambientmusic"
 
         private val RECORDER_PACKAGES =
@@ -355,9 +357,12 @@ constructor(
                     return
                 }
 
-                if (pkg == NOW_PLAYING_PACKAGE) {
+                if (pkg == NOW_PLAYING_PACKAGE || pkg == NOW_PLAYING_APP_PACKAGE) {
                     val channel = sbn.notification?.channelId ?: ""
-                    if (channel.contains(NOW_PLAYING_CHANNEL)) {
+                    // ASI uses ambientmusic channel; standalone NP app may use other channels.
+                    if (pkg == NOW_PLAYING_APP_PACKAGE
+                            || channel.contains(NOW_PLAYING_CHANNEL)
+                            || channel.contains("now_playing", ignoreCase = true)) {
                         if ("now_playing" !in disabledTypes) handleNowPlaying(sbn, extras)
                         return
                     }
