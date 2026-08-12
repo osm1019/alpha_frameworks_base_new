@@ -246,8 +246,9 @@ fun AxDynamicBarKeyguardChip(
                         MaterialTheme.motionScheme.fastEffectsSpec(),
                         label = "kg_accent",
                     )
+                    // Glyphs stay OnGlass; accent is body tint + progress only.
                     val contentColor by animateColorAsState(
-                        chipContentColorOn(rawAccent),
+                        MediaChrome.OnGlass,
                         MaterialTheme.motionScheme.fastEffectsSpec(),
                         label = "kg_content",
                     )
@@ -311,10 +312,12 @@ private fun KeyguardChipBody(
         else -> ChipHeight
     }
 
-    // Media: dark glass body for every style. Pill chrome only recolors buttons + progress
-    // (Waveform = today's accent look; Minimal = neutral; Glass deferred to a later pass).
-    val bodyColor = if (isMedia) MediaChrome.GlassBody else accent
-    val onBody = if (isMedia) MediaChrome.OnGlass else contentColor
+    // Glass shell for every event: media = neutral glass; others keep event hue as a tint
+    // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
+    // media buttons + progress.
+    val chrome = islandGlassChrome(accent, isMedia = isMedia)
+    val bodyColor = chrome.body
+    val onBody = chrome.content
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
     val progressTrack =
         when {
@@ -340,13 +343,7 @@ private fun KeyguardChipBody(
                 .widthIn(min = 48.dp, max = chipMaxWidth)
                 .clip(ChipShape)
                 .background(bodyColor)
-                .then(
-                    if (isMedia) {
-                        Modifier.border(1.dp, MediaChrome.GlassBorder, ChipShape)
-                    } else {
-                        Modifier
-                    },
-                )
+                .border(1.dp, chrome.border, ChipShape)
                 .animateContentSize(motionScheme.defaultSpatialSpec())
                 .then(
                     if (progress != null) {
@@ -514,7 +511,10 @@ private fun RowScope.KeyguardMediaChipContent(
     val onAccent = chipContentColorOn(accent)
     val skipBg =
         if (minimal || glass) Color.Transparent else MediaChrome.skipBackground(accent)
-    val skipIcon = if (minimal || glass) MediaChrome.ControlBare else onAccent
+    // Waveform's skip plate is a blend of the body and the accent, not the accent — colour the
+    // glyph against the plate it actually sits on or it goes light-on-light in day mode.
+    val skipIcon =
+        if (minimal || glass) MediaChrome.ControlBare else chipContentColorOn(skipBg)
     val playBg = if (minimal) Color.Transparent else accent
     val playIcon = if (minimal) MediaChrome.ControlBare else onAccent
     // Same hairline the expand card's play button carries — one control, two surfaces.
@@ -725,7 +725,8 @@ private fun KeyguardBatteryChip(
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }
-    val contentColor = chipContentColorOn(accent)
+    val chrome = islandGlassChrome(accent, isMedia = false)
+    val contentColor = chrome.content
 
     val parts = rememberChargingParts(batteryString)
     val isMultiLine = info.isCharging && parts.size >= 2
@@ -736,7 +737,8 @@ private fun KeyguardBatteryChip(
             modifier = modifier
                 .height(dynamicHeight)
                 .clip(ChipShape)
-                .background(accent)
+                .background(chrome.body)
+                .border(1.dp, chrome.border, ChipShape)
                 .widthIn(min = 48.dp, max = 260.dp)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),

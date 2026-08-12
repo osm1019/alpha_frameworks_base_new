@@ -17,6 +17,10 @@
 package com.android.systemui.media.ax.ui.compose
 
 import android.graphics.Color as AndroidColor
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -24,44 +28,100 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 
 /**
- * Shared chrome for Alpha media surfaces that speak the Phase 1 glass language:
- * Dynamic Bar keyguard chip, lockscreen media card, and (optionally) related players.
+ * Shared chrome for Alpha media + Dynamic Bar glass surfaces.
  *
- * Accent is reserved for play + progress; body stays dark glass, not full-fill Monet.
+ * **The seed is a Material role, not a hex.** Body is `surfaceContainerHigh` and content is
+ * `onSurface` — the same pair the lockscreen shortcut buttons use
+ * (`KeyguardQuickAffordanceViewBinder`). Day/night and the user's Monet palette come for free,
+ * and the keyguard pill matches the shortcuts it sits between by construction rather than by
+ * a hand-picked colour that has to be re-tuned every time the theme moves.
  *
- * The lockscreen card uses a more open glass ([LockscreenGlassBody]) so the wallpaper can tint
- * the pane the way the Style 1 mockup does. The denser [GlassBody] stays on the DB chip and
- * expand panel, where the surface sits over UI chrome rather than the wallpaper.
+ * Density is the only thing this file decides:
+ *
+ * | Surface | Body | Why |
+ * |---------|------|-----|
+ * | DB chip / expand card | opaque | Sits over status icons, notifications, wallpaper — a controlled surface, like the shortcut buttons |
+ * | Lockscreen card with frost | open (denser in day) | Blur / art behind it is the whole point |
+ * | Lockscreen card, blur off | `AlphaNoBlur` | Without frost an open pane leaves content on bare wallpaper |
+ *
+ * Play stays per-style (art `primary` / bare / accent ring). Dynamic Bar non-media chips tint
+ * the body with the event accent via `islandGlassChrome` so colour codes survive.
+ *
+ * QS media is a separate track — same tokens later, not wired through axdynamicbar.
  */
 object MediaChrome {
-    /** ~80% dark glass body — DB chip / expand panel (not full-fill accent). */
-    val GlassBody = Color(0xCC1C1C1E)
-    val GlassBorder = Color.White.copy(alpha = 0.10f)
+
+    private const val AlphaOpenDark = 0x4D / 255f // ~0.30 — lockscreen with blur / art frost
+    private const val AlphaNoBlur = 0xD9 / 255f // ~0.85 — lockscreen when blur is off
 
     /**
-     * Lockscreen media card body. ~40% so the wallpaper shows through and tints the pane;
-     * paired with [LockscreenGlassBlurRadius] for a frosted read. Denser than air, open enough
-     * that a bright sky no longer paints the card as a black slab.
+     * Day mode needs a denser open body than night. What sits behind the frost is wallpaper and
+     * album art, and neither follows the theme — at 0.30 a light seed loses to a dark wallpaper
+     * and `onSurface` text lands on a pane that is still visually dark. Night has no such
+     * problem because the seed already agrees with a typical wallpaper.
      */
-    val LockscreenGlassBody = Color(0x4D1C1C1E)
+    private const val AlphaOpenLight = 0.72f
+
+    private val isDark: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = isSystemInDarkTheme()
+
     /**
-     * Luminous rim, uniform on every edge — and on the art thumbnail, so the two panes read as the
-     * same material. A gradient rim looked like a lighting trick; a single bright hairline is what
-     * the reference actually has.
+     * Body seed. Opaque: the shortcut buttons beside the keyguard pill are opaque too, and a
+     * translucent chip over status icons or notification text reads as a smear, not a pane.
      */
-    val LockscreenGlassBorder = Color.White.copy(alpha = 0.38f)
+    private val seed: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = MaterialTheme.colorScheme.surfaceContainerHigh
+
+    private fun Color.withAlpha(a: Float): Color = copy(alpha = a)
+
+    /** Opaque glass body — DB chip / expand panel (not full-fill accent). */
+    val GlassBody: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = seed
+
+    /**
+     * Hairline that separates one glass pane from another. Our expand card can land on top of a
+     * notification card, which resolves to a neighbouring surface role — without this they merge.
+     */
+    val GlassBorder: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+
+    /**
+     * Lockscreen media card body. Open so wallpaper / art frost tints the pane.
+     */
+    val LockscreenGlassBody: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = seed.withAlpha(if (isDark) AlphaOpenDark else AlphaOpenLight)
+
+    /**
+     * Luminous rim on the lockscreen card and art thumbnail — one material, two panes.
+     */
+    val LockscreenGlassBorder: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = if (isDark) 0.38f else 0.18f)
+
     val LockscreenGlassBorderWidth = 1.dp
 
     /**
-     * Denser body for when the compositor refuses cross-window blur (developer option, power save,
-     * unsupported hardware). Without the frost behind it, an open pane leaves white text sitting on
-     * a bright wallpaper — the volume dialog swaps colours the same way.
+     * Denser body when the compositor refuses cross-window blur (dev option, power save).
+     * Without frost, an open pane leaves content sitting on bare wallpaper.
      */
-    val LockscreenGlassBodyNoBlur = Color(0xD91C1C1E)
+    val LockscreenGlassBodyNoBlur: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = seed.withAlpha(AlphaNoBlur)
 
     /**
-     * Sweep from the art accent to a hue-rotated sibling — the Waveform style's signature, used for
-     * its band and its rim. Derived from the art so it stays the track's own palette.
+     * Sweep from the art accent to a hue-rotated sibling — Waveform band + rim.
      */
     fun accentSweep(accent: Color, degrees: Float = 62f): Brush =
         Brush.horizontalGradient(listOf(accent, accent.rotateHue(degrees)))
@@ -74,61 +134,99 @@ object MediaChrome {
     }
 
     /**
-     * Played portion of the Glass timeline: a trail that fades in behind the thumb rather than a
-     * flat filled bar.
+     * Played portion of the Glass timeline: fade-in trail behind the thumb.
+     * Non-composable so it can run inside [Canvas] draw scopes — pass [LockscreenProgress]
+     * (or any tip colour) captured during composition.
      */
-    fun lockscreenProgressTrail(endX: Float): Brush =
+    fun lockscreenProgressTrail(endX: Float, tip: Color): Brush =
         Brush.horizontalGradient(
-            0f to LockscreenProgress.copy(alpha = 0f),
-            0.35f to LockscreenProgress.copy(alpha = 0.35f),
-            1f to LockscreenProgress,
+            0f to tip.copy(alpha = 0f),
+            0.35f to tip.copy(alpha = 0.35f),
+            1f to tip,
             startX = 0f,
             endX = endX,
         )
-    /** Soft drop shadow so the card lifts off the wallpaper. */
+
     val LockscreenGlassElevation = 14.dp
-    /**
-     * Cross-window blur radius for [BackgroundBlurDrawable] on the lockscreen card backdrop
-     * (same path as the volume dialog). Devices that refuse blur still get the open tinted body.
-     */
     val LockscreenGlassBlurRadius = 56.dp
 
-    val OnGlass = Color.White
+    /**
+     * Primary content on glass — the partner of [seed]. Paired by the palette, so this needs no
+     * per-mode branch and no contrast guard of our own.
+     */
+    val OnGlass: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = MaterialTheme.colorScheme.onSurface
+
     /**
      * Secondary / hint on glass. Alphas match Dynamic Bar island tokens
-     * (`IslandContentTokens.AlphaSecondary` = 0.7f, `AlphaHint` = 0.4f) so chip and
-     * media surfaces stay on one scale.
+     * (`AlphaSecondary` = 0.7f, `AlphaHint` = 0.4f).
      */
-    val OnGlassSecondary = Color.White.copy(alpha = 0.7f)
-    val OnGlassHint = Color.White.copy(alpha = 0.4f)
-    /** Neutral skip fill before accent wash. */
-    val SkipNeutral = Color.White.copy(alpha = 0.12f)
+    val OnGlassSecondary: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = if (isDark) 0.7f else 0.62f)
+
+    val OnGlassHint: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = if (isDark) 0.4f else 0.42f)
+
+    /** Neutral skip / badge fill before accent wash. */
+    val SkipNeutral: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = if (isDark) 0.12f else 0.08f)
 
     /**
-     * Lockscreen card controls are neutral except the play button, which takes the artwork scheme
-     * (`primary` / `onPrimary`) so the card has exactly one accented element. Everything else —
-     * skips, heart, output switcher — is drawn bare on the glass, and Glass progress stays neutral
-     * (see [LockscreenProgress] / [LockscreenProgressTrack]): the mockup is a quiet white timeline,
-     * not an accent squiggle.
+     * Bare control tint on glass. Lockscreen controls are neutral except Glass play
+     * (art primary). Progress tokens stay quiet, not accent squiggle.
      */
-    val ControlBare = OnGlass
-    val LockscreenProgress = Color.White.copy(alpha = 0.92f)
-    val LockscreenProgressTrack = Color.White.copy(alpha = 0.22f)
-    val LockscreenProgressThumb = Color.White
+    val ControlBare: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass
 
-    /** Art thumbnail on the lockscreen card. */
+    val LockscreenProgress: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = 0.92f)
+
+    val LockscreenProgressTrack: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = 0.22f)
+
+    val LockscreenProgressThumb: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass
+
     val LockscreenArtSize = 88.dp
     val LockscreenArtCorner = 20.dp
-    val ProgressTrack = Color.White.copy(alpha = 0.18f)
+
+    val ProgressTrack: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = 0.18f)
+
     val ProgressHeight = 2.dp
 
-    /** Lockscreen card corner radius — softer than a QS tile. */
     val LockscreenCornerRadius = 28.dp
 
     /**
-     * Skip / secondary control fill: opaque blend of glass toward art accent so icons stay
+     * Skip / secondary control fill: blend of glass body toward art accent so icons stay
      * legible (a low-alpha overlay vanishes on dark glass).
      */
+    @Composable
+    @ReadOnlyComposable
     fun skipBackground(accent: Color, amount: Float = 0.55f): Color =
         lerp(GlassBody, accent, amount)
+
+    /** Event-tint border on non-media DB chips (hairline over tinted glass). */
+    val EventTintBorder: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = OnGlass.copy(alpha = if (isDark) 0.16f else 0.12f)
 }

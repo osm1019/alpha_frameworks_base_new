@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -62,6 +64,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.android.systemui.media.ax.ui.compose.MediaChrome
 
 internal val SpaceXxs = 2.dp
 internal val SpaceXs = 4.dp
@@ -161,16 +164,21 @@ internal val PausedGray = Color(0xFF8E8E93)
 
 internal val ExpandedMaxWidth = 420.dp
 
+/**
+ * Dynamic Bar expand cards sit on dense glass (same material as the media sheet).
+ * Content tokens track [MediaChrome] so day mode is dark-on-light-gray and night is light-on-dark.
+ */
 internal val SubtleGray: Color
-    @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable get() = MediaChrome.OnGlassSecondary
 internal val CardBg: Color
-    @Composable get() = MaterialTheme.colorScheme.surfaceBright
+    @Composable get() = MediaChrome.GlassBody
+/** Nested box inside an expand card — steps up a surface role rather than going translucent. */
 internal val DarkCard: Color
-    @Composable get() = MaterialTheme.colorScheme.surfaceContainerHigh
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerHighest
 internal val OnCardText: Color
-    @Composable get() = MaterialTheme.colorScheme.onSurface
+    @Composable get() = MediaChrome.OnGlass
 internal val OnCardSecondary: Color
-    @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable get() = MediaChrome.OnGlassSecondary
 internal val ActionBg: Color
     @Composable get() = MaterialTheme.colorScheme.primary
 internal val OnActionText: Color
@@ -180,16 +188,98 @@ internal val DestructiveBg: Color
 internal val OnDestructiveText: Color
     @Composable get() = MaterialTheme.colorScheme.onErrorContainer
 
+/** Hairline on glass expand shells — flat, matches [MediaChrome.GlassBorder] weight. */
 internal val CardBorderBrush: Brush
     @Composable
-    get() =
-        Brush.verticalGradient(
-            colors =
-                listOf(
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.08f),
-                )
+    get() {
+        val border = MediaChrome.GlassBorder
+        return Brush.verticalGradient(colors = listOf(border, border))
+    }
+
+/**
+ * Shared glass shell for Dynamic Bar chips and cards.
+ *
+ * Event colour codes stay: non-media chips tint the glass with the event accent (charging
+ * green, timer orange, …). Media uses neutral glass and keeps accent on play / progress.
+ * Bodies are never solid full-fill accent. Body seed follows night/day via [MediaChrome].
+ */
+internal data class IslandGlassChrome(
+    val body: Color,
+    val border: Color,
+    val content: Color,
+)
+
+/**
+ * How hard non-media event accent tints the glass.
+ * The day surface role is a light, low-chroma grey, so the same mix reads washed-out against it —
+ * push harder in day mode to keep charging / timer / call distinguishable at arm's length.
+ */
+private const val IslandGlassEventTintDark = 0.45f
+private const val IslandGlassEventTintLight = 0.62f
+
+/** WCAG AA for icons and short labels at the sizes these chips use. */
+private const val MinContentContrast = 4.5
+
+/**
+ * Content that stays legible on [body].
+ *
+ * The event palette is fixed hex (see [RedAccent] and friends) and does not follow the theme, so a
+ * tinted body can land anywhere on the luminance range regardless of mode.
+ *
+ * Measure contrast rather than testing which side of mid-grey the body falls on: a body at ~0.45
+ * luminance is "not light" by that test and gets a light glyph, which is only about 2:1. Prefer the
+ * palette's own on-surface roles, and only fall back to plain black/white when neither clears AA.
+ */
+@Composable
+private fun contentColorOn(body: Color): Color {
+    // calculateContrast demands an opaque background; tinted bodies may carry alpha.
+    val bg = body.copy(alpha = 1f).toArgb()
+    val best =
+        listOf(MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.inverseOnSurface)
+            .maxByOrNull { ColorUtils.calculateContrast(it.toArgb(), bg) }!!
+    if (ColorUtils.calculateContrast(best.toArgb(), bg) >= MinContentContrast) return best
+    return if (
+        ColorUtils.calculateContrast(Color.White.toArgb(), bg) >=
+            ColorUtils.calculateContrast(Color.Black.toArgb(), bg)
+    ) Color.White
+    else Color.Black
+}
+
+/**
+ * Chip / pill glass. [accent] is from [chipAccentColorFor].
+ * @param isMedia media keeps neutral glass; accent stays on controls
+ */
+@Composable
+internal fun islandGlassChrome(
+    accent: Color,
+    isMedia: Boolean,
+): IslandGlassChrome {
+    val body = MediaChrome.GlassBody
+    if (isMedia) {
+        return IslandGlassChrome(
+            body = body,
+            border = MediaChrome.GlassBorder,
+            content = MediaChrome.OnGlass,
         )
+    }
+    val tintAmount =
+        if (isSystemInDarkTheme()) IslandGlassEventTintDark else IslandGlassEventTintLight
+    val mixed = lerp(body, accent.copy(alpha = 1f), tintAmount)
+    return IslandGlassChrome(
+        body = mixed,
+        border = MediaChrome.EventTintBorder,
+        content = contentColorOn(mixed),
+    )
+}
+
+/** Expand-card shell — neutral dense glass; accent lives in content chrome. */
+@Composable
+internal fun islandCardChrome(): IslandGlassChrome =
+    IslandGlassChrome(
+        body = MediaChrome.GlassBody,
+        border = MediaChrome.GlassBorder,
+        content = MediaChrome.OnGlass,
+    )
 
 internal val PillPrimary: TextStyle
     @Composable get() = MaterialTheme.typography.labelSmall.copy(
@@ -215,7 +305,13 @@ internal val ShapeCompact = RoundedCornerShape(12.dp)
 
 internal fun accentColorFor(event: IslandEvent): Color = eventStyleFor(event).accent
 
-internal fun chipContentColorOn(background: Color): Color = Color.White
+/**
+ * Glyph / label colour on a solid accent fill (play button, call actions, action circles).
+ * Was unconditionally white, which fails on the light end of the palette — [YellowAccent] and a
+ * light Monet media colour both take a white glyph and lose it.
+ */
+@Composable
+internal fun chipContentColorOn(background: Color): Color = contentColorOn(background)
 
 internal fun darkenColor(color: Color, keep: Float = 0.35f): Color =
     Color(
@@ -575,17 +671,90 @@ internal fun textKeyFor(event: IslandEvent): Any =
         else -> event.id
     }
 
-internal fun resolveLabelIcon(label: String): ImageVector {
+/**
+ * Map a custom-action label to a stock glyph when we recognise the intent.
+ * Prefer this over the app drawable: apps (ViviMusic especially) ship multi-state
+ * icons as filled rounded squares with the arrows cut out — [Icon] + tint is SrcIn,
+ * so every opaque pixel becomes the tint and you get a solid white badge.
+ *
+ * Returns null when the label is unknown so the caller can fall back to the app art
+ * without inventing a Shuffle glyph for "Add to queue".
+ */
+internal fun resolveLabelIcon(label: String): ImageVector? {
     val lower = label.lowercase()
     return when {
         lower.contains("shuffle") -> Icons.Filled.Shuffle
+        // Multi-state repeat: "repeat one" / "repeat_one" / "single" before bare "repeat".
+        lower.contains("repeat") &&
+            (lower.contains("one") ||
+                lower.contains("single") ||
+                lower.contains("track") ||
+                Regex("""\b1\b""").containsMatchIn(lower)) -> Icons.Filled.RepeatOne
         lower.contains("repeat") -> Icons.Filled.Repeat
         lower.contains("thumb") && lower.contains("up") -> Icons.Filled.ThumbUp
         lower.contains("thumb") && lower.contains("down") -> Icons.Filled.ThumbDown
-        lower.contains("like") || lower.contains("love") || lower.contains("favorite") -> Icons.Filled.Favorite
-        else -> Icons.Filled.Shuffle
+        lower.contains("like") || lower.contains("love") || lower.contains("favorite") ->
+            Icons.Filled.Favorite
+        else -> null
     }
 }
+
+/** Raster size for custom-action drawables — big enough to key on, cheap to scan (2304 px). */
+private const val CustomActionRaster = 48
+
+/** Above this share of opaque pixels a drawable is a plate, not a glyph. */
+private const val GlyphMaxCoverage = 0.55f
+
+/** Above this there is effectively no alpha channel to key on at all. */
+private const val OpaqueTileMinCoverage = 0.95f
+
+/**
+ * Reduce an app's custom-action drawable to an alpha mask, so [Icon] can paint it in our colour.
+ *
+ * Apps are meant to ship a monochrome glyph on transparency, and most do — that case passes
+ * through unchanged and simply gets tinted. Two shapes have to be corrected first, because
+ * tinting is SrcIn and would otherwise paint the wrong pixels:
+ *
+ * - **Knocked-out badge** (ViviMusic's `repeat_on`): a filled rounded square with the arrows cut
+ *   out of it. The glyph is the *transparent* part, so tinting fills the square solid. Inverting
+ *   alpha recovers the glyph.
+ * - **Fully opaque tile**: no alpha to key on. Treat the corner pixel as background and derive
+ *   alpha from how far each pixel departs from it.
+ *
+ * Deciding from the pixels means no dependence on the action's label, which is app-authored and
+ * localised.
+ */
+private fun glyphMaskOf(src: android.graphics.Bitmap): ImageBitmap {
+    val w = src.width
+    val h = src.height
+    val px = IntArray(w * h)
+    src.getPixels(px, 0, w, 0, 0, w, h)
+
+    var opaque = 0
+    for (p in px) if ((p ushr 24) > 127) opaque++
+    val coverage = opaque.toFloat() / px.size
+
+    val out = IntArray(px.size)
+    when {
+        coverage < GlyphMaxCoverage ->
+            for (i in px.indices) out[i] = (px[i] and ALPHA_MASK) or RGB_WHITE
+        coverage < OpaqueTileMinCoverage ->
+            for (i in px.indices) out[i] = ((255 - (px[i] ushr 24)) shl 24) or RGB_WHITE
+        else -> {
+            val bgLum = ColorUtils.calculateLuminance(px[0])
+            for (i in px.indices) {
+                val d = kotlin.math.abs(ColorUtils.calculateLuminance(px[i]) - bgLum)
+                out[i] = ((d * 255).roundToInt().coerceIn(0, 255) shl 24) or RGB_WHITE
+            }
+        }
+    }
+    return android.graphics.Bitmap
+        .createBitmap(out, w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        .asImageBitmap()
+}
+
+private const val ALPHA_MASK = 0xFF000000.toInt()
+private const val RGB_WHITE = 0x00FFFFFF
 
 @Composable
 internal fun CustomActionIcon(
@@ -593,16 +762,26 @@ internal fun CustomActionIcon(
     tint: Color,
     modifier: Modifier = Modifier,
 ) {
-    val appBitmap = ca.icon?.let { drawable ->
-        remember(drawable) {
-            try { drawable.toBitmap(48, 48).asImageBitmap() } catch (_: Exception) { null }
+    // The app's own drawable is the only thing that knows what this action is and what state
+    // it is in — PlaybackState carries no type and no on/off flag, and the app republishes a
+    // new drawable whenever the state changes. Draw what it sent; never substitute a glyph of
+    // our own for one we think we recognise (a forced heart is always filled).
+    val mask =
+        ca.icon?.let { drawable ->
+            remember(drawable) {
+                try {
+                    glyphMaskOf(drawable.toBitmap(CustomActionRaster, CustomActionRaster))
+                } catch (_: Exception) {
+                    null
+                }
+            }
         }
+    if (mask != null) {
+        Icon(mask, ca.label, tint = tint, modifier = modifier)
+        return
     }
-    if (appBitmap != null) {
-        Icon(appBitmap, ca.label, tint = tint, modifier = modifier)
-    } else {
-        Icon(resolveLabelIcon(ca.label), ca.label, tint = tint, modifier = modifier)
-    }
+    // Only with no drawable at all do we fall back to guessing from the label.
+    Icon(resolveLabelIcon(ca.label) ?: Icons.Filled.Shuffle, ca.label, tint = tint, modifier = modifier)
 }
 
 internal fun PendingIntent.sendWithBal(context: Context, fillIntent: Intent? = null) {

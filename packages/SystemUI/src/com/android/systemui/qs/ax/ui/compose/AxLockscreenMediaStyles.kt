@@ -672,6 +672,8 @@ private fun WaveformLockscreenMedia(
 /** Progress as a row of dashes, filled up to [progress]. Indicator only — never interactive. */
 @Composable
 private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
+    val filledColor = MediaChrome.OnGlass
+    val emptyColor = MediaChrome.LockscreenProgressTrack
     Canvas(modifier) {
         val segment = MinimalSegmentWidth.toPx()
         val gap = MinimalSegmentGap.toPx()
@@ -683,8 +685,7 @@ private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
         val top = (size.height - barHeight) / 2f
         for (index in 0 until count) {
             drawRoundRect(
-                color =
-                    if (index < filled) MediaChrome.OnGlass else MediaChrome.LockscreenProgressTrack,
+                color = if (index < filled) filledColor else emptyColor,
                 topLeft = Offset(index * (segment + gap), top),
                 size = Size(segment, barHeight),
                 cornerRadius = radius,
@@ -795,10 +796,15 @@ private fun LockscreenSeekBar(
     viewModel: AxMediaViewModel,
     interactive: Boolean,
     modifier: Modifier = Modifier,
-    trail: (Float) -> Brush = MediaChrome::lockscreenProgressTrail,
+    trail: ((Float) -> Brush)? = null,
 ) {
     val progress = session?.let(viewModel::progress) ?: 0f
     val description = seekBarDescription(session, progress)
+    // Capture theme colours here — Canvas draw scope is not @Composable.
+    val trackColor = MediaChrome.LockscreenProgressTrack
+    val thumbColor = MediaChrome.LockscreenProgressThumb
+    val progressTip = MediaChrome.LockscreenProgress
+    val resolvedTrail = trail ?: { endX -> MediaChrome.lockscreenProgressTrail(endX, progressTip) }
     // Inset by the thumb radius, the same margin the canvas paints with, so it tracks the finger at
     // both ends.
     val gestures = rememberScrubGestures(session, viewModel, interactive, inset = GlassSeekBarThumb)
@@ -824,7 +830,7 @@ private fun LockscreenSeekBar(
             val usable = (size.width - thumbRadius * 2f).coerceAtLeast(0f)
             val playedX = thumbRadius + usable * progress.coerceIn(0f, 1f)
             drawLine(
-                color = MediaChrome.LockscreenProgressTrack,
+                color = trackColor,
                 start = Offset(thumbRadius, centreY),
                 end = Offset(size.width - thumbRadius, centreY),
                 strokeWidth = stroke,
@@ -832,7 +838,7 @@ private fun LockscreenSeekBar(
             )
             if (playedX > thumbRadius) {
                 drawLine(
-                    brush = trail(playedX),
+                    brush = resolvedTrail(playedX),
                     start = Offset(thumbRadius, centreY),
                     end = Offset(playedX, centreY),
                     strokeWidth = stroke,
@@ -840,7 +846,7 @@ private fun LockscreenSeekBar(
                 )
             }
             drawCircle(
-                color = MediaChrome.LockscreenProgressThumb,
+                color = thumbColor,
                 radius = thumbRadius,
                 center = Offset(playedX, centreY),
             )
@@ -858,14 +864,15 @@ private fun MediaArtPane(
     size: Dp,
     shape: Shape,
     borderWidth: Dp = MediaChrome.LockscreenGlassBorderWidth,
-    borderColor: Color = MediaChrome.LockscreenGlassBorder,
+    borderColor: Color? = null,
 ) {
+    val resolvedBorder = borderColor ?: MediaChrome.LockscreenGlassBorder
     Box(
         modifier =
             Modifier.size(size)
                 .clip(shape)
                 .background(MediaChrome.SkipNeutral)
-                .border(borderWidth, borderColor, shape),
+                .border(borderWidth, resolvedBorder, shape),
         contentAlignment = Alignment.Center,
     ) {
         Crossfade(targetState = session?.background, label = "AxLockscreenMediaArt") { artwork ->

@@ -21,6 +21,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -63,9 +64,9 @@ import com.android.systemui.axdynamicbar.shared.ShapeXl
 import com.android.systemui.axdynamicbar.shared.SpaceSm
 import com.android.systemui.axdynamicbar.shared.SpaceXs
 import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
-import com.android.systemui.axdynamicbar.shared.chipContentColorOn
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.iconKeyFor
+import com.android.systemui.axdynamicbar.shared.islandGlassChrome
 import com.android.systemui.axdynamicbar.shared.textKeyFor
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipState
@@ -110,8 +111,16 @@ fun AxDynamicBarNowBar(
 
                 val rawAccent = chipAccentColorFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
+                val isMedia = display.event is IslandEvent.Media
+                val rawChrome = islandGlassChrome(rawAccent, isMedia = isMedia)
+                val bodyColor by animateColorAsState(
+                    rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
+                )
+                val borderColor by animateColorAsState(
+                    rawChrome.border, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_border",
+                )
                 val contentColor by animateColorAsState(
-                    chipContentColorOn(rawAccent), MaterialTheme.motionScheme.fastEffectsSpec(), label = "content",
+                    rawChrome.content, MaterialTheme.motionScheme.fastEffectsSpec(), label = "content",
                 )
                 val rawProgress = chipProgressFor(display.event)
                 val progressTarget = rawProgress ?: 0f
@@ -176,20 +185,22 @@ fun AxDynamicBarNowBar(
                             }
                             .shadow(6.dp, NowBarShape)
                             .clip(NowBarShape)
-                            .background(accent)
+                            .background(bodyColor)
+                            .border(1.dp, borderColor, NowBarShape)
                             .then(
                                 if (progress != null) {
                                     Modifier.drawWithContent {
                                         drawContent()
                                         val barH = 3.dp.toPx()
                                         val y = size.height - barH
+                                        // Progress stays event-accent so the glass body still color-codes.
                                         drawRect(
-                                            contentColor.copy(alpha = AlphaTrack),
+                                            accent.copy(alpha = AlphaTrack),
                                             topLeft = Offset(0f, y),
                                             size = Size(size.width, barH),
                                         )
                                         drawRect(
-                                            contentColor.copy(alpha = 0.85f),
+                                            accent.copy(alpha = 0.85f),
                                             topLeft = Offset(0f, y),
                                             size = Size(size.width * progress, barH),
                                         )

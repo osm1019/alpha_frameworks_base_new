@@ -63,23 +63,25 @@ import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
 
-private val AlbumArtSize = 80.dp
-private val PlayPauseSize = 56.dp
-private val ControlButtonSize = 44.dp
-private val ControlIconSize = 22.dp
-private val SeekBarHeight = 28.dp
+// Compact stack card — keep controls usable but shave vertical bulk vs full-sheet media.
+private val AlbumArtSize = 56.dp
+private val PlayPauseSize = 44.dp
+private val ControlButtonSize = 36.dp
+private val ControlIconSize = 20.dp
+private val SeekBarHeight = 22.dp
 
 @Composable
 internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
     val colors = rememberMediaColors(event)
     val accent = colors.accent
+    val chrome = islandCardChrome()
 
     Surface(
         modifier = Modifier.fillMaxWidth()
-            .border(1.dp, CardBorderBrush, ShapeCard)
+            .border(1.dp, chrome.border, ShapeCard)
             .pointerInput(Unit) { detectTapGestures {} },
         shape = ShapeCard,
-        color = CardBg,
+        color = chrome.body,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -89,9 +91,9 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
                         interactor.openMediaApp()
                         interactor.collapseIsland()
                     }
-                    .padding(SpaceXxl),
+                    .padding(horizontal = SpaceXxl, vertical = SpaceLg),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SpaceXxl),
+                horizontalArrangement = Arrangement.spacedBy(SpaceLg),
             ) {
                 event.albumArt?.let { art ->
                     Image(
@@ -107,25 +109,25 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
                         .background(accent.copy(alpha = AlphaFaint)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.MusicNote, null, tint = accent, modifier = Modifier.size(36.dp))
+                    Icon(Icons.Filled.MusicNote, null, tint = accent, modifier = Modifier.size(28.dp))
                 }
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(SpaceXs),
+                    verticalArrangement = Arrangement.spacedBy(SpaceXxs),
                 ) {
                     Text(
                         event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) },
                         color = OnCardText,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (event.artist.isNotEmpty()) {
                         Text(
                             event.artist,
                             color = accent,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -145,8 +147,8 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(accent.copy(alpha = AlphaFaint))
-                    .padding(horizontal = SpaceXxl, vertical = SpaceLg),
-                verticalArrangement = Arrangement.spacedBy(SpaceLg),
+                    .padding(horizontal = SpaceXxl, vertical = SpaceMd),
+                verticalArrangement = Arrangement.spacedBy(SpaceMd),
             ) {
                 if (event.duration > 0L) {
                     MediaSeekBar(event, interactor, accent)
@@ -280,7 +282,7 @@ private fun MediaControls(
                     else
                         stringResource(R.string.ax_dynamic_bar_play),
                     tint = onAccent,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }

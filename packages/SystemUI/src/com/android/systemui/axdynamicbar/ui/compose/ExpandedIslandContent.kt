@@ -222,7 +222,7 @@ fun ExpandedIslandContent(
                         Icon(
                             imageVector = Icons.Default.ExpandMore,
                             contentDescription = "Show all $stackSize events",
-                            tint = Color.White,
+                            tint = chipContentColorOn(accentColor),
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -400,12 +400,13 @@ private fun CallElapsedTimer(startTimeMs: Long, color: Color) {
 
 @Composable
 internal fun PrimaryCard(content: @Composable () -> Unit) {
+    val chrome = islandCardChrome()
     Box(
         modifier =
             Modifier.fillMaxWidth()
                 .clip(ShapeCard)
-                .background(CardBg)
-                .border(1.dp, CardBorderBrush, ShapeCard)
+                .background(chrome.body)
+                .border(1.dp, chrome.border, ShapeCard)
                 .pointerInput(Unit) { detectTapGestures {} }
                 .padding(SpaceXxl)
     ) {

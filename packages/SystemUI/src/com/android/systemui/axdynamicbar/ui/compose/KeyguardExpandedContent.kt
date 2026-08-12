@@ -196,14 +196,15 @@ private fun ProgressRing(
 
 @Composable
 private fun KeyguardPanelSurface(content: @Composable () -> Unit) {
+    val chrome = islandCardChrome()
     Box(
         modifier = Modifier
             .widthIn(max = ExpandedMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = SpaceSection)
             .clip(ShapeXl)
-            .background(CardBg)
-            .border(1.dp, CardBorderBrush, ShapeXl)
+            .background(chrome.body)
+            .border(1.dp, chrome.border, ShapeXl)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -233,10 +234,8 @@ private fun TonalBanner(
 }
 
 /**
- * Expanded keyguard media panel (surface E).
- * - **Minimal**: 104dp pill card (B Minimal geometry) — spinning circle art, segmented scrub,
- *   bare transport, single output glyph. Expansion of the keyguard pill.
- * - **Waveform / Glass**: floating art + frosted sheet (output · progress · transport).
+ * Expanded keyguard media panel (surface E): floating art over a frosted sheet. Title/artist sit
+ * in the sheet header (app | text | output); styles only change progress form and play treatment.
  *
  * Empty space on/around the card falls through to the outer collapse click — only real controls
  * consume taps (no full-sheet click eater).
@@ -251,9 +250,10 @@ private fun KeyguardMediaPanel(
 }
 
 /**
- * The expand card, for every style: floating art over a frosted control sheet. Composition and
- * geometry are fixed — a style only picks the art silhouette, the rim, the progress form and the
- * play treatment. No sheet-wide click eater; empty sheet chrome and padding collapse the panel.
+ * The expand card, for every style: floating art over a frosted control sheet. Title and artist
+ * live in the sheet header (app | text | output) so nothing sits on open wallpaper between art and
+ * card. Geometry is fixed — a style only picks the art silhouette, the rim, the progress form and
+ * the play treatment. No sheet-wide click eater; empty sheet chrome and padding collapse the panel.
  */
 @Composable
 private fun KeyguardMediaCard(
@@ -279,6 +279,7 @@ private fun KeyguardMediaCard(
     val rimBrush: Brush =
         if (style == AxLockscreenMediaStyle.WAVEFORM) MediaChrome.accentSweep(accent)
         else SolidColor(MediaChrome.LockscreenGlassBorder)
+    val trackText = event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) }
 
     Column(
         modifier =
@@ -287,8 +288,8 @@ private fun KeyguardMediaCard(
                 .padding(horizontal = KeyguardPanelSideMargin),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Art takes leftover height; everything below is fixed height so this slot cannot breathe
-        // when metadata updates on skip.
+        // Art takes leftover height; the sheet below is fixed so this slot cannot breathe when
+        // metadata updates on skip. Title/artist no longer sit between art and sheet.
         BoxWithConstraints(
             modifier = Modifier.weight(1f, fill = true).fillMaxWidth(),
             contentAlignment = Alignment.Center,
@@ -334,51 +335,6 @@ private fun KeyguardMediaCard(
 
         Spacer(Modifier.height(SpaceXxl))
 
-        val trackText = event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) }
-        AnimatedContent(
-            targetState = trackText,
-            transitionSpec = {
-                fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                    fadeOut(motionScheme.fastEffectsSpec()) using null
-            },
-            label = "kg_media_track",
-            contentAlignment = Alignment.Center,
-        ) { title ->
-            Text(
-                title,
-                color = MediaChrome.OnGlass,
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-                minLines = 1,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        // Always laid out, blank or not: dropping the row hands height to the art weight slot.
-        Spacer(Modifier.height(SpaceSm))
-        AnimatedContent(
-            targetState = event.artist,
-            transitionSpec = {
-                fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
-                    fadeOut(motionScheme.fastEffectsSpec()) using null
-            },
-            label = "kg_media_artist",
-            contentAlignment = Alignment.Center,
-        ) { artist ->
-            Text(
-                artist,
-                color = MediaChrome.OnGlassSecondary,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                minLines = 1,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        Spacer(Modifier.height(SpaceXxl))
-
         // Frosted sheet — no click eater. Only controls below consume taps; empty chrome collapses.
         Column(
             modifier =
@@ -393,9 +349,9 @@ private fun KeyguardMediaCard(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Header: app | title+artist | output. Text is inside the glass, not on wallpaper.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 KeyguardBareControl(
@@ -418,6 +374,51 @@ private fun KeyguardMediaCard(
                             null,
                             tint = MediaChrome.ControlBare,
                             modifier = Modifier.size(KeyguardBareIconSize),
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f).padding(horizontal = SpaceSm),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    AnimatedContent(
+                        targetState = trackText,
+                        transitionSpec = {
+                            fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
+                                fadeOut(motionScheme.fastEffectsSpec()) using null
+                        },
+                        label = "kg_media_track",
+                        contentAlignment = Alignment.Center,
+                    ) { title ->
+                        Text(
+                            title,
+                            color = MediaChrome.OnGlass,
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            minLines = 1,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    // Always laid out so skip metadata blips do not resize the sheet.
+                    AnimatedContent(
+                        targetState = event.artist,
+                        transitionSpec = {
+                            fadeIn(motionScheme.defaultEffectsSpec()) togetherWith
+                                fadeOut(motionScheme.fastEffectsSpec()) using null
+                        },
+                        label = "kg_media_artist",
+                        contentAlignment = Alignment.Center,
+                    ) { artist ->
+                        Text(
+                            artist,
+                            color = MediaChrome.OnGlassSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            minLines = 1,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -796,6 +797,9 @@ private fun KeyguardMediaWaveformProgress(
  */
 @Composable
 private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: IslandActions) {
+    val trackColor = MediaChrome.LockscreenProgressTrack
+    val thumbColor = MediaChrome.LockscreenProgressThumb
+    val progressTip = MediaChrome.LockscreenProgress
     KeyguardMediaScrubber(
         event = event,
         interactor = interactor,
@@ -809,7 +813,7 @@ private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: Is
             val usable = (size.width - thumbRadius * 2f).coerceAtLeast(0f)
             val playedX = thumbRadius + usable * fraction.floatValue.coerceIn(0f, 1f)
             drawLine(
-                color = MediaChrome.LockscreenProgressTrack,
+                color = trackColor,
                 start = Offset(thumbRadius, centreY),
                 end = Offset(size.width - thumbRadius, centreY),
                 strokeWidth = stroke,
@@ -817,7 +821,7 @@ private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: Is
             )
             if (playedX > thumbRadius) {
                 drawLine(
-                    brush = MediaChrome.lockscreenProgressTrail(playedX),
+                    brush = MediaChrome.lockscreenProgressTrail(playedX, progressTip),
                     start = Offset(thumbRadius, centreY),
                     end = Offset(playedX, centreY),
                     strokeWidth = stroke,
@@ -825,7 +829,7 @@ private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: Is
                 )
             }
             drawCircle(
-                color = MediaChrome.LockscreenProgressThumb,
+                color = thumbColor,
                 radius = thumbRadius,
                 center = Offset(playedX, centreY),
             )
@@ -844,6 +848,8 @@ private fun KeyguardMediaSegmentedProgress(
     interactor: IslandActions,
     showTimes: Boolean = true,
 ) {
+    val filledColor = MediaChrome.OnGlass
+    val emptyColor = MediaChrome.LockscreenProgressTrack
     KeyguardMediaScrubber(event, interactor, KeyguardSegmentHeight, showTimes) { fraction, _ ->
         Canvas(modifier = Modifier.fillMaxWidth().height(KeyguardSegmentHeight)) {
             val segment = KeyguardSegmentDash.toPx()
@@ -855,9 +861,7 @@ private fun KeyguardMediaSegmentedProgress(
             val top = (size.height - barHeight) / 2f
             for (index in 0 until count) {
                 drawRoundRect(
-                    color =
-                        if (index < filled) MediaChrome.OnGlass
-                        else MediaChrome.LockscreenProgressTrack,
+                    color = if (index < filled) filledColor else emptyColor,
                     topLeft = Offset(index * (segment + gap), top),
                     size = Size(segment, barHeight),
                     cornerRadius = radius,

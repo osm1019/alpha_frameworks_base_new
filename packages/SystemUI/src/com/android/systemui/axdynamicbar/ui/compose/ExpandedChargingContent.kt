@@ -63,10 +63,7 @@ import com.android.systemui.res.R
 @Composable
 internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandActions) {
     val accent = if (event.isPowerSave) OrangeAccent else GreenAccent
-    // PrimaryCard paints CardBg (surfaceBright). ExpandedCardLayout only tints the
-    // inner row with accent@AlphaFaint. White text worked on dark CardBg but washed
-    // out to unreadable on light theme — match every other expanded card and use
-    // theme on-surface tokens so both day and night stay legible.
+    // PrimaryCard is dense glass; OnCard* is light-on-glass so both day and night stay legible.
     val onCard = OnCardText
     val onCardSecondary = OnCardSecondary
 

@@ -98,11 +98,12 @@ import com.android.systemui.axdynamicbar.shared.CutoutPadBottom
 import com.android.systemui.axdynamicbar.shared.CutoutPadSide
 import com.android.systemui.axdynamicbar.shared.CutoutPadTop
 import com.android.systemui.axdynamicbar.shared.StatusBarContentWidth
+import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.axdynamicbar.shared.StatusBarIconWidth
 import com.android.systemui.axdynamicbar.shared.StatusBarPillWidth
 import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
-import com.android.systemui.axdynamicbar.shared.chipContentColorOn
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
+import com.android.systemui.axdynamicbar.shared.islandGlassChrome
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
@@ -293,9 +294,17 @@ fun CutoutChip(
             ) { display ->
                 val rawAccent = chipAccentColorFor(display.event)
                 val motionScheme = MaterialTheme.motionScheme
-        val accent by animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "accent")
+                val accent by animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "accent")
+                val isMedia = display.event is IslandEvent.Media
+                val rawChrome = islandGlassChrome(rawAccent, isMedia = isMedia)
+                val bodyColor by animateColorAsState(
+                    rawChrome.body, motionScheme.fastEffectsSpec(), label = "glass_body",
+                )
+                val borderColor by animateColorAsState(
+                    rawChrome.border, motionScheme.fastEffectsSpec(), label = "glass_border",
+                )
                 val contentColor by animateColorAsState(
-                    chipContentColorOn(rawAccent), motionScheme.fastEffectsSpec(), label = "content",
+                    rawChrome.content, motionScheme.fastEffectsSpec(), label = "content",
                 )
                 val rawProgress = chipProgressFor(display.event)
                 val progressTarget = rawProgress ?: 0f
@@ -313,7 +322,7 @@ fun CutoutChip(
                     val infiniteTransition = rememberInfiniteTransition(label = "charging_pulse")
                     infiniteTransition.animateFloat(
                         initialValue = 1f,
-                        targetValue = 0.4f,
+                        targetValue = 0.55f,
                         animationSpec = infiniteRepeatable(
                             animation = tween(1000, easing = LinearEasing),
                             repeatMode = RepeatMode.Reverse
@@ -321,11 +330,15 @@ fun CutoutChip(
                         label = "pulse"
                     ).value
                 } else 1f
+                // Pulse the event tint, not the body alpha: the chip sits over status bar content,
+                // so fading it out would show icons through. Breathes between tinted and neutral.
+                val pulsedBody = lerp(MediaChrome.GlassBody, bodyColor, pulseAnim)
                 val pulsedAccent = accent.copy(alpha = accent.alpha * pulseAnim)
 
                 when (placementHint) {
                     CutoutPlacementHint.LEFT -> CutoutPillLeft(
-                        accent = pulsedAccent, contentColor = contentColor, progress = progress,
+                        accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
+                        contentColor = contentColor, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp,
                         pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
@@ -334,9 +347,12 @@ fun CutoutChip(
                         viewModel = viewModel, touchSlop = touchSlop, screenWidthPx = screenWidthPx,
                         collapseToRing = collapseToRing, cutoutRectPx = effectiveCutoutRectPx,
                         ringGap = ringGap, ringScaleX = ringScaleX, ringScaleY = ringScaleY,
-                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,                        ringStrokeDp = ringStrokeDp,                    )
+                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,
+                        ringStrokeDp = ringStrokeDp,
+                    )
                     CutoutPlacementHint.RIGHT -> CutoutPillRight(
-                        accent = pulsedAccent, contentColor = contentColor, progress = progress,
+                        accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
+                        contentColor = contentColor, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp,
                         pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
@@ -345,9 +361,12 @@ fun CutoutChip(
                         viewModel = viewModel, touchSlop = touchSlop, screenWidthPx = screenWidthPx,
                         collapseToRing = collapseToRing, cutoutRectPx = effectiveCutoutRectPx,
                         ringGap = ringGap, ringScaleX = ringScaleX, ringScaleY = ringScaleY,
-                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,                        ringStrokeDp = ringStrokeDp,                    )
+                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,
+                        ringStrokeDp = ringStrokeDp,
+                    )
                     CutoutPlacementHint.CENTER -> CutoutPillCenter(
-                        accent = pulsedAccent, contentColor = contentColor, progress = progress,
+                        accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
+                        contentColor = contentColor, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp, pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
                         cutoutWidthDp = cutoutWidthDp, padSideDp = padSideDp,
@@ -355,7 +374,9 @@ fun CutoutChip(
                         viewModel = viewModel, touchSlop = touchSlop, screenWidthPx = screenWidthPx,
                         collapseToRing = collapseToRing, cutoutRectPx = effectiveCutoutRectPx,
                         ringGap = ringGap, ringScaleX = ringScaleX, ringScaleY = ringScaleY,
-                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,                        ringStrokeDp = ringStrokeDp,                    )
+                        ringOffsetXDp = 0f, ringOffsetYDp = 0f, ringOpacity = ringOpacity,
+                        ringStrokeDp = ringStrokeDp,
+                    )
                 }
             }
         }
@@ -370,6 +391,8 @@ fun CutoutChip(
 @Composable
 private fun CutoutPillLeft(
     accent: Color,
+    bodyColor: Color,
+    borderColor: Color,
     contentColor: Color,
     progress: Float?,
     pillShape: RoundedCornerShape,
@@ -474,7 +497,8 @@ private fun CutoutPillLeft(
                             onClick(label = "Expand") { viewModel.togglePanel(); true }
                         }
                         .clip(pillShape)
-                        .background(accent)
+                        .background(bodyColor)
+                        .border(1.dp, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor)
                         .padding(start = cutoutZone, end = ContentPad),
                     verticalAlignment = Alignment.CenterVertically,
@@ -509,6 +533,8 @@ private fun CutoutPillLeft(
 @Composable
 private fun CutoutPillRight(
     accent: Color,
+    bodyColor: Color,
+    borderColor: Color,
     contentColor: Color,
     progress: Float?,
     pillShape: RoundedCornerShape,
@@ -612,7 +638,8 @@ private fun CutoutPillRight(
                             onClick(label = "Expand") { viewModel.togglePanel(); true }
                         }
                         .clip(pillShape)
-                        .background(accent)
+                        .background(bodyColor)
+                        .border(1.dp, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor)
                         .padding(start = ContentPad, end = cutoutZone),
                     verticalAlignment = Alignment.CenterVertically,
@@ -647,6 +674,8 @@ private fun CutoutPillRight(
 @Composable
 private fun CutoutPillCenter(
     accent: Color,
+    bodyColor: Color,
+    borderColor: Color,
     contentColor: Color,
     progress: Float?,
     pillShape: RoundedCornerShape,
@@ -768,7 +797,8 @@ private fun CutoutPillCenter(
                             onClick(label = "Expand") { viewModel.togglePanel(); true }
                         }
                         .clip(pillShape)
-                        .background(accent)
+                        .background(bodyColor)
+                        .border(1.dp, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

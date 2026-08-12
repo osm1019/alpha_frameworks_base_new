@@ -1385,6 +1385,8 @@ internal fun MediaSeekBar(
                 )
             }
             .orEmpty()
+    // Capture theme tokens in composition — the AndroidView update block is not @Composable.
+    val trackColorArgb = MediaChrome.ProgressTrack.toArgb()
     Column(modifier = modifier) {
         AndroidView(
             factory = { context ->
@@ -1448,11 +1450,10 @@ internal fun MediaSeekBar(
                 // Progress uses art accent (Phase 1/2 language); track stays on-glass neutral.
                 // The Glass lockscreen style draws its own bar (GlassSeekBar) and never lands here.
                 val progressColor = colors.primary.toArgb()
-                val trackColor = MediaChrome.ProgressTrack.toArgb()
                 seekBar.setMediaColor(progressColor)
                 seekBar.thumbTintList = ColorStateList.valueOf(progressColor)
                 seekBar.progressTintList = ColorStateList.valueOf(progressColor)
-                seekBar.progressBackgroundTintList = ColorStateList.valueOf(trackColor)
+                seekBar.progressBackgroundTintList = ColorStateList.valueOf(trackColorArgb)
                 val playing = session?.state == MediaSessionState.Playing && !seekBar.isPressed
                 val animate = playing && squiggleAnimationEnabled
                 (seekBar.progressDrawable as? SquigglyProgress)?.animate = animate
