@@ -40,6 +40,7 @@ import com.android.systemui.res.R
 import androidx.compose.ui.platform.LocalContext
 import com.android.systemui.axdynamicbar.shared.*
 import kotlinx.coroutines.delay
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun AudioRecordingExpanded(
@@ -158,11 +159,11 @@ internal fun RowScope.CompactAudioRecordingRow(event: IslandEvent.AudioRecording
     }
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent),
         contentAlignment = Alignment.Center,
     ) {
         when (event.state) {
-            RecordingState.RECORDING -> PulsingDot(color = style.accent, size = 10.dp, durationMs = 550, minAlpha = AlphaTrack)
+            RecordingState.RECORDING -> PulsingDot(color = AlphaColors.onAccentColor, size = 10.dp, durationMs = 550, minAlpha = AlphaTrack)
             RecordingState.PAUSED ->
                 style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(16.dp)) }
             RecordingState.SAVED ->

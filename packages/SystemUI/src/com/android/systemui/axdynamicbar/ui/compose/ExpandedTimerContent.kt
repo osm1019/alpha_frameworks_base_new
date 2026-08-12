@@ -55,6 +55,7 @@ import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun TimerExpanded(event: IslandEvent.Timer, interactor: IslandActions) {
@@ -147,8 +148,8 @@ internal fun TimerExpanded(event: IslandEvent.Timer, interactor: IslandActions) 
                 ActionChip(
                     label = stringResource(R.string.ax_dynamic_bar_dismiss),
                     icon = Icons.Filled.Close,
-                    color = style.accent,
-                    bg = style.accent.copy(alpha = AlphaIconBg),
+                    color = AlphaColors.onAccentColor,
+                    bg = style.accent,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { interactor.dismissEvent(event) },
                 )
@@ -211,8 +212,8 @@ internal fun StopwatchExpanded(event: IslandEvent.Stopwatch, interactor: IslandA
                 ActionChip(
                     label = stringResource(R.string.ax_dynamic_bar_dismiss),
                     icon = Icons.Filled.Close,
-                    color = style.accent,
-                    bg = style.accent.copy(alpha = AlphaIconBg),
+                    color = AlphaColors.onAccentColor,
+                    bg = style.accent,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { interactor.dismissEvent(event) },
                 )
@@ -244,10 +245,10 @@ internal fun RowScope.CompactTimerRow(event: IslandEvent.Timer) {
     val style = eventStyleFor(event)
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent),
         contentAlignment = Alignment.Center,
     ) {
-        style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(18.dp)) }
+        style.icon?.let { Icon(it, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp)) }
     }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {
@@ -288,11 +289,11 @@ internal fun RowScope.CompactStopwatchRow(event: IslandEvent.Stopwatch) {
     val style = eventStyleFor(event)
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent),
         contentAlignment = Alignment.Center,
     ) {
         if (event.isRunning) PulsingDot(color = style.accent, size = 18.dp)
-        else style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(18.dp)) }
+        else style.icon?.let { Icon(it, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp)) }
     }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {

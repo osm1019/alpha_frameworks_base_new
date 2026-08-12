@@ -87,6 +87,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.res.R
 import com.android.systemui.axdynamicbar.model.IslandEvent
@@ -477,7 +478,6 @@ private fun KeyguardMediaCard(
                         style = style,
                         accent = accent,
                         chipAccent = chipAccent,
-                        onAccent = onAccent,
                         isPlaying = event.isPlaying,
                         onClick = { interactor.togglePlayPause() },
                     )
@@ -550,7 +550,6 @@ private fun KeyguardPlayButton(
     style: AxLockscreenMediaStyle,
     accent: Color,
     chipAccent: Color,
-    onAccent: Color,
     isPlaying: Boolean,
     onClick: () -> Unit,
 ) {
@@ -574,9 +573,12 @@ private fun KeyguardPlayButton(
                 },
                 tint =
                     when (style) {
+                        // Bare glyphs sit on the sheet, so they take the sheet's content colour.
                         AxLockscreenMediaStyle.MINIMAL -> MediaChrome.ControlBare
                         AxLockscreenMediaStyle.WAVEFORM -> MediaChrome.ControlBare
-                        AxLockscreenMediaStyle.GLASS -> onAccent
+                        // Glass fills the button with chipAccent, so the glyph follows the
+                        // filled-accent rule rather than a colour derived from a different accent.
+                        AxLockscreenMediaStyle.GLASS -> AlphaColors.onAccentColor
                     },
                 modifier = Modifier.size(26.dp),
             )
@@ -910,10 +912,10 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(colors.accent.copy(alpha = AlphaSubtle)),
+                    .background(colors.accent),
                 contentAlignment = Alignment.Center,
             ) {
-                eventStyleFor(event).icon?.let { Icon(it, null, tint = colors.accent, modifier = Modifier.size(18.dp)) }
+                eventStyleFor(event).icon?.let { Icon(it, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp)) }
             }
             Text(
                 event.label.ifEmpty { stringResource(R.string.ax_dynamic_bar_timer) }.uppercase(),
@@ -997,10 +999,10 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .background(colors.accent.copy(alpha = AlphaSubtle)),
+                    .background(colors.accent),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.AvTimer, null, tint = colors.accent, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.AvTimer, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
             }
             Text(
                 event.label.ifEmpty { stringResource(R.string.ax_dynamic_bar_stopwatch) }.uppercase(),

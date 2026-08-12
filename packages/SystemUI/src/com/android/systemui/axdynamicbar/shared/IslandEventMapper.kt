@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.res.R
+import androidx.compose.runtime.Composable
 
 internal data class EventStyle(
     val accent: Color,
@@ -48,6 +49,7 @@ internal data class EventStyle(
     val labelRes: Int,
 )
 
+@Composable
 internal fun eventStyleFor(event: IslandEvent): EventStyle = when (event) {
     is IslandEvent.AudioRecording -> EventStyle(
         accent = when (event.state) {

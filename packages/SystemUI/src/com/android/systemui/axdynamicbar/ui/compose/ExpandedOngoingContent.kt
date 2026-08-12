@@ -47,6 +47,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import androidx.compose.ui.platform.LocalContext
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 private fun resolveRemoteViews(ctx: Context, notification: Notification): RemoteViews? {
     notification.bigContentView?.let {
@@ -239,10 +240,10 @@ internal fun RowScope.CompactPromotedOngoingRow(event: IslandEvent.PromotedOngoi
     }
         ?: Box(
             modifier =
-                Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent.copy(alpha = AlphaIconBg)),
+                Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent),
             contentAlignment = Alignment.Center,
         ) {
-            PulsingDot(color = BlueAccent, size = SpaceMd)
+            PulsingDot(color = AlphaColors.onAccentColor, size = SpaceMd)
         }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {

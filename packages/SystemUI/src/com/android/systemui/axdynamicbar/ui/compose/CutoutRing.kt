@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.AlphaTertiary
@@ -210,7 +211,7 @@ internal fun AnimatedCutoutRing(
             }
 
             RingMode.MEDIA_ROTATE -> {
-                val contrastColor = lerp(effAccent, Color.White, 0.6f)
+                val contrastColor = lerp(effAccent, AlphaColors.cutoutRingHighlightColor, 0.6f)
                 val segmentSweep = 30f
                 drawCircle(color = ringColor, radius = radius, style = stroke)
                 drawArc(

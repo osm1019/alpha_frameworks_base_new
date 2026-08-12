@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaOpacity
+import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.AlphaMetrics
 
 /**
  * Shared chrome for Alpha media + Dynamic Bar glass surfaces.
@@ -51,8 +54,8 @@ import androidx.compose.ui.unit.dp
  */
 object MediaChrome {
 
-    private const val AlphaOpenDark = 0x4D / 255f // ~0.30 — lockscreen with blur / art frost
-    private const val AlphaNoBlur = 0xD9 / 255f // ~0.85 — lockscreen when blur is off
+    private const val AlphaOpenDark = AlphaOpacity.mediaCardFrostAlphaDark
+    private const val AlphaNoBlur = AlphaOpacity.mediaCardFrostAlphaNoBlur
 
     /**
      * Day mode needs a denser open body than night. What sits behind the frost is wallpaper and
@@ -60,7 +63,7 @@ object MediaChrome {
      * and `onSurface` text lands on a pane that is still visually dark. Night has no such
      * problem because the seed already agrees with a typical wallpaper.
      */
-    private const val AlphaOpenLight = 0.72f
+    private const val AlphaOpenLight = AlphaOpacity.mediaCardFrostAlphaLight
 
     private val isDark: Boolean
         @Composable
@@ -74,7 +77,7 @@ object MediaChrome {
     private val seed: Color
         @Composable
         @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.surfaceContainerHigh
+        get() = AlphaColors.chipBodyColor
 
     private fun Color.withAlpha(a: Float): Color = copy(alpha = a)
 
@@ -91,7 +94,7 @@ object MediaChrome {
     val GlassBorder: Color
         @Composable
         @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        get() = AlphaColors.chipRimColor
 
     /**
      * Lockscreen media card body. Open so wallpaper / art frost tints the pane.
@@ -107,9 +110,9 @@ object MediaChrome {
     val LockscreenGlassBorder: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = if (isDark) 0.38f else 0.18f)
+        get() = OnGlass.copy(alpha = if (isDark) AlphaOpacity.mediaCardRimAlphaDark else AlphaOpacity.mediaCardRimAlphaLight)
 
-    val LockscreenGlassBorderWidth = 1.dp
+    val LockscreenGlassBorderWidth = AlphaMetrics.chipRimWidth
 
     /**
      * Denser body when the compositor refuses cross-window blur (dev option, power save).
@@ -123,7 +126,7 @@ object MediaChrome {
     /**
      * Sweep from the art accent to a hue-rotated sibling — Waveform band + rim.
      */
-    fun accentSweep(accent: Color, degrees: Float = 62f): Brush =
+    fun accentSweep(accent: Color, degrees: Float = AlphaMetrics.accentSweepDegrees): Brush =
         Brush.horizontalGradient(listOf(accent, accent.rotateHue(degrees)))
 
     private fun Color.rotateHue(degrees: Float): Color {
@@ -141,14 +144,14 @@ object MediaChrome {
     fun lockscreenProgressTrail(endX: Float, tip: Color): Brush =
         Brush.horizontalGradient(
             0f to tip.copy(alpha = 0f),
-            0.35f to tip.copy(alpha = 0.35f),
+            AlphaOpacity.progressTrailMidAlpha to tip.copy(alpha = AlphaOpacity.progressTrailMidAlpha),
             1f to tip,
             startX = 0f,
             endX = endX,
         )
 
-    val LockscreenGlassElevation = 14.dp
-    val LockscreenGlassBlurRadius = 56.dp
+    val LockscreenGlassElevation = AlphaMetrics.mediaCardElevation
+    val LockscreenGlassBlurRadius = AlphaMetrics.mediaCardBlurRadius
 
     /**
      * Primary content on glass — the partner of [seed]. Paired by the palette, so this needs no
@@ -157,7 +160,7 @@ object MediaChrome {
     val OnGlass: Color
         @Composable
         @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onSurface
+        get() = AlphaColors.chipTextColor
 
     /**
      * Secondary / hint on glass. Alphas match Dynamic Bar island tokens
@@ -166,18 +169,18 @@ object MediaChrome {
     val OnGlassSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = if (isDark) 0.7f else 0.62f)
+        get() = OnGlass.copy(alpha = if (isDark) AlphaOpacity.mediaTextSecondaryAlphaDark else AlphaOpacity.mediaTextSecondaryAlphaLight)
 
     val OnGlassHint: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = if (isDark) 0.4f else 0.42f)
+        get() = OnGlass.copy(alpha = if (isDark) AlphaOpacity.mediaTextHintAlphaDark else AlphaOpacity.mediaTextHintAlphaLight)
 
     /** Neutral skip / badge fill before accent wash. */
     val SkipNeutral: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = if (isDark) 0.12f else 0.08f)
+        get() = OnGlass.copy(alpha = if (isDark) AlphaOpacity.mediaButtonPlateAlphaDark else AlphaOpacity.mediaButtonPlateAlphaLight)
 
     /**
      * Bare control tint on glass. Lockscreen controls are neutral except Glass play
@@ -191,29 +194,29 @@ object MediaChrome {
     val LockscreenProgress: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = 0.92f)
+        get() = OnGlass.copy(alpha = AlphaOpacity.progressTipAlpha)
 
     val LockscreenProgressTrack: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = 0.22f)
+        get() = OnGlass.copy(alpha = AlphaOpacity.progressTrackAlpha)
 
     val LockscreenProgressThumb: Color
         @Composable
         @ReadOnlyComposable
         get() = OnGlass
 
-    val LockscreenArtSize = 88.dp
-    val LockscreenArtCorner = 20.dp
+    val LockscreenArtSize = AlphaMetrics.mediaArtSize
+    val LockscreenArtCorner = AlphaMetrics.mediaArtCornerRadius
 
     val ProgressTrack: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = 0.18f)
+        get() = OnGlass.copy(alpha = AlphaOpacity.progressTrackAlphaQs)
 
-    val ProgressHeight = 2.dp
+    val ProgressHeight = AlphaMetrics.progressHeight
 
-    val LockscreenCornerRadius = 28.dp
+    val LockscreenCornerRadius = AlphaMetrics.cardCornerRadius
 
     /**
      * Skip / secondary control fill: blend of glass body toward art accent so icons stay
@@ -221,12 +224,12 @@ object MediaChrome {
      */
     @Composable
     @ReadOnlyComposable
-    fun skipBackground(accent: Color, amount: Float = 0.55f): Color =
+    fun skipBackground(accent: Color, amount: Float = AlphaOpacity.buttonPlateBlendAmount): Color =
         lerp(GlassBody, accent, amount)
 
     /** Event-tint border on non-media DB chips (hairline over tinted glass). */
     val EventTintBorder: Color
         @Composable
         @ReadOnlyComposable
-        get() = OnGlass.copy(alpha = if (isDark) 0.16f else 0.12f)
+        get() = OnGlass.copy(alpha = if (isDark) AlphaOpacity.chipRimAlphaDark else AlphaOpacity.chipRimAlphaLight)
 }

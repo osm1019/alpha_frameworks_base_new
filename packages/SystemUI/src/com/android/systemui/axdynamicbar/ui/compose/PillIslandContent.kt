@@ -80,6 +80,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import androidx.compose.ui.graphics.graphicsLayer
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipState
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.res.R
@@ -1156,7 +1157,7 @@ private fun KeyguardIndicationIcon(event: IslandEvent.KeyguardIndication, tint: 
                 drawRect(color, Offset(w * 0.15f, h * 0.3f), Size(w * 0.35f, h * 0.65f))
                 drawRect(color, Offset(w * 0.55f, h * 0.1f), Size(w * 0.3f, h * 0.85f))
                 
-                val windowColor = Color.Black.copy(alpha = AlphaDisabled)
+                val windowColor = AlphaColors.torchWindowColor.copy(alpha = AlphaDisabled)
                 drawRect(windowColor, Offset(w * 0.25f, h * 0.45f), Size(w * 0.12f, h * 0.1f))
                 drawRect(windowColor, Offset(w * 0.25f, h * 0.65f), Size(w * 0.12f, h * 0.1f))
                 drawRect(windowColor, Offset(w * 0.62f, h * 0.22f), Size(w * 0.12f, h * 0.1f))
@@ -1201,9 +1202,9 @@ private fun KeyguardIndicationIcon(event: IslandEvent.KeyguardIndication, tint: 
             Canvas(modifier = Modifier.size(SizeBadge)) {
                 drawCircle(color, style = Stroke(width = SizeStrokeThin.dp.toPx()))
                 val cx = size.width / 2f; val cy = size.height / 2f
-                drawCircle(Color.White, radius = 0.8.dp.toPx(), center = Offset(cx, cy - 2.2.dp.toPx()))
+                drawCircle(AlphaColors.torchFilamentColor, radius = 0.8.dp.toPx(), center = Offset(cx, cy - 2.2.dp.toPx()))
                 drawLine(
-                    Color.White, Offset(cx, cy - 0.3.dp.toPx()), Offset(cx, cy + 2.8.dp.toPx()),
+                    AlphaColors.torchFilamentColor, Offset(cx, cy - 0.3.dp.toPx()), Offset(cx, cy + 2.8.dp.toPx()),
                     strokeWidth = 1.2.dp.toPx(), cap = StrokeCap.Round,
                 )
             }

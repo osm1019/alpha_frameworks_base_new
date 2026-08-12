@@ -43,6 +43,7 @@ import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 
 
@@ -167,13 +168,13 @@ private fun RingerCard(
 ) {
     val bg by
         animateColorAsState(
-            targetValue = if (isSelected) accent.copy(alpha = AlphaIconBg) else OnCardText.copy(alpha = AlphaFaint),
+            targetValue = if (isSelected) accent else OnCardText.copy(alpha = AlphaFaint),
             animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
             label = "ringer_bg",
         )
     val tint by
         animateColorAsState(
-            targetValue = if (isSelected) accent else SubtleGray,
+            targetValue = if (isSelected) AlphaColors.onAccentColor else SubtleGray,
             animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
             label = "ringer_tint",
         )
@@ -223,12 +224,12 @@ internal fun VpnExpanded(event: IslandEvent.Vpn) {
 internal fun RowScope.CompactBluetoothRow(event: IslandEvent.Bluetooth) {
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent),
         contentAlignment = Alignment.Center,
     ) {
         event.deviceIcon?.let {
             Image(bitmap = it.toScaledBitmap(SizeIconSm), null, modifier = Modifier.size(SizeIconSm))
-        } ?: Icon(Icons.Filled.Bluetooth, null, tint = BlueAccent, modifier = Modifier.size(18.dp))
+        } ?: Icon(Icons.Filled.Bluetooth, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
     }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {
@@ -259,10 +260,10 @@ internal fun RowScope.CompactBluetoothRow(event: IslandEvent.Bluetooth) {
 internal fun RowScope.CompactHotspotRow(event: IslandEvent.Hotspot) {
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(OrangeAccent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(OrangeAccent),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Wifi, null, tint = OrangeAccent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Filled.Wifi, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
     }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {
@@ -286,10 +287,10 @@ internal fun RowScope.CompactHotspotRow(event: IslandEvent.Hotspot) {
 internal fun RowScope.CompactRingerRow(event: IslandEvent.RingerMode) {
     val style = eventStyleFor(event)
     Box(
-        modifier = Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent.copy(alpha = AlphaStatusChip)),
+        modifier = Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(style.accent),
         contentAlignment = Alignment.Center,
     ) {
-        style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(18.dp)) }
+        style.icon?.let { Icon(it, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp)) }
     }
     Spacer(Modifier.width(SpaceLg))
     Text(event.label, color = OnCardText, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
@@ -299,10 +300,10 @@ internal fun RowScope.CompactRingerRow(event: IslandEvent.RingerMode) {
 internal fun RowScope.CompactVpnRow() {
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(IndigoAccent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(IndigoAccent),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.VpnKey, null, tint = IndigoAccent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Filled.VpnKey, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
     }
     Spacer(Modifier.width(SpaceLg))
     Text(stringResource(R.string.ax_dynamic_bar_vpn_active), color = OnCardText, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))

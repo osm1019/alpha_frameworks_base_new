@@ -50,6 +50,7 @@ import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun SportsExpanded(event: IslandEvent.Sports, interactor: IslandActions) {
@@ -179,12 +180,12 @@ private fun CompactTeamBadge(name: String, icon: Drawable?, accent: Color) {
             contentScale = ContentScale.Crop,
         )
     } ?: Box(
-        modifier = Modifier.size(SizeCompactIcon).clip(CircleShape).background(accent.copy(alpha = AlphaIconBg)),
+        modifier = Modifier.size(SizeCompactIcon).clip(CircleShape).background(accent),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             name.take(3).uppercase(),
-            color = accent,
+            color = AlphaColors.onAccentColor,
             style = TsBadge,
         )
     }
@@ -271,7 +272,7 @@ private fun StatusBadge(status: IslandEvent.GameStatus, accent: Color) {
     }
     Surface(
         shape = ShapeChip,
-        color = accent.copy(alpha = AlphaIconBg),
+        color = accent,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = SpaceLg, vertical = SpaceXs),
@@ -279,7 +280,7 @@ private fun StatusBadge(status: IslandEvent.GameStatus, accent: Color) {
             horizontalArrangement = Arrangement.spacedBy(SpaceXs),
         ) {
             if (status == IslandEvent.GameStatus.LIVE) {
-                PulsingDot(color = accent, size = 6.dp)
+                PulsingDot(color = AlphaColors.onAccentColor, size = 6.dp)
             }
             Text(label, color = accent, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         }

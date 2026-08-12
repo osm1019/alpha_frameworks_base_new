@@ -44,6 +44,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import com.android.systemui.alpha.theme.AlphaOpacity
+import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.AlphaMetrics
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -126,16 +129,17 @@ internal val PillTextMaxWidth = 80.dp
 // text container never shrinks per-tick, eliminating centering jitter.
 internal val TickingTextMinWidth = 48.dp
 
-internal const val AlphaSecondary = 0.7f
-internal const val AlphaTertiary = 0.5f
-internal const val AlphaHint = 0.4f
-internal const val AlphaDisabled = 0.3f
-internal const val AlphaSubtle = 0.15f
-internal const val AlphaFaint = 0.1f
-internal const val AlphaBorder = 0.08f
-internal const val AlphaStatusChip = 0.14f
-internal const val AlphaIconBg = 0.16f
-internal const val AlphaTrack = 0.25f
+// Alphas live in AlphaOpacity; these names stay so call sites are untouched.
+internal const val AlphaSecondary = AlphaOpacity.secondaryTextAlpha
+internal const val AlphaTertiary = AlphaOpacity.tertiaryTextAlpha
+internal const val AlphaHint = AlphaOpacity.hintTextAlpha
+internal const val AlphaDisabled = AlphaOpacity.disabledAlpha
+internal const val AlphaSubtle = AlphaOpacity.subtlePlateAlpha
+internal const val AlphaFaint = AlphaOpacity.faintPlateAlpha
+internal const val AlphaBorder = AlphaOpacity.borderAlpha
+internal const val AlphaStatusChip = AlphaOpacity.statusChipPlateAlpha
+internal const val AlphaIconBg = AlphaOpacity.iconPlateAlpha
+internal const val AlphaTrack = AlphaOpacity.trackAlpha
 
 internal val TsBadge: TextStyle
     @Composable get() = MaterialTheme.typography.labelSmall.copy(
@@ -144,49 +148,49 @@ internal val TsBadge: TextStyle
     )
 
 
-internal val BatteryChargingColor = Color(0xFF66BB6A)
-internal val BatteryPowerSaveColor = Color(0xFFFFA726)
+// Palette lives in AlphaColors; these names stay so call sites are untouched.
+// Composable because the palette now resolves per theme.
+internal val BatteryChargingColor: Color
+    @Composable get() = AlphaColors.batteryChargingColor
+internal val BatteryPowerSaveColor: Color
+    @Composable get() = AlphaColors.batteryPowerSaveColor
 internal val BatteryNeutralColor: Color
-    @Composable get() = MaterialTheme.colorScheme.surfaceVariant
-internal val ChipContentDark = Color(0xFF1B1B1B)
+    @Composable get() = AlphaColors.batteryIdleColor
+internal val ChipContentDark = AlphaColors.unusedDarkChipTextColor
 
-internal val RedAccent = Color(0xFFEF5350)
-internal val PinkAccent = Color(0xFFEC407A)
-internal val OrangeAccent = Color(0xFFFFA726)
-internal val YellowAccent = Color(0xFFFFCA28)
-internal val GreenAccent = Color(0xFF66BB6A)
-internal val MintAccent = Color(0xFF26A69A)
-internal val TealAccent = Color(0xFF29B6F6)
-internal val BlueAccent = Color(0xFF42A5F5)
-internal val IndigoAccent = Color(0xFF7E57C2)
-internal val PurpleAccent = Color(0xFFAB47BC)
-internal val PausedGray = Color(0xFF8E8E93)
+internal val RedAccent: Color @Composable get() = AlphaColors.red
+internal val PinkAccent: Color @Composable get() = AlphaColors.pink
+internal val OrangeAccent: Color @Composable get() = AlphaColors.orange
+internal val YellowAccent: Color @Composable get() = AlphaColors.yellow
+internal val GreenAccent: Color @Composable get() = AlphaColors.green
+internal val MintAccent: Color @Composable get() = AlphaColors.mint
+internal val TealAccent: Color @Composable get() = AlphaColors.teal
+internal val BlueAccent: Color @Composable get() = AlphaColors.blue
+internal val IndigoAccent: Color @Composable get() = AlphaColors.indigo
+internal val PurpleAccent: Color @Composable get() = AlphaColors.purple
+internal val PausedGray: Color @Composable get() = AlphaColors.pausedGray
 
 internal val ExpandedMaxWidth = 420.dp
 
-/**
- * Dynamic Bar expand cards sit on dense glass (same material as the media sheet).
- * Content tokens track [MediaChrome] so day mode is dark-on-light-gray and night is light-on-dark.
- */
+// Card chrome lives in AlphaColors; these names stay so call sites are untouched.
 internal val SubtleGray: Color
     @Composable get() = MediaChrome.OnGlassSecondary
 internal val CardBg: Color
-    @Composable get() = MediaChrome.GlassBody
-/** Nested box inside an expand card — steps up a surface role rather than going translucent. */
+    @Composable get() = AlphaColors.chipBodyColor
 internal val DarkCard: Color
-    @Composable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+    @Composable get() = AlphaColors.chipBodyNestedColor
 internal val OnCardText: Color
-    @Composable get() = MediaChrome.OnGlass
+    @Composable get() = AlphaColors.chipTextColor
 internal val OnCardSecondary: Color
     @Composable get() = MediaChrome.OnGlassSecondary
 internal val ActionBg: Color
-    @Composable get() = MaterialTheme.colorScheme.primary
+    @Composable get() = AlphaColors.actionButtonColor
 internal val OnActionText: Color
-    @Composable get() = MaterialTheme.colorScheme.onPrimary
+    @Composable get() = AlphaColors.actionButtonTextColor
 internal val DestructiveBg: Color
-    @Composable get() = MaterialTheme.colorScheme.errorContainer
+    @Composable get() = AlphaColors.destructiveButtonColor
 internal val OnDestructiveText: Color
-    @Composable get() = MaterialTheme.colorScheme.onErrorContainer
+    @Composable get() = AlphaColors.destructiveButtonTextColor
 
 /** Hairline on glass expand shells — flat, matches [MediaChrome.GlassBorder] weight. */
 internal val CardBorderBrush: Brush
@@ -214,11 +218,11 @@ internal data class IslandGlassChrome(
  * The day surface role is a light, low-chroma grey, so the same mix reads washed-out against it —
  * push harder in day mode to keep charging / timer / call distinguishable at arm's length.
  */
-private const val IslandGlassEventTintDark = 0.45f
-private const val IslandGlassEventTintLight = 0.62f
+private const val IslandGlassEventTintDark = AlphaOpacity.eventTintAmountDark
+private const val IslandGlassEventTintLight = AlphaOpacity.eventTintAmountLight
 
 /** WCAG AA for icons and short labels at the sizes these chips use. */
-private const val MinContentContrast = 4.5
+private const val MinContentContrast = AlphaMetrics.minContentContrast
 
 /**
  * Content that stays legible on [body].
@@ -239,10 +243,10 @@ private fun contentColorOn(body: Color): Color {
             .maxByOrNull { ColorUtils.calculateContrast(it.toArgb(), bg) }!!
     if (ColorUtils.calculateContrast(best.toArgb(), bg) >= MinContentContrast) return best
     return if (
-        ColorUtils.calculateContrast(Color.White.toArgb(), bg) >=
-            ColorUtils.calculateContrast(Color.Black.toArgb(), bg)
-    ) Color.White
-    else Color.Black
+        ColorUtils.calculateContrast(AlphaColors.contrastFloorLightColor.toArgb(), bg) >=
+            ColorUtils.calculateContrast(AlphaColors.contrastFloorDarkColor.toArgb(), bg)
+    ) AlphaColors.contrastFloorLightColor
+    else AlphaColors.contrastFloorDarkColor
 }
 
 /**
@@ -303,6 +307,7 @@ internal val ShapeAlbum = RoundedCornerShape(16.dp)
 internal val ShapeChip = RoundedCornerShape(percent = 50)
 internal val ShapeCompact = RoundedCornerShape(12.dp)
 
+@Composable
 internal fun accentColorFor(event: IslandEvent): Color = eventStyleFor(event).accent
 
 /**
@@ -313,7 +318,7 @@ internal fun accentColorFor(event: IslandEvent): Color = eventStyleFor(event).ac
 @Composable
 internal fun chipContentColorOn(background: Color): Color = contentColorOn(background)
 
-internal fun darkenColor(color: Color, keep: Float = 0.35f): Color =
+internal fun darkenColor(color: Color, keep: Float = AlphaMetrics.mediaAccentDarkenKeep): Color =
     Color(
         red = color.red * keep,
         green = color.green * keep,
@@ -797,12 +802,12 @@ internal fun PendingIntent.sendWithBal(context: Context, fillIntent: Intent? = n
 internal fun IslandStackCountBadge(
     count: Int,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Color.Black,
+    backgroundColor: Color = AlphaColors.badgeBodyColor,
 ) {
     Box(
         modifier = modifier
             .background(backgroundColor, CircleShape)
-            .border(1.dp, Color.White, CircleShape)
+            .border(AlphaMetrics.chipRimWidth, AlphaColors.badgeRimColor, CircleShape)
             .padding(horizontal = 6.dp, vertical = 1.dp)
     ) {
         Text(
@@ -812,7 +817,7 @@ internal fun IslandStackCountBadge(
                 fontWeight = FontWeight.Black,
                 letterSpacing = (-0.5).sp
             ),
-            color = Color.White
+            color = AlphaColors.badgeRimColor
         )
     }
 }

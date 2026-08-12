@@ -100,6 +100,7 @@ import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
 import com.android.systemui.axdynamicbar.shared.chipContentColorOn
 import com.android.systemui.axdynamicbar.shared.sendWithBal
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
+import com.android.systemui.alpha.theme.AlphaColors
 
 private const val MAX_EXPANDED_ACTIONS = 3
 private val ThumbnailSize = 44.dp
@@ -570,10 +571,10 @@ private fun NotifAvatar(
         }
     } else {
         Box(
-            modifier = modifier.size(size).clip(ShapeIconMedium).background(accent.copy(alpha = AlphaSubtle)),
+            modifier = modifier.size(size).clip(ShapeIconMedium).background(accent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Notifications, null, tint = accent, modifier = Modifier.size(SizeIconSm))
+            Icon(Icons.Filled.Notifications, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(SizeIconSm))
         }
     }
 }
@@ -607,8 +608,8 @@ private fun CollapsedActions(
         visibleActions.take(if (hasReply) 1 else 2).forEach { action ->
             ExpressivePillButton(
                 label = action.label.toString(),
-                contentColor = accent,
-                backgroundColor = accent.copy(alpha = AlphaIconBg),
+                contentColor = AlphaColors.onAccentColor,
+                backgroundColor = accent,
                 modifier = Modifier.weight(1f),
                 onClick = {
                     try { action.action.actionIntent?.sendWithBal(context) }
@@ -710,11 +711,11 @@ private fun ExpandChip(
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = accent.copy(alpha = AlphaIconBg),
+        color = accent,
         modifier = modifier.size(36.dp),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(36.dp)) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -767,8 +768,8 @@ private fun ExpandedActions(
         visibleActions.forEach { action ->
             ExpressivePillButton(
                 label = action.label.toString(),
-                contentColor = accent,
-                backgroundColor = accent.copy(alpha = AlphaIconBg),
+                contentColor = AlphaColors.onAccentColor,
+                backgroundColor = accent,
                 modifier = Modifier.weight(1f),
                 onClick = {
                     try { action.action.actionIntent?.sendWithBal(context) }

@@ -31,6 +31,7 @@ import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
 import android.text.format.DateFormat
 import java.util.Date
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun AlarmExpanded(event: IslandEvent.Alarm, interactor: IslandActions) {
@@ -57,8 +58,8 @@ internal fun AlarmExpanded(event: IslandEvent.Alarm, interactor: IslandActions) 
             ActionChip(
                 label = stringResource(R.string.ax_dynamic_bar_dismiss),
                 icon = Icons.Filled.Close,
-                color = OrangeAccent,
-                bg = OrangeAccent.copy(alpha = AlphaIconBg),
+                color = AlphaColors.onAccentColor,
+                bg = OrangeAccent,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { interactor.dismissEvent(event) },
             )
@@ -73,11 +74,11 @@ internal fun RowScope.CompactAlarmRow(
 ) {
     Box(
         modifier =
-            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(OrangeAccent.copy(alpha = AlphaIconBg)),
+            Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(OrangeAccent),
         contentAlignment = Alignment.Center,
     ) {
         if (event.isRinging) PulsingDot(color = OrangeAccent, size = SizeIconSm)
-        else Icon(Icons.Filled.Alarm, null, tint = OrangeAccent, modifier = Modifier.size(18.dp))
+        else Icon(Icons.Filled.Alarm, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
     }
     Spacer(Modifier.width(SpaceLg))
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(SpaceXxs)) {
@@ -95,11 +96,11 @@ internal fun RowScope.CompactAlarmRow(
         Surface(
             onClick = { interactor.dismissEvent(event) },
             shape = ShapeChip,
-            color = OrangeAccent.copy(alpha = AlphaIconBg),
+            color = OrangeAccent,
         ) {
             Text(
                 stringResource(R.string.ax_dynamic_bar_dismiss),
-                color = OrangeAccent,
+                color = AlphaColors.onAccentColor,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(horizontal = SpaceLg, vertical = SpaceSm),
             )

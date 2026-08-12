@@ -80,6 +80,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun NotificationExpanded(
@@ -203,8 +204,8 @@ internal fun NotificationExpanded(
             ActionChip(
                 label = stringResource(R.string.ax_dynamic_bar_dismiss),
                 icon = Icons.Filled.Close,
-                color = accent,
-                bg = accent.copy(alpha = AlphaIconBg),
+                color = AlphaColors.onAccentColor,
+                bg = accent,
                 modifier = Modifier.weight(1f),
                 onClick = {
                     interactor.onNotificationInteraction(event.id)
@@ -260,10 +261,10 @@ private fun NotifExpandedAvatar(event: IslandEvent.Notification, size: Dp) {
             modifier = Modifier.size(size).clip(if (isRound) CircleShape else ShapeIconMedium),
         )
         else -> Box(
-            modifier = Modifier.size(size).clip(ShapeIconMedium).background(BlueAccent.copy(alpha = AlphaSubtle)),
+            modifier = Modifier.size(size).clip(ShapeIconMedium).background(BlueAccent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Notifications, null, tint = BlueAccent, modifier = Modifier.size(SizeIconSm))
+            Icon(Icons.Filled.Notifications, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(SizeIconSm))
         }
     }
 }
@@ -505,13 +506,13 @@ internal fun NotificationGroupCard(
             Box(
                 modifier = Modifier
                     .clip(ShapeChip)
-                    .background(accent.copy(alpha = AlphaSubtle))
+                    .background(accent)
                     .padding(horizontal = SpaceMd, vertical = SpaceXs),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "${notifications.size}",
-                    color = accent,
+                    color = AlphaColors.onAccentColor,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -628,8 +629,8 @@ private fun GroupedNotificationRow(
                 ) {
                     ActionChip(
                         label = stringResource(R.string.ax_dynamic_bar_open),
-                        color = accent,
-                        bg = accent.copy(alpha = AlphaIconBg),
+                        color = AlphaColors.onAccentColor,
+                        bg = accent,
                         modifier = Modifier.weight(1f),
                         onClick = {
                             try {
@@ -687,13 +688,13 @@ internal fun RowScope.CompactNotificationRow(event: IslandEvent.Notification) {
     }
         ?: Box(
             modifier =
-                Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent.copy(alpha = AlphaIconBg)),
+                Modifier.size(SizeCompactIcon).clip(ShapeCompact).background(BlueAccent),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Filled.Notifications,
                 null,
-                tint = BlueAccent,
+                tint = AlphaColors.onAccentColor,
                 modifier = Modifier.size(18.dp),
             )
         }

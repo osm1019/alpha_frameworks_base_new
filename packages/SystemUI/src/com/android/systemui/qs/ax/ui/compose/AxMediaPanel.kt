@@ -131,6 +131,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.systemui.alpha.theme.AlphaColors
 import kotlin.math.roundToInt
 import com.android.compose.animation.Expandable as ExpandableContainer
 import com.android.compose.animation.rememberExpandableController
@@ -308,8 +309,8 @@ fun AxMediaPanel(
         pagerIndicator = { pagerState ->
             PagerDots(
                 pagerState = pagerState,
-                activeColor = Color.White,
-                nonActiveColor = Color.White.copy(alpha = 0.42f),
+                activeColor = AlphaColors.mediaPageDotColor,
+                nonActiveColor = AlphaColors.mediaPageDotInactiveColor,
                 dotSize = 3.dp,
                 spaceSize = 3.dp,
                 modifier =
@@ -400,7 +401,7 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 if (session != null) {
-                    if (isLockscreen) MediaChrome.OnGlass else Color.White
+                    if (isLockscreen) MediaChrome.OnGlass else AlphaColors.mediaArtButtonColor
                 } else {
                     tileForeground
                 },
@@ -445,8 +446,8 @@ private fun AxMediaCard(
                     elevation = MediaChrome.LockscreenGlassElevation,
                     shape = shape,
                     clip = false,
-                    ambientColor = Color.Black.copy(alpha = 0.30f),
-                    spotColor = Color.Black.copy(alpha = 0.42f),
+                    ambientColor = AlphaColors.cardShadowAmbientColor,
+                    spotColor = AlphaColors.cardShadowSpotColor,
                 )
                 .clip(shape)
                 // Waveform rims the card with the same sweep it draws the band in; the other

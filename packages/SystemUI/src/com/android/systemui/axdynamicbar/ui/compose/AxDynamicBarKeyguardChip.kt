@@ -94,6 +94,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
@@ -508,7 +509,6 @@ private fun RowScope.KeyguardMediaChipContent(
     val motionScheme = MaterialTheme.motionScheme
     val minimal = mediaStyle == AxLockscreenMediaStyle.MINIMAL
     val glass = mediaStyle == AxLockscreenMediaStyle.GLASS
-    val onAccent = chipContentColorOn(accent)
     val skipBg =
         if (minimal || glass) Color.Transparent else MediaChrome.skipBackground(accent)
     // Waveform's skip plate is a blend of the body and the accent, not the accent — colour the
@@ -516,7 +516,8 @@ private fun RowScope.KeyguardMediaChipContent(
     val skipIcon =
         if (minimal || glass) MediaChrome.ControlBare else chipContentColorOn(skipBg)
     val playBg = if (minimal) Color.Transparent else accent
-    val playIcon = if (minimal) MediaChrome.ControlBare else onAccent
+    // Filled accent behind the glyph -> near-white by rule, matching the expand card's play.
+    val playIcon = if (minimal) MediaChrome.ControlBare else AlphaColors.onAccentColor
     // Same hairline the expand card's play button carries — one control, two surfaces.
     val playBorder =
         if (glass) {

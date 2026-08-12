@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.shared.*
@@ -132,9 +133,9 @@ private fun CPRBatteryIcon(
 ) {
     val progress = (level ?: 0) / 100f
     val fillColor = when {
-        progress < 0.30f -> Color(0xCCF44336)
-        progress < 0.60f -> Color(0xCCFF9800)
-        else -> Color(0xCC4CAF50)
+        progress < 0.30f -> AlphaColors.chargeRingLowColor
+        progress < 0.60f -> AlphaColors.chargeRingMidColor
+        else -> AlphaColors.chargeRingHighColor
     }
 
     val transition = rememberInfiniteTransition(label = "charging_pulse")
@@ -241,13 +242,13 @@ internal fun RowScope.CompactChargingRow(event: IslandEvent.Charging) {
         modifier = Modifier
             .size(SizeCompactIcon)
             .clip(ShapeCompact)
-            .background(accent.copy(alpha = AlphaIconBg)),
+            .background(accent),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             Icons.Filled.BatteryChargingFull,
             null,
-            tint = accent,
+            tint = AlphaColors.onAccentColor,
             modifier = Modifier.size(18.dp),
         )
     }

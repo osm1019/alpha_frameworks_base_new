@@ -36,6 +36,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.flashlight.ui.composable.VerticalFlashlightSlider
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 @Composable
 internal fun RowScope.TorchPill(event: IslandEvent.Torch) {
@@ -77,11 +78,11 @@ internal fun TorchExpanded(
         },
         trailing = {
             CircleButton(
-                color = RedAccent.copy(alpha = AlphaSubtle),
+                color = RedAccent,
                 size = SizeButton,
                 onClick = { interactor.toggleTorch() },
             ) {
-                Icon(Icons.Filled.FlashlightOff, null, tint = RedAccent, modifier = Modifier.size(22.dp))
+                Icon(Icons.Filled.FlashlightOff, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(22.dp))
             }
         },
         actions = if (event.supportsLevel) {

@@ -62,6 +62,7 @@ import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
 import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
+import com.android.systemui.alpha.theme.AlphaColors
 
 // Compact stack card — keep controls usable but shave vertical bulk vs full-sheet media.
 private val AlbumArtSize = 56.dp
@@ -187,12 +188,12 @@ internal fun MediaExpanded(
             } ?: Surface(
                 modifier = Modifier.size(SizeAlbumSm),
                 shape = ShapeLg,
-                color = accent.copy(alpha = AlphaSubtle),
+                color = accent,
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
                         Icons.Filled.MusicNote, null,
-                        tint = accent,
+                        tint = AlphaColors.onAccentColor,
                         modifier = Modifier.size(SpacePanel),
                     )
                 }
@@ -614,10 +615,10 @@ internal fun RowScope.CompactMediaRow(
         Box(
             modifier = Modifier.size(SizeCompactIcon)
                 .clip(ShapeCompact)
-                .background(accent.copy(alpha = AlphaIconBg)),
+                .background(accent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.MusicNote, null, tint = accent, modifier = Modifier.size(20.dp))
+            Icon(Icons.Filled.MusicNote, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(20.dp))
         }
     }
     Spacer(Modifier.width(SpaceLg))
