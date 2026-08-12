@@ -303,7 +303,9 @@ public class KeyguardIndicationControllerBaseTest extends SysuiTestCase {
                 mDeviceEntryFingerprintAuthInteractor,
                 mDeviceEntryFaceAuthInteractor,
                 mUserLogoutInteractor,
-                () -> mSecureLockDeviceInteractor
+                () -> mSecureLockDeviceInteractor,
+                mock(com.android.systemui.statusbar.notification.collection.notifcollection
+                        .CommonNotifCollection.class)
         );
         mController.init();
         mController.setIndicationArea(mIndicationArea);

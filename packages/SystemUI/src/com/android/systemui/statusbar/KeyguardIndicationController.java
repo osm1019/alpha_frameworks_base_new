@@ -18,6 +18,8 @@ package com.android.systemui.statusbar;
 
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.KEYGUARD_MANAGEMENT_DISCLOSURE;
 import static android.app.admin.DevicePolicyResources.Strings.SystemUi.KEYGUARD_NAMED_MANAGEMENT_DISCLOSURE;
+import static android.service.notification.NotificationListenerService.REASON_CANCEL;
+import static android.service.notification.NotificationListenerService.REASON_CANCEL_ALL;
 import static android.hardware.biometrics.BiometricFaceConstants.FACE_ACQUIRED_START;
 import static android.hardware.biometrics.BiometricFaceConstants.FACE_ACQUIRED_TOO_DARK;
 import static android.hardware.biometrics.BiometricFaceConstants.FACE_ERROR_TIMEOUT;
@@ -55,6 +57,7 @@ import static com.android.systemui.plugins.FalsingManager.LOW_PENALTY;
 import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 
 import android.app.AlarmManager;
+import android.app.Notification;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -76,6 +79,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.Pair;
@@ -98,6 +102,9 @@ import com.android.settingslib.fuelgauge.BatteryStatus;
 import com.android.systemui.Flags;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.biometrics.FaceHelpMessageDeferral;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.biometrics.FaceHelpMessageDeferralFactory;
 import com.android.systemui.bouncer.domain.interactor.AlternateBouncerInteractor;
 import com.android.systemui.bouncer.domain.interactor.BouncerMessageInteractor;
@@ -170,6 +177,12 @@ public class KeyguardIndicationController {
             "com.google.android.ambientindication.action.AMBIENT_INDICATION_HIDE";
     private static final String PERMISSION_AMBIENT_INDICATION =
             "com.google.android.ambientindication.permission.AMBIENT_INDICATION";
+    /** ASI ambient-music channel + standalone Pixel Now Playing package. */
+    private static final String PKG_ASI = "com.google.android.as";
+    private static final String PKG_NOW_PLAYING = "com.google.android.apps.pixel.nowplaying";
+    /** Alpha software poller FGS — not a song match notification. */
+    private static final String PKG_NP_SOFTWARE = "com.alpha.nowplaying.software";
+    private static final String CHANNEL_AMBIENT_MUSIC = "ambientmusic";
     private static final String EXTRA_AMBIENT_TEXT =
             "com.google.android.ambientindication.extra.TEXT";
     private static final String EXTRA_AMBIENT_SONG_TITLE =
@@ -232,6 +245,10 @@ public class KeyguardIndicationController {
     /** Song title for Ambient Now Playing, shown in the keyguard indication area (Charged). */
     private CharSequence mNowPlayingText;
     private BroadcastReceiver mAmbientIndicationReceiver;
+    private CommonNotifCollection mNotifCollection;
+    private NotifCollectionListener mNowPlayingNotifListener;
+    /** Active Now Playing notification keys — strip clears when this set empties after dismiss. */
+    private final java.util.HashSet<String> mNowPlayingNotifKeys = new java.util.HashSet<>();
     private CharSequence mTrustAgentErrorMessage;
     private CharSequence mBiometricMessage;
     private CharSequence mBiometricMessageFollowUp;
@@ -406,10 +423,12 @@ public class KeyguardIndicationController {
             DeviceEntryFingerprintAuthInteractor deviceEntryFingerprintAuthInteractor,
             DeviceEntryFaceAuthInteractor deviceEntryFaceAuthInteractor,
             UserLogoutInteractor userLogoutInteractor,
-            Lazy<SecureLockDeviceInteractor> secureLockDeviceInteractor
+            Lazy<SecureLockDeviceInteractor> secureLockDeviceInteractor,
+            CommonNotifCollection notifCollection
     ) {
         mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
+        mNotifCollection = notifCollection;
         mDevicePolicyManager = devicePolicyManager;
         mKeyguardStateController = keyguardStateController;
         mStatusBarStateController = statusBarStateController;
@@ -564,6 +583,7 @@ public class KeyguardIndicationController {
             mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, intentFilter);
         }
         registerAmbientIndicationReceiver();
+        registerNowPlayingNotifListener();
 
         collectFlow(mIndicationArea,
                 mBiometricMessageInteractor.getCoExFaceAcquisitionMsgIdsToShow(),
@@ -600,6 +620,142 @@ public class KeyguardIndicationController {
             }
             mAmbientIndicationReceiver = null;
         }
+        if (mNowPlayingNotifListener != null && mNotifCollection != null) {
+            mNotifCollection.removeCollectionListener(mNowPlayingNotifListener);
+            mNowPlayingNotifListener = null;
+        }
+        mNowPlayingNotifKeys.clear();
+    }
+
+    /**
+     * When the user swipes away the Now Playing notification, ASI often does not send
+     * AMBIENT_INDICATION_HIDE. Only clear the keyguard strip on explicit user cancel —
+     * ranking updates/reposts use remove+add and must not wipe the strip mid-song.
+     */
+    private void registerNowPlayingNotifListener() {
+        if (mNotifCollection == null || mNowPlayingNotifListener != null) {
+            return;
+        }
+        mNowPlayingNotifListener = new NotifCollectionListener() {
+            @Override
+            public void onEntryAdded(@NonNull NotificationEntry entry) {
+                trackNowPlayingNotif(entry, /* present= */ true, /* userDismissed= */ false);
+            }
+
+            @Override
+            public void onEntryUpdated(NotificationEntry entry) {
+                trackNowPlayingNotif(entry, /* present= */ true, /* userDismissed= */ false);
+            }
+
+            @Override
+            public void onEntryRemoved(@NonNull NotificationEntry entry, int reason) {
+                final boolean userDismissed =
+                        reason == REASON_CANCEL || reason == REASON_CANCEL_ALL;
+                trackNowPlayingNotif(entry, /* present= */ false, userDismissed);
+            }
+        };
+        mNotifCollection.addCollectionListener(mNowPlayingNotifListener);
+    }
+
+    private void trackNowPlayingNotif(
+            NotificationEntry entry, boolean present, boolean userDismissed) {
+        if (entry == null || entry.getSbn() == null) {
+            return;
+        }
+        if (!isNowPlayingNotification(entry.getSbn())) {
+            return;
+        }
+        final String key = entry.getKey();
+        final CharSequence notifText =
+                present ? extractNowPlayingTextFromNotif(entry.getSbn()) : null;
+        mHandler.post(() -> {
+            if (present) {
+                mNowPlayingNotifKeys.add(key);
+                // ASI sometimes sends AMBIENT_INDICATION_SHOW with empty TEXT while
+                // the song notif has a real title. Prefer notif title for the strip.
+                if (!TextUtils.isEmpty(notifText)
+                        && (TextUtils.isEmpty(mNowPlayingText)
+                                || !TextUtils.equals(mNowPlayingText, notifText))) {
+                    mNowPlayingText = notifText;
+                    updateNowPlayingIndication();
+                }
+            } else {
+                mNowPlayingNotifKeys.remove(key);
+                // System reposts/updates must not clear the strip. Only user swipe/clear-all.
+                if (userDismissed
+                        && mNowPlayingNotifKeys.isEmpty()
+                        && !TextUtils.isEmpty(mNowPlayingText)) {
+                    mNowPlayingText = null;
+                    updateNowPlayingIndication();
+                }
+            }
+        });
+    }
+
+    /**
+     * Song match notifications only — not the software FGS placeholder.
+     */
+    private static boolean isNowPlayingNotification(StatusBarNotification sbn) {
+        final String pkg = sbn.getPackageName();
+        if (pkg == null || PKG_NP_SOFTWARE.equals(pkg)) {
+            return false;
+        }
+        if (PKG_NOW_PLAYING.equals(pkg)) {
+            return true;
+        }
+        if (PKG_ASI.equals(pkg)) {
+            final Notification n = sbn.getNotification();
+            final String channel = n != null ? n.getChannelId() : null;
+            if (channel == null) {
+                return false;
+            }
+            final String ch = channel.toLowerCase(java.util.Locale.US);
+            return ch.contains(CHANNEL_AMBIENT_MUSIC)
+                    || ch.contains("musicnotification")
+                    || ch.contains("now_playing");
+        }
+        return false;
+    }
+
+    /**
+     * Build "Title • Artist" (or title alone) from a Now Playing notification.
+     * Handles "Song by Artist" and "Song - Artist" styles used by ASI / NP app.
+     */
+    @Nullable
+    private static CharSequence extractNowPlayingTextFromNotif(StatusBarNotification sbn) {
+        final Notification n = sbn.getNotification();
+        if (n == null || n.extras == null) {
+            return null;
+        }
+        CharSequence titleCs = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence textCs = n.extras.getCharSequence(Notification.EXTRA_TEXT);
+        if (TextUtils.isEmpty(titleCs) && TextUtils.isEmpty(textCs)) {
+            return null;
+        }
+        final String title = titleCs != null ? titleCs.toString().trim() : "";
+        final String text = textCs != null ? textCs.toString().trim() : "";
+        // "Song by Artist"
+        final java.util.regex.Matcher by =
+                java.util.regex.Pattern.compile(
+                                "(.+?)\\s+by\\s+(.+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(title);
+        if (by.matches()) {
+            return by.group(1).trim() + " • " + by.group(2).trim();
+        }
+        // "Song - Artist" / en-dash
+        final String[] dash = title.split("\\s[-–]\\s", 2);
+        if (dash.length == 2
+                && !dash[0].isEmpty()
+                && !dash[1].isEmpty()) {
+            return dash[0].trim() + " • " + dash[1].trim();
+        }
+        if (!title.isEmpty() && !text.isEmpty() && !title.equals(text)) {
+            return title + " • " + text;
+        }
+        if (!title.isEmpty()) {
+            return title;
+        }
+        return text.isEmpty() ? null : text;
     }
 
     private void registerAmbientIndicationReceiver() {

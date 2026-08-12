@@ -209,6 +209,9 @@ constructor(
                 SHOW
             // Keyguard state doesn't matter if the keyguard is not showing.
             !isLockedOrLocking -> SHOW
+            // Pixel-style Now Playing: song UI is AmbientIndication / dynamic bar, not a
+            // sticky lockscreen row. Hide software FGS + ASI song notifs on keyguard.
+            shouldHideNowPlayingOnKeyguard(entry) -> HIDE
             // Notifications not allowed on the lockscreen, always hide.
             !lockscreenUserManager.shouldShowLockscreenNotifications() -> HIDE
             // secure lock device mode is enabled always disallow
@@ -222,6 +225,10 @@ constructor(
             shouldHideIfEntrySilent(entry) -> HIDE
             else -> SHOW
         }
+
+    /** Hide only the software-ST poller FGS; the ASI song notification stays visible. */
+    private fun shouldHideNowPlayingOnKeyguard(entry: NotificationEntry): Boolean =
+        entry.sbn.packageName == PKG_NP_SOFTWARE
 
     private fun shouldHideIfEntrySilent(entry: PipelineEntry): VisState =
         when {
@@ -296,6 +303,8 @@ constructor(
 }
 
 private typealias VisState = Boolean
+
+private const val PKG_NP_SOFTWARE = "com.alpha.nowplaying.software"
 
 private const val SHOW: VisState = false
 private const val HIDE: VisState = true
