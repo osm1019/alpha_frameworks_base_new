@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Optional;
 
 import javax.inject.Inject;
+import javax.inject.Provider;
 
 /**
  * Class to manage everything related to assist in SystemUI.
@@ -105,6 +106,15 @@ public class AssistManager {
         void onAttentionLost();
     }
 
+    /**
+     * Optional receiver for AGSA / NGA UI hint bundles delivered via
+     * {@link IVoiceInteractionSessionListener#onSetUiHints}. Pixel SystemUIGoogle
+     * binds {@code NgaMessageHandler} here.
+     */
+    public interface UiHintsReceiver {
+        void onUiHints(Bundle hints);
+    }
+
     private static final String TAG = "AssistManager";
 
     // Note that VERBOSE logging may leak PII (e.g. transcription contents).
@@ -151,7 +161,9 @@ public class AssistManager {
     private final AssistDisclosure mAssistDisclosure;
     private final PhoneStateMonitor mPhoneStateMonitor;
     private final LauncherProxyService mLauncherProxyService;
-    private final UiController mUiController;
+    private final DefaultUiController mDefaultUiController;
+    private final Optional<Provider<UiController>> mUiControllerOverride;
+    private volatile UiController mUiController;
     protected final Lazy<SysUiState> mSysUiState;
     protected final AssistLogger mAssistLogger;
     private final UserTracker mUserTracker;
@@ -162,6 +174,7 @@ public class AssistManager {
     private final AssistInteractor mInteractor;
     private final Handler mBgHandler;
     private final Optional<InvocationEffectEnabler> mOptionalInvocationEffectEnabler;
+    private final Optional<Provider<UiHintsReceiver>> mOptionalUiHintsReceiver;
 
     private final DeviceProvisionedController mDeviceProvisionedController;
 
@@ -199,6 +212,7 @@ public class AssistManager {
             LauncherProxyService launcherProxyService,
             Lazy<SysUiState> sysUiState,
             DefaultUiController defaultUiController,
+            Optional<Provider<UiController>> uiControllerOverride,
             AssistLogger assistLogger,
             @Main Handler uiHandler,
             @Background Handler bgHandler,
@@ -209,7 +223,8 @@ public class AssistManager {
             ActivityManager activityManager,
             AssistInteractor interactor,
             WindowManager windowManager,
-            Optional<InvocationEffectEnabler> optionalInvocationEffectEnabler) {
+            Optional<InvocationEffectEnabler> optionalInvocationEffectEnabler,
+            Optional<Provider<UiHintsReceiver>> optionalUiHintsReceiver) {
         mContext = context;
         mDeviceProvisionedController = controller;
         mCommandQueue = commandQueue;
@@ -226,11 +241,16 @@ public class AssistManager {
         mInteractor = interactor;
         mBgHandler = bgHandler;
         mOptionalInvocationEffectEnabler = optionalInvocationEffectEnabler;
+        mOptionalUiHintsReceiver = optionalUiHintsReceiver;
 
         registerVoiceInteractionSessionListener();
         registerVisualQueryRecognitionStatusListener();
 
-        mUiController = defaultUiController;
+        // Pixel slim NGA (SystemUIGoogle) binds PixelAssistUiController as override. Resolved
+        // on first invocation, not here: SystemUI builds AssistManager during startup (via
+        // CentralSurfacesCommandQueueCallbacks), and the Pixel controller inflates a window.
+        mDefaultUiController = defaultUiController;
+        mUiControllerOverride = uiControllerOverride;
 
         mSysUiState = sysUiState;
 
@@ -291,6 +311,9 @@ public class AssistManager {
                                             SYSUI_STATE_ASSIST_GESTURE_CONSTRAINED,
                                             hints.getBoolean(CONSTRAINED_KEY, false))
                                     .commitUpdate(mDisplayTracker.getDefaultDisplayId());
+                        } else {
+                            // Pixel NGA: forward remaining AGSA hints (config/clear/…).
+                            notifyUiHints(hints);
                         }
                     }
 
@@ -372,9 +395,46 @@ public class AssistManager {
         mAssistOverrideInvocationTypes = invocationTypes;
     }
 
+    /** Runs on a binder thread — a throw here would take SystemUI down. */
+    private void notifyUiHints(Bundle hints) {
+        if (!mOptionalUiHintsReceiver.isPresent()) {
+            return;
+        }
+        try {
+            mOptionalUiHintsReceiver.get().get().onUiHints(hints);
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to deliver UI hints", t);
+        }
+    }
+
+    /**
+     * The Pixel override if one is bound and builds cleanly, otherwise the AOSP controller.
+     * A broken override must not take SystemUI down with it.
+     */
+    private UiController getUiController() {
+        UiController controller = mUiController;
+        if (controller != null) {
+            return controller;
+        }
+        synchronized (this) {
+            if (mUiController == null) {
+                controller = mDefaultUiController;
+                if (mUiControllerOverride.isPresent()) {
+                    try {
+                        controller = mUiControllerOverride.get().get();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "Assist UI override failed to load; using default", t);
+                    }
+                }
+                mUiController = controller;
+            }
+            return mUiController;
+        }
+    }
+
     /** Called when the user is performing an assistant invocation action (e.g. Active Edge) */
     public void onInvocationProgress(int type, float progress) {
-        mUiController.onInvocationProgress(type, progress);
+        getUiController().onInvocationProgress(type, progress);
     }
 
     /**
@@ -383,7 +443,7 @@ public class AssistManager {
      * zero.
      */
     public void onGestureCompletion(float velocity) {
-        mUiController.onGestureCompletion(velocity);
+        getUiController().onGestureCompletion(velocity);
     }
 
     public void hideAssist() {

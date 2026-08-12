@@ -65,4 +65,18 @@ public abstract class AssistModule {
 
     @BindsOptionalOf
     abstract InvocationEffectEnabler optionalInvocationEffectEnabler();
+
+    /**
+     * Optional override for {@link AssistManager.UiController}. SystemUIGoogle binds
+     * Pixel slim NGA {@code PixelAssistUiController} here; AOSP leaves the Optional
+     * empty and AssistManager falls back to {@link DefaultUiController}.
+     */
+    @BindsOptionalOf
+    abstract AssistManager.UiController optionalAssistUiController();
+
+    /**
+     * Optional AGSA UI-hints receiver (Pixel NGA {@code NgaMessageHandler}).
+     */
+    @BindsOptionalOf
+    abstract AssistManager.UiHintsReceiver optionalUiHintsReceiver();
 }
