@@ -92,6 +92,27 @@ constructor(
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Lazily, null)
 
+    // Doze forces IslandState.HIDDEN, which is right for the status bar pill and wrong for the
+    // keyguard chip: without this the chip drops to the battery fallback the moment AOD starts.
+    val keyguardChipState: StateFlow<AxDynamicBarChipState?> =
+        combine(interactor.uiState, interactor.isDozing) { uiState, dozing ->
+            val visible =
+                uiState.shouldShow ||
+                    (dozing && !uiState.manuallyHidden && uiState.events.isNotEmpty())
+            if (!visible) return@combine null
+            val alert = uiState.notificationAlert
+            val topEvent = uiState.topEvent ?: alert ?: return@combine null
+            AxDynamicBarChipState(
+                event = topEvent,
+                eventCount = uiState.activeEvents.size,
+                pinnedIndex = uiState.pinnedEventIndex,
+                allEvents = uiState.events,
+                notificationAlert = alert,
+            )
+        }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Lazily, null)
+
     val isEnabled: StateFlow<Boolean> = interactor.settings.isEnabled
     val isKeyguardEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardEnabled
     val keyguardBatteryChipMode: StateFlow<Int> = interactor.settings.keyguardBatteryChipMode
