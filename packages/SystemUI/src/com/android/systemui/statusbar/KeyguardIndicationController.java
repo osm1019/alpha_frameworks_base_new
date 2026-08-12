@@ -828,6 +828,7 @@ public class KeyguardIndicationController {
                     new KeyguardIndication.Builder()
                             .setMessage(mNowPlayingText)
                             .setTextColor(getInitialTextColorState())
+                            .setIcon(mContext.getDrawable(R.drawable.ic_now_playing_note))
                             .setMinVisibilityMillis(IMPORTANT_MSG_MIN_DURATION)
                             .build(),
                     true);

@@ -65,6 +65,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
+            android:drawablePadding="6dp"
             android:minHeight="@dimen/keyguard_indication_text_min_height"
             android:layout_gravity="center_horizontal"
             android:paddingStart="@dimen/keyguard_indication_text_padding"
