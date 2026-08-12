@@ -85,7 +85,9 @@ constructor(
         if (isTypeEnabled("app_switch")) appTracking.startListening()
         if (isTypeEnabled("torch")) torch.startListening()
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
+        if (isTypeEnabled("media") || isTypeEnabled("sports") || isTypeEnabled("now_playing")) {
+            smartspace.startListening()
+        }
     }
 
     fun stopListening() {
@@ -130,8 +132,9 @@ constructor(
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
         else biometric.stopListening()
 
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
-        else smartspace.stopListening()
+        if (isTypeEnabled("media") || isTypeEnabled("sports") || isTypeEnabled("now_playing")) {
+            smartspace.startListening()
+        } else smartspace.stopListening()
     }
 
     private fun syncDisabledTypes() {
@@ -211,7 +214,7 @@ constructor(
                 a + listOfNotNull(
                     appSwitch?.takeIf { isTypeEnabled("app_switch") },
                     audioRec?.takeIf { isTypeEnabled("audio_recording") },
-                    nowPlaying?.takeIf { isTypeEnabled("media") },
+                    nowPlaying?.takeIf { isTypeEnabled("now_playing") },
                 )
             }
         val transientGroup = combine(midGroup, lowGroup) { mid, low -> mid + low }
