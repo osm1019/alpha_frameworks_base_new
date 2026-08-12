@@ -79,7 +79,9 @@ constructor(
         if (isTypeEnabled("app_switch")) appTracking.startListening()
         if (isTypeEnabled("torch")) torch.startListening()
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
+        if (isTypeEnabled("media") || isTypeEnabled("sports") || isTypeEnabled("now_playing")) {
+            smartspace.startListening()
+        }
     }
 
     fun stopListening() {
@@ -124,8 +126,9 @@ constructor(
         if (isTypeEnabled("biometric_unlock")) biometric.startListening()
         else biometric.stopListening()
 
-        if (isTypeEnabled("media") || isTypeEnabled("sports")) smartspace.startListening()
-        else smartspace.stopListening()
+        if (isTypeEnabled("media") || isTypeEnabled("sports") || isTypeEnabled("now_playing")) {
+            smartspace.startListening()
+        } else smartspace.stopListening()
     }
 
     private fun syncDisabledTypes() {
@@ -195,17 +198,24 @@ constructor(
                     clipboard?.takeIf { isTypeEnabled("clipboard") },
                 )
             }
+        // Both sources carry id "now_playing"; keep one so the chip never lists it twice.
+        val nowPlayingGroup = combine(
+            smartspace.nowPlayingEvent,
+            notification.nowPlayingEvent,
+        ) { ql, notif ->
+            (ql ?: notif)?.takeIf { isTypeEnabled("now_playing") }
+        }
         val lowGroup =
             combine(
                 lowGroupA,
                 appTracking.appSwitchEvent,
                 notification.audioRecordingEvent,
-                smartspace.nowPlayingEvent,
+                nowPlayingGroup,
             ) { a, appSwitch, audioRec, nowPlaying ->
                 a + listOfNotNull(
                     appSwitch?.takeIf { isTypeEnabled("app_switch") },
                     audioRec?.takeIf { isTypeEnabled("audio_recording") },
-                    nowPlaying?.takeIf { isTypeEnabled("media") },
+                    nowPlaying,
                 )
             }
         val transientGroup = combine(midGroup, lowGroup) { mid, low -> mid + low }
