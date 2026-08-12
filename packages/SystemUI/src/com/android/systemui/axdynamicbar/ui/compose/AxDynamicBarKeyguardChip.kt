@@ -103,6 +103,11 @@ private val ActionSize = SpacePanel
 private val ActionIconSize = SizeBadge
 private val BatteryIconSize = ChipHeight - SpaceXxl
 private val CountBadgeHeight = ChipHeight / 2
+private val ChipMaxWidth = 260.dp
+private val ChipMaxWidthWithBattery = 190.dp
+
+private fun hasBatteryChip(mode: Int, info: KeyguardBatteryInfo): Boolean =
+    mode > 0 && (mode != 1 || info.isCharging)
 
 @Composable
 private fun rememberChargingParts(batteryString: String): List<String> {
@@ -196,63 +201,77 @@ fun AxDynamicBarKeyguardChip(
                 },
         ) {
             val chipState = state
-            if (chipState != null) {
-                val displayEvent = chipState.notificationAlert ?: chipState.event
+            val showBattery = hasBatteryChip(keyguardBatteryChipMode, batteryInfo)
 
-                AnimatedContent(
-                    targetState = displayEvent,
-                    transitionSpec = {
-                        (fadeIn(motionScheme.defaultEffectsSpec()) + scaleIn(
-                            initialScale = 0.95f,
-                            animationSpec = motionScheme.defaultSpatialSpec(),
-                        )) togetherWith (fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(
-                            targetScale = 0.95f,
-                            animationSpec = motionScheme.fastSpatialSpec(),
-                        )) using SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() })
-                    },
-                    contentKey = { it::class.simpleName },
-                    label = "keyguard_chip_event",
-                ) { event ->
-                    val rawAccent = chipAccentColorFor(event)
-                    val accent by animateColorAsState(
-                        rawAccent,
-                        MaterialTheme.motionScheme.fastEffectsSpec(),
-                        label = "kg_accent",
-                    )
-                    val contentColor by animateColorAsState(
-                        chipContentColorOn(rawAccent),
-                        MaterialTheme.motionScheme.fastEffectsSpec(),
-                        label = "kg_content",
-                    )
-                    val rawProgress = chipProgressFor(event)
-                    val progressTarget = rawProgress ?: 0f
-                    val progressAnim = remember { Animatable(progressTarget) }
-                    LaunchedEffect(progressTarget) {
-                        if (abs(progressTarget - progressAnim.value) > 0.05f) {
-                            progressAnim.animateTo(progressTarget, tween(300, easing = FastOutSlowInEasing))
-                        } else {
-                            progressAnim.snapTo(progressTarget)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (chipState != null) {
+                    val displayEvent = chipState.notificationAlert ?: chipState.event
+
+                    AnimatedContent(
+                        targetState = displayEvent,
+                        transitionSpec = {
+                            (fadeIn(motionScheme.defaultEffectsSpec()) + scaleIn(
+                                initialScale = 0.95f,
+                                animationSpec = motionScheme.defaultSpatialSpec(),
+                            )) togetherWith (fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(
+                                targetScale = 0.95f,
+                                animationSpec = motionScheme.fastSpatialSpec(),
+                            )) using SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() })
+                        },
+                        contentKey = { it::class.simpleName },
+                        label = "keyguard_chip_event",
+                    ) { event ->
+                        val rawAccent = chipAccentColorFor(event)
+                        val accent by animateColorAsState(
+                            rawAccent,
+                            MaterialTheme.motionScheme.fastEffectsSpec(),
+                            label = "kg_accent",
+                        )
+                        val contentColor by animateColorAsState(
+                            chipContentColorOn(rawAccent),
+                            MaterialTheme.motionScheme.fastEffectsSpec(),
+                            label = "kg_content",
+                        )
+                        val rawProgress = chipProgressFor(event)
+                        val progressTarget = rawProgress ?: 0f
+                        val progressAnim = remember { Animatable(progressTarget) }
+                        LaunchedEffect(progressTarget) {
+                            if (abs(progressTarget - progressAnim.value) > 0.05f) {
+                                progressAnim.animateTo(progressTarget, tween(300, easing = FastOutSlowInEasing))
+                            } else {
+                                progressAnim.snapTo(progressTarget)
+                            }
                         }
-                    }
-                    val progress = if (rawProgress != null) progressAnim.value else null
+                        val progress = if (rawProgress != null) progressAnim.value else null
 
-                    KeyguardChipBody(
-                        event = event,
-                        accent = accent,
-                        contentColor = contentColor,
-                        progress = progress,
-                        eventCount = chipState.eventCount,
-                        viewModel = viewModel,
-                        batteryString = batteryString,
-                    )
+                        KeyguardChipBody(
+                            event = event,
+                            accent = accent,
+                            contentColor = contentColor,
+                            progress = progress,
+                            eventCount = chipState.eventCount,
+                            viewModel = viewModel,
+                            batteryString = batteryString,
+                            maxWidth = if (showBattery) ChipMaxWidthWithBattery else ChipMaxWidth,
+                        )
+                    }
                 }
-            } else {
-                KeyguardBatteryChip(
-                    batteryInfo,
-                    keyguardBatteryChipMode,
-                    batteryString,
-                    modifier,
-                )
+
+                // Battery rides alongside the event instead of replacing it. It keeps the full
+                // charging string on its own and shrinks to icon + level when sharing the line.
+                if (showBattery) {
+                    if (chipState != null) {
+                        Spacer(Modifier.width(SpaceXs))
+                        KeyguardBatteryChipCompact(batteryInfo)
+                    } else {
+                        KeyguardBatteryChip(
+                            batteryInfo,
+                            keyguardBatteryChipMode,
+                            batteryString,
+                            modifier,
+                        )
+                    }
+                }
             }
         }
     }
@@ -267,6 +286,7 @@ private fun KeyguardChipBody(
     eventCount: Int,
     viewModel: AxDynamicBarChipViewModel,
     batteryString: String = "",
+    maxWidth: Dp = ChipMaxWidth,
 ) {
     val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
@@ -279,7 +299,7 @@ private fun KeyguardChipBody(
         Row(
             modifier = Modifier
                 .height(dynamicHeight)
-                .widthIn(min = 48.dp, max = 260.dp)
+                .widthIn(min = 48.dp, max = maxWidth)
                 .clip(ChipShape)
                 .background(accent)
                 .animateContentSize(motionScheme.defaultSpatialSpec())
@@ -533,6 +553,38 @@ private fun KeyguardChipBody(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun KeyguardBatteryChipCompact(info: KeyguardBatteryInfo) {
+    val accent = when {
+        info.isCharging -> BatteryChargingColor
+        info.isPowerSave -> BatteryPowerSaveColor
+        else -> BatteryNeutralColor
+    }
+    val contentColor = chipContentColorOn(accent)
+
+    Row(
+        modifier = Modifier
+            .height(ChipHeight)
+            .clip(ChipShape)
+            .background(accent)
+            .padding(horizontal = SpaceSm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (info.isCharging) {
+            AnimatedChargingBoltIcon(info.level, contentColor, BatteryIconSize)
+        } else {
+            AnimatedBatteryFillIcon(info.level, contentColor, BatteryIconSize)
+        }
+        Spacer(Modifier.width(SpaceXxs))
+        Text(
+            "${info.level}%",
+            style = PillPrimary,
+            color = contentColor,
+            maxLines = 1,
+        )
     }
 }
 
