@@ -111,6 +111,10 @@ constructor(
         _sportsEvents.value = _sportsEvents.value.filter { it.key != key }
     }
 
+    fun clearNowPlaying() {
+        _nowPlayingEvent.value = null
+    }
+
     private fun parseGameStatus(status: String, detail: String): IslandEvent.GameStatus {
         val combined = "$status $detail".lowercase()
         return when {
