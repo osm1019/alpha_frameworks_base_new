@@ -20,11 +20,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** @hide */
@@ -34,22 +30,6 @@ public final class PlayIntegritySpoofService {
     private static final String DROIDGUARD_PACKAGE = "com.google.android.gms.unstable";
     private static final String VENDING_PACKAGE = "com.android.vending";
     private static final String GMS_PACKAGE = "com.google.android.gms";
-
-    /**
-     * Build fields DroidGuard / Wallet-path attestation is allowed to see.
-     * Matches the sparse imported prop that passes Wallet: anything else in the
-     * stored canary dump (BRAND, PRODUCT, DEVICE, DEVICE_INITIAL_SDK_INT, …)
-     * stays in config for UI/fetch but is not applied to the process. Order is
-     * the apply order (FINGERPRINT first).
-     */
-    private static final String[] WALLET_SAFE_BUILD_FIELDS = {
-            "FINGERPRINT",
-            "MANUFACTURER",
-            "MODEL",
-            "SECURITY_PATCH",
-    };
-    private static final Set<String> WALLET_SAFE_BUILD_FIELD_SET =
-            Collections.unmodifiableSet(new HashSet<>(Arrays.asList(WALLET_SAFE_BUILD_FIELDS)));
 
     private static final String ROM_SIGNATURE_DATA = "MIIFyTCCA7GgAwIBAgIVALyxxl+zDS9SL68SzOr48309eAZyMA0GCSqGSIb3DQEBCwUAMHQxCzAJ" +
             "BgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQw" +
@@ -82,16 +62,15 @@ public final class PlayIntegritySpoofService {
     private static PlayIntegritySpoofService sInstance;
 
     private volatile int mVerboseLogs = 0;
-    // Wallet-safe defaults when a config omits spoof* keys (identity-only canary
-    // payloads). Explicit keys in the config always override via processKeyValue.
+    // Evolution X defaults when a config omits spoof* keys. Explicit keys always
+    // override via processKeyValue.
     private volatile boolean mSpoofBuild = true;
-    private volatile boolean mSpoofProps = false;
-    private volatile boolean mSpoofProvider = false;
+    private volatile boolean mSpoofProps = true;
+    private volatile boolean mSpoofProvider = true;
     private volatile boolean mSpoofSignature = false;
-    // PlayIntegrityFork semantics: "0"/empty = disabled, "1"/"true" = use the
-    // configured FINGERPRINT for Play Store, anything else = literal FP string.
-    // Default "1" matches the Wallet-working PIF profile (spoofVendingBuild=true).
-    private volatile String mSpoofVendingFinger = "1";
+    // PlayIntegrityFork / Evolution X: "0"/empty = disabled (default),
+    // "1"/"true" = same FINGERPRINT as DroidGuard, else literal FP string.
+    private volatile String mSpoofVendingFinger = "0";
     private volatile boolean mSpoofVendingSdk = false;
     private volatile boolean mDebug = false;
 
@@ -112,16 +91,16 @@ public final class PlayIntegritySpoofService {
     }
 
     /**
-     * Reset spoof flags to Wallet-safe defaults before each parse so missing
+     * Reset spoof flags to Evolution X defaults before each parse so missing
      * keys are deterministic (not leftover from a previous config).
      */
     private void resetSpoofFlags() {
         mVerboseLogs = 0;
         mSpoofBuild = true;
-        mSpoofProps = false;
-        mSpoofProvider = false;
+        mSpoofProps = true;
+        mSpoofProvider = true;
         mSpoofSignature = false;
-        mSpoofVendingFinger = "1";
+        mSpoofVendingFinger = "0";
         mSpoofVendingSdk = false;
         mDebug = false;
         mSignatureSpoofed = false;
@@ -331,25 +310,14 @@ public final class PlayIntegritySpoofService {
             return;
         }
 
-        // Wallet-safe view: only apply the sparse identity set, even if the
-        // stored pif.json is a full canary dump. Extra keys remain available
-        // for Settings UI but DroidGuard never sees them as Build fields.
-        for (String key : WALLET_SAFE_BUILD_FIELDS) {
-            String value = mBuildFields.get(key);
-            if (value == null || value.isEmpty()) continue;
-            spoofField(key, value, "DG");
-        }
-        if (mVerboseLogs > 0 || mDebug) {
-            for (String key : mBuildFields.keySet()) {
-                if (!WALLET_SAFE_BUILD_FIELD_SET.contains(key)) {
-                    Log.d(TAG, "DG skip non-Wallet field: " + key);
-                }
-            }
+        // Evolution X: apply every stored Build field to DroidGuard.
+        for (Map.Entry<String, String> entry : mBuildFields.entrySet()) {
+            spoofField(entry.getKey(), entry.getValue(), "DG");
         }
 
         // spoofVendingSdk when enabled applies an additional SDK_INT override
         // specifically for DroidGuard to match legacy attestation paths.
-        // It has no effect on Vending. Default off (Wallet-safe).
+        // It has no effect on Vending. Default off (Evolution X).
         if (mSpoofVendingSdk) {
             spoofSdkInt();
         }
@@ -361,9 +329,9 @@ public final class PlayIntegritySpoofService {
      * Returns null if vending fingerprint spoofing is disabled.
      *
      * spoofVendingFinger may be:
-     *   "0" / "false" / empty -> disabled (default)
-     *   "1" / "true"          -> use the same FINGERPRINT configured for DroidGuard
-     *   anything else          -> treated as a literal custom FINGERPRINT value
+     *   "0" / "false" / empty -> disabled (default, Evolution X parity)
+     *   "1" / "true"          -> same FINGERPRINT as DroidGuard
+     *   anything else         -> treated as a literal custom FINGERPRINT value
      */
     private String resolveVendingFingerprint() {
         String setting = mSpoofVendingFinger;
