@@ -17,6 +17,7 @@
 package com.android.systemui.media.ax.ui.compose
 
 import android.graphics.Color as AndroidColor
+import androidx.core.graphics.ColorUtils
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -122,6 +123,27 @@ object MediaChrome {
         @Composable
         @ReadOnlyComposable
         get() = seed.withAlpha(AlphaNoBlur)
+
+    /**
+     * An art-derived colour, normalised to the one band a filled control can live in.
+     *
+     * Keeps the artwork's hue and chroma, replaces its lightness. See
+     * [AlphaMetrics.mediaAccentFillLightnessDark] for why the incoming colour cannot be trusted to
+     * be a fill. Everything that paints a solid accent — play buttons, output pills — goes through
+     * here, so [AlphaColors.onAccentColor] reads on all of them by construction rather than by
+     * measurement.
+     */
+    @Composable
+    @ReadOnlyComposable
+    fun accentFill(accent: Color): Color {
+        val hsl = FloatArray(3)
+        ColorUtils.colorToHSL(accent.toArgb(), hsl)
+        hsl[1] = hsl[1].coerceAtLeast(AlphaMetrics.mediaAccentFillSaturationFloor)
+        hsl[2] =
+            if (isDark) AlphaMetrics.mediaAccentFillLightnessDark
+            else AlphaMetrics.mediaAccentFillLightnessLight
+        return Color(ColorUtils.HSLToColor(hsl))
+    }
 
     /**
      * Sweep from the art accent to a hue-rotated sibling — Waveform band + rim.

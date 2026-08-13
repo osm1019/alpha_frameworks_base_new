@@ -339,7 +339,6 @@ private fun GlassLockscreenMedia(
                             onPrimary = MediaChrome.ControlBare,
                         ),
                     interactive = interactive,
-                    showLabel = false,
                     compact = false,
                     iconSize = 22.dp,
                     modifier = Modifier.align(Alignment.CenterStart),
@@ -538,7 +537,6 @@ private fun WaveformLockscreenMedia(
                                 onPrimary = MediaChrome.ControlBare,
                             ),
                         interactive = interactive,
-                        showLabel = false,
                         compact = false,
                         iconSize = 22.dp,
                     )
@@ -859,7 +857,7 @@ private fun LockscreenSeekBar(
  * body read as the same material — rounded square on Glass, a ringed circle on Minimal.
  */
 @Composable
-private fun MediaArtPane(
+internal fun MediaArtPane(
     session: MediaSessionModel?,
     size: Dp,
     shape: Shape,

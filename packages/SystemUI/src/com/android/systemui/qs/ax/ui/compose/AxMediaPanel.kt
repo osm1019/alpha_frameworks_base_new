@@ -358,21 +358,19 @@ private fun AxMediaCard(
             else -> AxMediaLayout.Compact
         }
     val gutsVisible = allowGuts && session?.let(viewModel::isGutsVisible) == true
-    // Lockscreen styles draw their own art; only QS washes it full-bleed behind the content.
-    val artwork = session?.background?.takeIf { !isLockscreen && span.columns > 1 }
     val tileBackground = AxTileDefaults.backgroundColor()
     val tileForeground = MaterialTheme.colorScheme.onSurface
     val colorScheme = session?.colorScheme
-    val mediaBackground = colorScheme?.background ?: MaterialTheme.colorScheme.onSurface
     val background by
         animateColorAsState(
             targetValue =
                 when {
-                    artwork != null && !gutsVisible -> Color.Transparent
                     // Lockscreen glass is drawn by [LockscreenGlassBackdrop] (open tint + blur);
                     // keep the expandable colour transparent so it does not paint a denser slab.
                     isLockscreen && session != null -> Color.Transparent
-                    session != null -> mediaBackground
+                    // QS media is a tile: same body as the tiles beside it. Album art is a
+                    // thumbnail inside the card, not a wash behind it, so the card's colours
+                    // stay ours instead of being decided by the artwork.
                     else -> tileBackground
                 },
             label = "AxMediaBackground",
@@ -401,19 +399,16 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 if (session != null) {
-                    if (isLockscreen) MediaChrome.OnGlass else AlphaColors.mediaArtButtonColor
+                    if (isLockscreen) MediaChrome.OnGlass else tileForeground
                 } else {
                     tileForeground
                 },
             label = "AxMediaForeground",
         )
-    val animatedMediaBackground by
-        animateColorAsState(targetValue = mediaBackground, label = "AxMediaArtworkOverlay")
     val colors =
         AxMediaColors(
             primary = primary,
             onPrimary = onPrimary,
-            background = animatedMediaBackground,
             foreground = foreground,
         )
     val clickLabel =
@@ -536,9 +531,6 @@ private fun AxMediaCard(
                     )
                 } else {
                     Box(Modifier.fillMaxSize()) {
-                        if (session != null && artwork != null) {
-                            MediaArtwork(artwork = artwork, overlayColor = colors.background)
-                        }
                         AnimatedContent(
                             targetState = layout,
                             transitionSpec = {
@@ -579,7 +571,6 @@ private fun AxMediaCard(
                                         title = title,
                                         subtitle = subtitle,
                                         viewModel = viewModel,
-                                        span = span,
                                         colors = colors,
                                         interactive = interactive,
                                     )
@@ -601,41 +592,6 @@ private fun AxMediaCard(
     }
 }
 
-@Composable
-private fun MediaArtwork(artwork: IconModel?, overlayColor: Color) {
-    // Radial mask that keeps QS text legible over the full-bleed art.
-    val washAlpha = 0.65f
-    Crossfade(targetState = artwork, label = "AxMediaArtwork", modifier = Modifier.fillMaxSize()) {
-        currentArtwork ->
-        val modifier =
-            Modifier.fillMaxSize().drawWithContent {
-                drawContent()
-                drawRect(
-                    brush =
-                        Brush.radialGradient(
-                            0f to overlayColor.copy(alpha = washAlpha),
-                            1f to overlayColor.copy(alpha = (washAlpha + 0.1f).coerceAtMost(0.95f)),
-                            center = center,
-                            radius = max(size.width, size.height) / 2f,
-                        )
-                )
-            }
-        when (currentArtwork) {
-            null -> Unit
-            is IconModel.Loaded -> {
-                val bitmap = remember(currentArtwork) { currentArtwork.asImageBitmap() }
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = modifier,
-                )
-            }
-            is IconModel.Resource ->
-                Icon(icon = currentArtwork, tint = Color.Unspecified, modifier = modifier)
-        }
-    }
-}
 
 @Composable
 private fun MediaGuts(
@@ -825,15 +781,22 @@ private fun CompactMediaContent(
                                 } else {
                                     dimensionResource(R.dimen.qs_media_app_icon_size)
                                 },
-                            tint = colors.primary,
+                            // Content, not accent — the raw art colour is a pastel and vanished
+                            // against a light tile.
+                            tint = colors.foreground,
                         )
                     }
                     MediaOutputChip(
                         session = session,
                         viewModel = viewModel,
-                        colors = colors,
+                        // The 2x2's only filled control, so it takes the normalised accent and the
+                        // near-white glyph that goes with it.
+                        colors =
+                            colors.copy(
+                                primary = MediaChrome.accentFill(colors.primary),
+                                onPrimary = AlphaColors.onAccentColor,
+                            ),
                         interactive = interactive,
-                        showLabel = false,
                         compact = compactOutput,
                         modifier = Modifier.widthIn(max = outputMaxWidth),
                     )
@@ -880,84 +843,80 @@ private fun CompactMediaContent(
     }
 }
 
+/**
+ * The 3x2 card, built on the same grammar as the lockscreen styles: art and track text on top, a
+ * timeline with its own timestamps, and one transport row that carries the output switcher and the
+ * app's custom action at its ends.
+ *
+ * It is a *tile*, not glass — body and content come from the tile palette — but the proportions
+ * are near enough to the keyguard card (192dp tall, a little wider) that a second layout language
+ * would only be a second thing to keep in step. The chrome that used to sit in a header row of its
+ * own now lives in the transport row, which is what buys the art its size.
+ */
 @Composable
 private fun ExpandedMediaContent(
     session: MediaSessionModel?,
     title: String,
     subtitle: String,
     viewModel: AxMediaViewModel,
-    span: AxQsSpan,
     colors: AxMediaColors,
     interactive: Boolean,
 ) {
-    val showOutputText = span.columns > 2
-    val outputLabel =
-        session?.outputDevice?.name?.takeUnless { it.isBlank() || it == "null" }
-            ?: stringResource(R.string.ax_dynamic_bar_media_output)
+    val playing = session?.state == MediaSessionState.Playing
     val playPauseCornerRadius by
         animateDpAsState(
-            targetValue = if (session?.state == MediaSessionState.Playing) 16.dp else 48.dp,
+            targetValue = if (playing) ExpandedMediaPlayCorner else ExpandedMediaPlaySize / 2,
             label = "AxExpandedMediaPlayPauseCornerRadius",
         )
-    val playPauseShape = RoundedCornerShape(playPauseCornerRadius)
     val showCoreActions =
         session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
+    val progress = session?.let(viewModel::progress) ?: 0f
+    val durationMs = session?.durationMs ?: 0L
+    val hasDuration = durationMs > 0L
+    val elapsedLabel =
+        if (hasDuration) DateUtils.formatElapsedTime((progress * durationMs).toLong() / 1000L)
+        else ""
+    val totalLabel = if (hasDuration) DateUtils.formatElapsedTime(durationMs / 1000L) else ""
+    val extras = session?.additionalActions.orEmpty()
+    // Core transport owns the middle, so custom actions get the single trailing slot the lockscreen
+    // styles give them. An app that publishes no transport at all puts its own actions there instead.
+    val trailingExtra = if (showCoreActions) extras.firstOrNull() else null
+    val middleExtras = if (showCoreActions) emptyList() else extras.take(3)
+    // Bare, like every other glyph on the card: a filled pill up here would out-shout the play
+    // button, which is the only thing on this card allowed to carry colour.
+    val bareColors = colors.copy(primary = Color.Transparent, onPrimary = colors.foreground)
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val availableWidth = maxWidth
         val horizontalPadding = mediaHorizontalPadding(maxWidth)
-        val bottomHorizontalPadding = if (maxWidth < 240.dp) 4.dp else 8.dp
-        val navigationWidth =
-            minOf(maxWidth - bottomHorizontalPadding * 2, ExpandedMediaNavigationMaxWidth)
-        val actionSize = 48.dp
-        val secondaryActionIconSize = 22.dp
-        val playPauseIconSize = 24.dp
-        val playPauseWidth = 72.dp
-        val bottomButtonCapacity =
-            ((navigationWidth - ExpandedMediaMinSeekWidth).value / (actionSize + 8.dp).value)
-                .toInt()
-                .coerceAtLeast(0)
-        val coreButtonCount = if (showCoreActions) 2 else 0
-        val additionalActionLimit =
-            (bottomButtonCapacity - coreButtonCount)
-                .coerceAtLeast(0)
-                .coerceAtMost(
-                    if (showCoreActions) {
-                        (mediaActionLimit(span.columns) - 3).coerceAtLeast(0)
-                    } else {
-                        span.columns
-                    }
-                )
-        val additionalActions = session?.additionalActions.orEmpty().take(additionalActionLimit)
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth()) {
-                MediaAppIcon(
-                    session = session,
-                    size = 24.dp,
-                    tint = colors.primary,
-                    modifier =
-                        Modifier.align(Alignment.TopStart)
-                            .padding(start = horizontalPadding, top = 8.dp),
-                )
-                MediaOutputChip(
-                    session = session,
-                    viewModel = viewModel,
-                    colors = colors,
-                    interactive = interactive,
-                    showLabel = showOutputText,
-                    label = outputLabel,
-                    compact = false,
-                    modifier =
-                        Modifier.align(Alignment.TopEnd)
-                            .widthIn(max = availableWidth * 0.4f)
-                            .padding(top = 8.dp, end = horizontalPadding),
-                )
-            }
-            Spacer(Modifier.weight(1f))
+        // The art takes whatever the fixed chrome leaves. Derived from the card's own span, so it
+        // is decided once at layout and never moves while the card is on screen.
+        val artSize =
+            (maxHeight - ExpandedMediaChromeHeight).coerceIn(
+                ExpandedMediaArtMinSize,
+                ExpandedMediaArtSize,
+            )
+        Column(
+            modifier =
+                Modifier.fillMaxSize()
+                    .padding(
+                        start = horizontalPadding,
+                        end = horizontalPadding,
+                        top = ExpandedMediaTopPadding,
+                        bottom = ExpandedMediaBottomPadding,
+                    )
+        ) {
             Row(
+                modifier = Modifier.fillMaxWidth().height(artSize),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
             ) {
-                Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                // Always drawn: the pane falls back to the app icon, so the row keeps its shape
+                // whether or not a cover ever arrives.
+                MediaArtPane(
+                    session = session,
+                    size = artSize,
+                    shape = RoundedCornerShape(ExpandedMediaArtCorner),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
                     AnimatedMediaText(
                         text = title,
                         color = colors.foreground,
@@ -966,86 +925,127 @@ private fun ExpandedMediaContent(
                     if (subtitle.isNotEmpty()) {
                         AnimatedMediaText(
                             text = subtitle,
-                            color = colors.foreground.copy(alpha = 0.72f),
+                            color = MediaChrome.OnGlassSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
-                if (showCoreActions) {
-                    CoreMediaAction(
-                        action = session?.playPauseAction,
-                        imageVector = playPauseIcon(session),
-                        descriptionRes = playPauseDescription(session),
-                        animatedIconRes = R.drawable.ic_media_play_button,
-                        animatedIconAtEnd = session?.state == MediaSessionState.Playing,
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Timeline sits with the track text; the slack goes below it, so the transport is the
+            // visual base of the card. Same order the lockscreen styles use.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(ExpandedMediaTimelineHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hasDuration) {
+                        Text(
+                            text = elapsedLabel,
+                            color = MediaChrome.OnGlassHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                    MediaSeekBar(
+                        session = session,
                         viewModel = viewModel,
-                        width = playPauseWidth,
-                        height = actionSize,
-                        iconSize = playPauseIconSize,
-                        tint = colors.onPrimary,
-                        background = colors.primary,
-                        shape = playPauseShape,
+                        dense = true,
                         interactive = interactive,
+                        modifier = Modifier.weight(1f),
                     )
-                } else {
-                    Spacer(Modifier.size(width = 0.dp, height = actionSize))
+                    if (hasDuration) {
+                        Text(
+                            text = totalLabel,
+                            color = MediaChrome.OnGlassHint,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                 }
             }
+
+            Spacer(Modifier.weight(1f))
+
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Box(
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .padding(horizontal = bottomHorizontalPadding, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(ExpandedMediaTransportHeight),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.width(navigationWidth),
-                    ) {
-                        if (showCoreActions) {
-                            ExpandedNavigationAction(
-                                action = session?.leftAction,
-                                placeholderDescription = R.string.controls_media_button_prev,
-                                viewModel = viewModel,
-                                colors = colors,
-                                interactive = interactive,
-                                size = actionSize,
-                                iconSize = secondaryActionIconSize,
-                                imageVector = Icons.Filled.SkipPrevious,
-                            )
-                        }
-                        MediaSeekBar(
-                            session = session,
+                    MediaOutputChip(
+                        session = session,
+                        viewModel = viewModel,
+                        colors = bareColors,
+                        interactive = interactive,
+                        compact = false,
+                        iconSize = ExpandedMediaExtraIconSize,
+                    )
+                    middleExtras.forEach { action ->
+                        MediaAction(
+                            action = action,
+                            viewModel = viewModel,
+                            width = ExpandedMediaExtraSize,
+                            iconSize = ExpandedMediaExtraIconSize,
+                            tint = colors.foreground,
+                            interactive = interactive,
+                        )
+                    }
+                    if (showCoreActions) {
+                        ExpandedNavigationAction(
+                            action = session?.leftAction,
+                            placeholderDescription = R.string.controls_media_button_prev,
                             viewModel = viewModel,
                             colors = colors,
-                            dense = true,
                             interactive = interactive,
-                            modifier = Modifier.weight(1f),
+                            size = ExpandedMediaSkipSize,
+                            iconSize = ExpandedMediaSkipIconSize,
+                            imageVector = Icons.Filled.SkipPrevious,
                         )
-                        if (showCoreActions) {
-                            ExpandedNavigationAction(
-                                action = session?.rightAction,
-                                placeholderDescription = R.string.controls_media_button_next,
-                                viewModel = viewModel,
-                                colors = colors,
-                                interactive = interactive,
-                                size = actionSize,
-                                iconSize = secondaryActionIconSize,
-                                imageVector = Icons.Filled.SkipNext,
-                            )
-                        }
-                        additionalActions.forEach { action ->
-                            MediaAction(
-                                action = action,
-                                viewModel = viewModel,
-                                width = actionSize,
-                                height = actionSize,
-                                iconSize = secondaryActionIconSize,
-                                tint = colors.foreground,
-                                interactive = interactive,
-                            )
-                        }
+                        CoreMediaAction(
+                            action = session?.playPauseAction,
+                            imageVector = playPauseIcon(session),
+                            descriptionRes = playPauseDescription(session),
+                            animatedIconRes = R.drawable.ic_media_play_button,
+                            animatedIconAtEnd = playing,
+                            viewModel = viewModel,
+                            width = ExpandedMediaPlaySize,
+                            iconSize = ExpandedMediaPlayIconSize,
+                            // The card's one accent, normalised so the near-white glyph reads on
+                            // it whatever the cover was.
+                            tint = AlphaColors.onAccentColor,
+                            background = MediaChrome.accentFill(colors.primary),
+                            shape = RoundedCornerShape(playPauseCornerRadius),
+                            interactive = interactive,
+                        )
+                        ExpandedNavigationAction(
+                            action = session?.rightAction,
+                            placeholderDescription = R.string.controls_media_button_next,
+                            viewModel = viewModel,
+                            colors = colors,
+                            interactive = interactive,
+                            size = ExpandedMediaSkipSize,
+                            iconSize = ExpandedMediaSkipIconSize,
+                            imageVector = Icons.Filled.SkipNext,
+                        )
+                    }
+                    // Reserved whether or not the app publishes one, so the transport does not
+                    // shuffle sideways the moment a custom action appears or goes away.
+                    if (trailingExtra != null) {
+                        MediaAction(
+                            action = trailingExtra,
+                            viewModel = viewModel,
+                            width = ExpandedMediaExtraSize,
+                            iconSize = ExpandedMediaExtraIconSize,
+                            tint = colors.foreground,
+                            interactive = interactive,
+                        )
+                    } else {
+                        Spacer(Modifier.size(ExpandedMediaExtraSize))
                     }
                 }
             }
@@ -1122,15 +1122,17 @@ internal fun MediaAppIcon(
     }
 }
 
+/**
+ * Output switcher. Always a round glyph: the device name is a long, mostly-uninformative string
+ * ("This phone") that every surface ended up truncating to nothing, so no card asks for it.
+ */
 @Composable
 internal fun MediaOutputChip(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
     colors: AxMediaColors,
     interactive: Boolean,
-    showLabel: Boolean,
     compact: Boolean,
-    label: String? = null,
     /** Overrides the size derived from [compact], for surfaces that draw it bare beside transport
      * icons and need it to match their weight. */
     iconSize: Dp? = null,
@@ -1169,16 +1171,7 @@ internal fun MediaOutputChip(
                     Modifier.clip(CircleShape)
                         .background(colors.primary)
                         .indication(interactionSource, ripple())
-                        .then(
-                            if (showLabel) {
-                                Modifier.padding(
-                                    horizontal = if (compact) 6.dp else 8.dp,
-                                    vertical = if (compact) 3.dp else 4.dp,
-                                )
-                            } else {
-                                Modifier.size(chipHeight)
-                            }
-                        ),
+                        .size(chipHeight),
             ) {
                 if (session != null) {
                     Icon(
@@ -1192,16 +1185,6 @@ internal fun MediaOutputChip(
                         contentDescription = null,
                         tint = colors.onPrimary,
                         modifier = Modifier.size(resolvedIconSize),
-                    )
-                }
-                if (showLabel) {
-                    Text(
-                        text = label ?: outputDescription,
-                        color = colors.onPrimary,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 4.dp),
                     )
                 }
             }
@@ -1366,7 +1349,6 @@ private fun InWindowArtBackdrop(artwork: IconModel) {
 internal fun MediaSeekBar(
     session: MediaSessionModel?,
     viewModel: AxMediaViewModel,
-    colors: AxMediaColors,
     dense: Boolean,
     interactive: Boolean,
     modifier: Modifier = Modifier,
@@ -1388,6 +1370,10 @@ internal fun MediaSeekBar(
             .orEmpty()
     // Capture theme tokens in composition — the AndroidView update block is not @Composable.
     val trackColorArgb = MediaChrome.ProgressTrack.toArgb()
+    // Neutral timeline, as on the lockscreen: the played portion is content, not accent. Painting
+    // it with the art colour put a tone-90 pastel line on a light card, where it read as unfilled.
+    val progressArgb = MediaChrome.LockscreenProgress.toArgb()
+    val thumbArgb = MediaChrome.LockscreenProgressThumb.toArgb()
     Column(modifier = modifier) {
         AndroidView(
             factory = { context ->
@@ -1448,12 +1434,11 @@ internal fun MediaSeekBar(
                 }
                 seekBar.isEnabled = interactive && session?.canBeScrubbed == true
                 seekBar.contentDescription = seekDescription
-                // Progress uses art accent (Phase 1/2 language); track stays on-glass neutral.
-                // The Glass lockscreen style draws its own bar (GlassSeekBar) and never lands here.
-                val progressColor = colors.primary.toArgb()
-                seekBar.setMediaColor(progressColor)
-                seekBar.thumbTintList = ColorStateList.valueOf(progressColor)
-                seekBar.progressTintList = ColorStateList.valueOf(progressColor)
+                // The Glass lockscreen style draws its own bar (LockscreenSeekBar) and never
+                // lands here.
+                seekBar.setMediaColor(progressArgb)
+                seekBar.thumbTintList = ColorStateList.valueOf(thumbArgb)
+                seekBar.progressTintList = ColorStateList.valueOf(progressArgb)
                 seekBar.progressBackgroundTintList = ColorStateList.valueOf(trackColorArgb)
                 val playing = session?.state == MediaSessionState.Playing && !seekBar.isPressed
                 val animate = playing && squiggleAnimationEnabled
@@ -1698,7 +1683,6 @@ private fun PlaceholderMediaAction(
 internal data class AxMediaColors(
     val primary: Color,
     val onPrimary: Color,
-    val background: Color,
     val foreground: Color,
 )
 
@@ -1710,8 +1694,28 @@ private enum class AxMediaLayout {
     Lockscreen,
 }
 
-internal val ExpandedMediaMinSeekWidth = 40.dp
-private val ExpandedMediaNavigationMaxWidth = 320.dp
+// 3x2 card. Everything but the art is a fixed height, and the art takes the remainder — so the
+// budget below has to add up to what the card is *not* spending on the cover:
+// 10 top + 20 timeline + 4 + 44 transport + 8 bottom = 86dp.
+private val ExpandedMediaTopPadding = 10.dp
+private val ExpandedMediaBottomPadding = 8.dp
+private val ExpandedMediaTimelineHeight = 20.dp
+private val ExpandedMediaTransportHeight = 44.dp
+private val ExpandedMediaChromeHeight = 86.dp
+
+private val ExpandedMediaArtSize = 72.dp
+private val ExpandedMediaArtMinSize = 40.dp
+private val ExpandedMediaArtCorner = 16.dp
+
+private val ExpandedMediaPlaySize = 44.dp
+private val ExpandedMediaPlayIconSize = 24.dp
+/** Playing squares the play button off; paused rounds it back to a circle. */
+private val ExpandedMediaPlayCorner = 16.dp
+private val ExpandedMediaSkipSize = 38.dp
+private val ExpandedMediaSkipIconSize = 22.dp
+private val ExpandedMediaExtraSize = 34.dp
+private val ExpandedMediaExtraIconSize = 20.dp
+
 private val CompactMediaMaxHeight = 220.dp
 private val MediaNavigationIconSize = 16.dp
 

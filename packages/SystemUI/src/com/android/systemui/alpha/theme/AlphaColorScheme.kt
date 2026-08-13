@@ -312,6 +312,23 @@ object AlphaMetrics {
     /** Media accent is darkened by this factor for chip and expand-card fills. */
     const val mediaAccentDarkenKeep = 0.35f
 
+    /**
+     * Lightness a filled media control is painted at, whatever the artwork handed us.
+     *
+     * The media scheme's accent is `primaryFixed` — a tone-90 pastel *by construction*, the same
+     * in both themes. A pastel fill has nowhere to sit: [AlphaColors.onAccentColor] disappears on
+     * it, and on a light card the fill itself disappears into the body. So hue and chroma stay the
+     * artwork's and lightness becomes ours.
+     *
+     * Split per theme, identical today — same rule as the event palette: the light value may only
+     * ever move toward *more* vivid.
+     */
+    const val mediaAccentFillLightnessDark = 0.46f
+    const val mediaAccentFillLightnessLight = 0.46f
+
+    /** Chroma floor, so a grey cover still yields a coloured fill rather than a slab of concrete. */
+    const val mediaAccentFillSaturationFloor = 0.55f
+
     /** WCAG AA for icons and short labels at chip sizes. */
     const val minContentContrast = 4.5
 }
