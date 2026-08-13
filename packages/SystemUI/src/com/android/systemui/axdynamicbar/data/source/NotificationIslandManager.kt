@@ -380,6 +380,25 @@ constructor(
                     if (pkg in SPORTS_PACKAGES && handleSportsScore(sbn, extras, forceCapture = true)) return
                 }
 
+                // A playing session already has its own media card, so the app's transport
+                // notification would sit beside it in the stack saying the same thing. The
+                // alert path below already drops these; the promoted-ongoing path runs first
+                // and did not.
+                //
+                // Keyed on the notification carrying a media session rather than on the active
+                // media package: the package is right for alerts, but here it would also drop a
+                // real transfer — a download posted by the app that happens to be playing.
+                // The session token is intrinsic to the post, so this also does not depend on
+                // whether the media source or the notification lands first.
+                //
+                // Only when the media chip is actually enabled: with it turned off there is no
+                // card to duplicate, and the notification is the only thing left to show.
+                if (isMedia && "media" !in disabledTypes) {
+                    _promotedOngoingEvents.value =
+                        _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
+                    return
+                }
+
                 if (sbn.isOngoing && isPromotable(sbn, extras)) {
                     if ("promoted_ongoing" !in disabledTypes) {
                         handlePromotedOngoing(sbn, extras, pkg)
