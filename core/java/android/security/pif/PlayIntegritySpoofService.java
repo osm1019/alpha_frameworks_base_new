@@ -21,6 +21,7 @@ import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** @hide */
@@ -62,14 +63,14 @@ public final class PlayIntegritySpoofService {
     private static PlayIntegritySpoofService sInstance;
 
     private volatile int mVerboseLogs = 0;
-    // Evolution X defaults when a config omits spoof* keys. Explicit keys always
-    // override via processKeyValue.
     private volatile boolean mSpoofBuild = true;
     private volatile boolean mSpoofProps = true;
     private volatile boolean mSpoofProvider = true;
     private volatile boolean mSpoofSignature = false;
-    // PlayIntegrityFork / Evolution X: "0"/empty = disabled (default),
-    // "1"/"true" = same FINGERPRINT as DroidGuard, else literal FP string.
+    // Replaces the old all-or-nothing "spoofVendingBuild" boolean. This now matches
+    // upstream PlayIntegrityFork semantics: "0"/empty = disabled (default), "1"/"true" =
+    // spoof the configured FINGERPRINT field only, or any other value = use that literal
+    // string as a custom FINGERPRINT to serve to Play Store instead of the DroidGuard one.
     private volatile String mSpoofVendingFinger = "0";
     private volatile boolean mSpoofVendingSdk = false;
     private volatile boolean mDebug = false;
@@ -90,27 +91,10 @@ public final class PlayIntegritySpoofService {
         return sInstance;
     }
 
-    /**
-     * Reset spoof flags to Evolution X defaults before each parse so missing
-     * keys are deterministic (not leftover from a previous config).
-     */
-    private void resetSpoofFlags() {
-        mVerboseLogs = 0;
-        mSpoofBuild = true;
-        mSpoofProps = true;
-        mSpoofProvider = true;
-        mSpoofSignature = false;
-        mSpoofVendingFinger = "0";
-        mSpoofVendingSdk = false;
-        mDebug = false;
-        mSignatureSpoofed = false;
-    }
-
     public void loadConfig() {
         mBuildFields.clear();
         mSystemProps.clear();
         mConfigLoaded = false;
-        resetSpoofFlags();
 
         IActivityManager am = ActivityManager.getService();
         if (am == null) {
@@ -141,15 +125,10 @@ public final class PlayIntegritySpoofService {
 
             mConfigLoaded = true;
             Log.i(TAG, "PIF config loaded, fields=" + mBuildFields.size()
-                + ", props=" + mSystemProps.size()
-                + ", spoofBuild=" + mSpoofBuild
-                + ", spoofProps=" + mSpoofProps
-                + ", spoofProvider=" + mSpoofProvider
-                + ", spoofVendingFinger=" + mSpoofVendingFinger);
+                + ", props=" + mSystemProps.size());
 
             // Sync SECURITY_PATCH to system props so apps reading these directly
             // see the spoofed date, matching what the upstream module does via resetprop.
-            // Only served when spoofProps is enabled (see getSpoofedProperty).
             String secPatch = mBuildFields.get("SECURITY_PATCH");
             if (secPatch != null && !secPatch.isEmpty()) {
                 mSystemProps.put("ro.build.version.security_patch", secPatch);
@@ -255,11 +234,6 @@ public final class PlayIntegritySpoofService {
                 mDebug = "1".equals(value) || "true".equalsIgnoreCase(value);
                 break;
             default:
-                // Underscore keys are UI/meta only (e.g. _canary_month) — never
-                // feed them into Build spoofing.
-                if (key.startsWith("_")) {
-                    break;
-                }
                 if (key.contains(".") || key.startsWith("*")) {
                     mSystemProps.put(key, value);
                 } else {
@@ -310,14 +284,13 @@ public final class PlayIntegritySpoofService {
             return;
         }
 
-        // Evolution X: apply every stored Build field to DroidGuard.
         for (Map.Entry<String, String> entry : mBuildFields.entrySet()) {
             spoofField(entry.getKey(), entry.getValue(), "DG");
         }
 
         // spoofVendingSdk when enabled applies an additional SDK_INT override
         // specifically for DroidGuard to match legacy attestation paths.
-        // It has no effect on Vending. Default off (Evolution X).
+        // It has no effect on Vending.
         if (mSpoofVendingSdk) {
             spoofSdkInt();
         }
@@ -329,9 +302,9 @@ public final class PlayIntegritySpoofService {
      * Returns null if vending fingerprint spoofing is disabled.
      *
      * spoofVendingFinger may be:
-     *   "0" / "false" / empty -> disabled (default, Evolution X parity)
-     *   "1" / "true"          -> same FINGERPRINT as DroidGuard
-     *   anything else         -> treated as a literal custom FINGERPRINT value
+     *   "0" / "false" / empty -> disabled (default)
+     *   "1" / "true"          -> use the same FINGERPRINT configured for DroidGuard
+     *   anything else          -> treated as a literal custom FINGERPRINT value
      */
     private String resolveVendingFingerprint() {
         String setting = mSpoofVendingFinger;

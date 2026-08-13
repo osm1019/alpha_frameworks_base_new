@@ -744,7 +744,25 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
 
                 if (mSpec.isDevicePropertiesAttestationIncluded()) {
                     try {
-                        fillAttestationDeviceProps(params);
+                        final String brand = isPropertyEmptyOrUnknown(Build.BRAND_FOR_ATTESTATION)
+                                ? Build.BRAND : Build.BRAND_FOR_ATTESTATION;
+                        params.brand = brand.getBytes(StandardCharsets.UTF_8);
+
+                        final String device = isPropertyEmptyOrUnknown(Build.DEVICE_FOR_ATTESTATION)
+                                ? Build.DEVICE : Build.DEVICE_FOR_ATTESTATION;
+                        params.device = device.getBytes(StandardCharsets.UTF_8);
+
+                        final String product = isPropertyEmptyOrUnknown(Build.PRODUCT_FOR_ATTESTATION)
+                                ? Build.PRODUCT : Build.PRODUCT_FOR_ATTESTATION;
+                        params.product = product.getBytes(StandardCharsets.UTF_8);
+
+                        final String manufacturer = isPropertyEmptyOrUnknown(Build.MANUFACTURER_FOR_ATTESTATION)
+                                ? Build.MANUFACTURER : Build.MANUFACTURER_FOR_ATTESTATION;
+                        params.manufacturer = manufacturer.getBytes(StandardCharsets.UTF_8);
+
+                        final String model = isPropertyEmptyOrUnknown(Build.MODEL_FOR_ATTESTATION)
+                                ? Build.MODEL : Build.MODEL_FOR_ATTESTATION;
+                        params.model = model.getBytes(StandardCharsets.UTF_8);
                     } catch (Exception e) {
                         Log.w(TAG, "Failed to set device properties for attestation", e);
                     }
@@ -846,26 +864,40 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
             ));
 
             if (mSpec.isDevicePropertiesAttestationIncluded()) {
-                final String[] id = resolveAttestationDeviceIdStrings();
+                final String platformReportedBrand =
+                        isPropertyEmptyOrUnknown(Build.BRAND_FOR_ATTESTATION)
+                        ? Build.BRAND : Build.BRAND_FOR_ATTESTATION;
                 params.add(KeyStore2ParameterUtils.makeBytes(
                         KeymasterDefs.KM_TAG_ATTESTATION_ID_BRAND,
-                        id[0].getBytes(StandardCharsets.UTF_8)
+                        platformReportedBrand.getBytes(StandardCharsets.UTF_8)
                 ));
+                final String platformReportedDevice =
+                        isPropertyEmptyOrUnknown(Build.DEVICE_FOR_ATTESTATION)
+                                ? Build.DEVICE : Build.DEVICE_FOR_ATTESTATION;
                 params.add(KeyStore2ParameterUtils.makeBytes(
                         KeymasterDefs.KM_TAG_ATTESTATION_ID_DEVICE,
-                        id[1].getBytes(StandardCharsets.UTF_8)
+                        platformReportedDevice.getBytes(StandardCharsets.UTF_8)
                 ));
+                final String platformReportedProduct =
+                        isPropertyEmptyOrUnknown(Build.PRODUCT_FOR_ATTESTATION)
+                        ? Build.PRODUCT : Build.PRODUCT_FOR_ATTESTATION;
                 params.add(KeyStore2ParameterUtils.makeBytes(
                         KeymasterDefs.KM_TAG_ATTESTATION_ID_PRODUCT,
-                        id[2].getBytes(StandardCharsets.UTF_8)
+                        platformReportedProduct.getBytes(StandardCharsets.UTF_8)
                 ));
+                final String platformReportedManufacturer =
+                        isPropertyEmptyOrUnknown(Build.MANUFACTURER_FOR_ATTESTATION)
+                                ? Build.MANUFACTURER : Build.MANUFACTURER_FOR_ATTESTATION;
                 params.add(KeyStore2ParameterUtils.makeBytes(
                         KeymasterDefs.KM_TAG_ATTESTATION_ID_MANUFACTURER,
-                        id[3].getBytes(StandardCharsets.UTF_8)
+                        platformReportedManufacturer.getBytes(StandardCharsets.UTF_8)
                 ));
+                final String platformReportedModel =
+                        isPropertyEmptyOrUnknown(Build.MODEL_FOR_ATTESTATION)
+                        ? Build.MODEL : Build.MODEL_FOR_ATTESTATION;
                 params.add(KeyStore2ParameterUtils.makeBytes(
                         KeymasterDefs.KM_TAG_ATTESTATION_ID_MODEL,
-                        id[4].getBytes(StandardCharsets.UTF_8)
+                        platformReportedModel.getBytes(StandardCharsets.UTF_8)
                 ));
             }
 
@@ -1337,50 +1369,5 @@ public abstract class AndroidKeyStoreKeyPairGeneratorSpi extends KeyPairGenerato
 
     private boolean isPropertyEmptyOrUnknown(String property) {
         return TextUtils.isEmpty(property) || property.equals(Build.UNKNOWN);
-    }
-
-    /**
-     * Prefer identity parsed from a Google {@link Build#FINGERPRINT} spoof so
-     * OnePlus/OEM props do not leak into attestation next to a Pixel FP.
-     * Order: brand, device, product, manufacturer, model.
-     */
-    private String[] resolveAttestationDeviceIdStrings() {
-        try {
-            // Fully-qualified: keystore.AttestationUtils is already imported.
-            android.security.trickystore.AttestationUtils.DeviceIdentity fromFp =
-                    android.security.trickystore.AttestationUtils
-                            .identityFromGoogleFingerprint();
-            if (fromFp != null) {
-                return new String[] {
-                        fromFp.brand, fromFp.device, fromFp.product,
-                        fromFp.manufacturer, fromFp.model
-                };
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "Failed to resolve identity from Google FINGERPRINT", t);
-        }
-        final String brand = isPropertyEmptyOrUnknown(Build.BRAND_FOR_ATTESTATION)
-                ? Build.BRAND : Build.BRAND_FOR_ATTESTATION;
-        final String device = isPropertyEmptyOrUnknown(Build.DEVICE_FOR_ATTESTATION)
-                ? Build.DEVICE : Build.DEVICE_FOR_ATTESTATION;
-        final String product = isPropertyEmptyOrUnknown(Build.PRODUCT_FOR_ATTESTATION)
-                ? Build.PRODUCT : Build.PRODUCT_FOR_ATTESTATION;
-        final String manufacturer = isPropertyEmptyOrUnknown(Build.MANUFACTURER_FOR_ATTESTATION)
-                ? Build.MANUFACTURER : Build.MANUFACTURER_FOR_ATTESTATION;
-        final String model = isPropertyEmptyOrUnknown(Build.MODEL_FOR_ATTESTATION)
-                ? Build.MODEL : Build.MODEL_FOR_ATTESTATION;
-        return new String[] { brand, device, product, manufacturer, model };
-    }
-
-    private void fillAttestationDeviceProps(CertificateGenerator.KeyGenParameters params) {
-        final String[] id = resolveAttestationDeviceIdStrings();
-        params.brand = id[0].getBytes(StandardCharsets.UTF_8);
-        params.device = id[1].getBytes(StandardCharsets.UTF_8);
-        params.product = id[2].getBytes(StandardCharsets.UTF_8);
-        params.manufacturer = id[3].getBytes(StandardCharsets.UTF_8);
-        params.model = id[4].getBytes(StandardCharsets.UTF_8);
-        Log.i(TAG, "Attestation device props: brand=" + id[0]
-                + " device=" + id[1] + " product=" + id[2]
-                + " manufacturer=" + id[3] + " model=" + id[4]);
     }
 }
