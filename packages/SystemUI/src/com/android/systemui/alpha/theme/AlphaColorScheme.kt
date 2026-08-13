@@ -16,12 +16,15 @@
 
 package com.android.systemui.alpha.theme
 
+import androidx.annotation.ColorRes
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.android.internal.R
 
 private val isDarkTheme: Boolean
     @Composable @ReadOnlyComposable get() = isSystemInDarkTheme()
@@ -31,6 +34,17 @@ private val onSurface: Color
 
 private val surfaceContainerHigh: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
+
+/**
+ * A Monet role taken from the **dark** palette whatever the system theme is.
+ *
+ * `MaterialTheme` only ever exposes the scheme currently in force, so a surface that wants to stay
+ * in its night form has to read the `*_dark` platform resources directly. These are the same
+ * resources `dynamicDarkColorScheme` is built from, so the user's palette still applies.
+ */
+@Composable
+@ReadOnlyComposable
+private fun nightRole(@ColorRes id: Int): Color = Color(LocalContext.current.getColor(id))
 
 /**
  * Every Alpha surface, and every element it paints, as one map.
@@ -173,21 +187,29 @@ object AlphaColors {
     /**
      * The chip that floats in the status bar, and the identical one drawn around the cutout.
      *
-     * Unlike every other object here it has **no neighbours to match** and its backdrop is the
-     * wallpaper, not a themed surface — it only shows while Quick Settings is closed. Every event
-     * carries its hue: [body] is the base the event accent tints, not the final colour.
+     * ⚠️ **Night-locked: day renders exactly as night.** This is the one surface with no
+     * neighbours to match and a backdrop that does not follow the theme — it only shows while
+     * Quick Settings is closed, so what sits behind it is wallpaper. Following the theme bought
+     * nothing and cost the chip its stability: text flipped dark on a theme change while the
+     * wallpaper under it did not move.
+     *
+     * So [body], [text] and [textInverse] read the `*_dark` Monet roles in both modes, and
+     * [tintAmount] is the night value. The user's palette still applies — these are the same
+     * resources the dark scheme is built from — but day and night resolve identically.
+     *
+     * Every event carries its hue: [body] is the base the event accent tints, not the final colour.
      */
     object DbStatusBarChip {
 
         /** Base the event accent is mixed into. The result, not this, is what you see. */
-        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+        val body: Color
+            @Composable @ReadOnlyComposable
+            get() = nightRole(R.color.system_surface_container_high_dark)
 
         /** How far [body] travels toward the event accent. 0 = untinted, 1 = solid accent. */
-        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
+        val tintAmount = 0.45f
 
-        val rim: Color
-            @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.16f else 0.12f)
+        val rim: Color @Composable @ReadOnlyComposable get() = text.copy(alpha = 0.16f)
 
         val rimWidth = 1.dp
 
@@ -196,9 +218,10 @@ object AlphaColors {
          * these two are candidates, not the answer: whichever contrasts better wins, and if neither
          * clears [AlphaMetrics.minContentContrast] the chip falls back to the shared floors.
          */
-        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val text: Color
+            @Composable @ReadOnlyComposable get() = nightRole(R.color.system_on_surface_dark)
         val textInverse: Color
-            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.inverseOnSurface
+            @Composable @ReadOnlyComposable get() = nightRole(R.color.system_inverse_on_surface_dark)
 
         val textSecondaryAlpha = 0.7f
         val textHintAlpha = 0.5f
@@ -228,7 +251,7 @@ object AlphaColors {
          * ceiling because [AlphaColors.onAccentColor] must read on it, a tint has none because the text is
          * measured against the mixed result afterwards. Set to where the event palette sits.
          */
-        val accentTintLightness: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.55f else 0.55f
+        const val accentTintLightness = 0.55f
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -641,16 +664,6 @@ object AlphaMetrics {
     const val mediaAccentFillLightnessDark = 0.46f
     const val mediaAccentFillLightnessLight = 0.46f
 
-    /**
-     * Lightness the album colour takes when it *tints* a body instead of filling a control.
-     *
-     * Deliberately not the fill value. A fill has a hard ceiling — [AlphaColors.onAccentColor] has
-     * to read on it — while a tint has none, because the content colour is measured against the
-     * mixed result afterwards. Set to where the event palette sits (mean lightness of the eleven
-     * hues is ≈0.55), so a media chip carries the same weight of colour as a charging or timer one.
-     */
-    const val mediaAccentTintLightnessDark = 0.55f
-    const val mediaAccentTintLightnessLight = 0.55f
 
     /** Chroma floor, so a grey cover still yields a coloured accent rather than a slab of concrete. */
     const val mediaAccentFillSaturationFloor = 0.55f

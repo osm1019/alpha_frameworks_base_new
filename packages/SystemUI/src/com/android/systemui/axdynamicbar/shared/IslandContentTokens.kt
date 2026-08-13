@@ -438,7 +438,10 @@ internal fun chipAccentColorFor(event: IslandEvent): Color {
 @Composable
 internal fun chipTintAccentFor(event: IslandEvent): Color =
     if (event is IslandEvent.Media && event.mediaColor != 0) {
-        MediaChrome.accentTint(Color(event.mediaColor))
+        MediaChrome.accentTint(
+            Color(event.mediaColor),
+            AlphaColors.DbStatusBarChip.accentTintLightness,
+        )
     } else {
         chipAccentColorFor(event)
     }

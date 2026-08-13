@@ -119,7 +119,7 @@ internal fun PillEventIcon(
         is IslandEvent.Clipboard -> AnimatedClipboardIcon(tint ?: IndigoAccent)
         is IslandEvent.Call -> CallPillIcon(event)
         is IslandEvent.Notification -> NotificationPillIcon(event)
-        is IslandEvent.AppSwitch -> AppSwitchPillIcon(event)
+        is IslandEvent.AppSwitch -> AppSwitchPillIcon(event, tint)
         is IslandEvent.Torch ->
             Icon(Icons.Filled.FlashlightOn, null, tint = tint ?: YellowAccent, modifier = Modifier.size(SizeBadge))
         is IslandEvent.BiometricUnlock -> BiometricUnlockIcon(tint)
@@ -133,7 +133,7 @@ private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
     when (event) {
         is IslandEvent.Media -> MediaPillIcon(event, animated = false)
         is IslandEvent.Notification -> NotificationPillIcon(event)
-        is IslandEvent.AppSwitch -> AppSwitchPillIcon(event)
+        is IslandEvent.AppSwitch -> AppSwitchPillIcon(event, tint)
         is IslandEvent.AospChip -> AospChipPillIcon(event, tint, animated = false)
         is IslandEvent.PromotedOngoing ->
             if (event.appIcon != null) {
@@ -1037,7 +1037,7 @@ private fun SportsTeamLabel(name: String, icon: Drawable?, color: Color) {
 }
 
 @Composable
-private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch) {
+private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch, tint: Color? = null) {
     val app = event.previousApp ?: event.recentApps.firstOrNull()
     app?.appIcon?.let {
         Image(
@@ -1046,7 +1046,7 @@ private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch) {
             modifier = Modifier.size(16.dp).clip(CircleShape),
             contentScale = ContentScale.Crop,
         )
-    } ?: AnimatedRecentsIcon(SubtleGray)
+    } ?: AnimatedRecentsIcon(tint ?: SubtleGray)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -1439,9 +1439,12 @@ private fun AudioRecText(event: IslandEvent.AudioRecording, modifier: Modifier, 
 
 @Composable
 private fun MediaText(event: IslandEvent.Media, modifier: Modifier, overrideColor: Color? = null) {
-    val baseColor = overrideColor ?: OrangeAccent
-    val alpha = if (event.isPlaying) 1f else AlphaHint
-    val color = baseColor.copy(alpha = alpha)
+    // Paused text keeps the playing colour. It used to drop to 40% alpha, which threw away the
+    // contrast the chip had just measured: the pick is made against the opaque colour and the alpha
+    // is applied after, so a paused chip drew near-white at 0.4 over a tinted body — around 2:1.
+    // The transport glyph already animates between play and pause; the label does not need to
+    // repeat it by going unreadable.
+    val color = overrideColor ?: OrangeAccent
     val text = if (event.artist.isNotBlank()) "${event.track} - ${event.artist}" else event.track
     MarqueeLabel(text, color, modifier.widthIn(max = 66.dp))
 }

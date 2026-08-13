@@ -65,20 +65,14 @@ object MediaChrome {
         )
 
     /**
-     * The same album colour normalised for *tinting a body* rather than filling a control.
+     * The same album colour normalised for *tinting a body* rather than filling a control, at the
+     * [lightness] the calling surface asks for.
      *
-     * A different lightness on purpose: a fill has a hard ceiling because the near-white glyph must
-     * read on it, a tint has none because the content colour is measured against the mixed result
-     * afterwards. See [AlphaMetrics.mediaAccentTintLightnessDark].
+     * A different number from [accentFill] on purpose: a fill has a hard ceiling because the
+     * near-white glyph must read on it, a tint has none because the content colour is measured
+     * against the mixed result afterwards.
      */
-    @Composable
-    @ReadOnlyComposable
-    fun accentTint(accent: Color): Color =
-        normalisedAccent(
-            accent,
-            if (isDark) AlphaMetrics.mediaAccentTintLightnessDark
-            else AlphaMetrics.mediaAccentTintLightnessLight,
-        )
+    fun accentTint(accent: Color, lightness: Float): Color = normalisedAccent(accent, lightness)
 
     private fun normalisedAccent(accent: Color, lightness: Float): Color {
         val hsl = FloatArray(3)
