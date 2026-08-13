@@ -37,6 +37,12 @@
     <string name="config_backGestureArrowPathData" translatable="false">M 1,-1 L 0,0 L 1,1</string>
     <bool name="config_useCustomChargingAnim">false</bool>
     <integer name="config_chargingAnimMode">0</integer>
+    <!-- When true, wait for oplus fast_chg_type handshake and play SVOOC frames only then. -->
+    <bool name="config_chargingAnimDetectSvooc">false</bool>
+    <integer name="config_chargingAnimHandshakeTimeoutMs">2200</integer>
+    <bool name="config_chargingAnimDimEnabled">true</bool>
+    <!-- 100 = native frame size. SuperVOOC overlay raises this a bit. -->
+    <integer name="config_chargingAnimFrameScale">100</integer>
     <integer name="config_chargingAnimDimAlpha">120</integer>
     <integer name="config_chargingAnimLowBatteryThreshold">15</integer>
     <color name="config_chargingAnimPercentColor">#FFFFFFFF</color>
