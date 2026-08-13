@@ -26,10 +26,16 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.util.Log
 import android.util.MathUtils
+import android.util.TypedValue
 import android.view.Display
 import android.view.View
 import android.view.WindowManager
@@ -47,6 +53,7 @@ class AXRippleView @JvmOverloads constructor(
     companion object {
         private const val TAG = "AXRippleView"
         private const val DECODE_BITMAP_MAX_THREAD_POOL = 2
+        private const val FRAME_DURATION_MS = 50L
     }
 
     private val animator = ValueAnimator.ofInt(0, 40).apply {
@@ -72,21 +79,52 @@ class AXRippleView @JvmOverloads constructor(
     private var currentIndex = 0
     private var images: MutableList<Bitmap?> = ArrayList()
     private var glare: Bitmap? = null
+    private var wattageBg: Bitmap? = null
+    private var logo: Drawable? = null
+    private var ratedWatts = 0
+    private var showBranding = false
+    private var dimEnabled = true
+    private var frameScale = 1f
     private var activeFrameResIds: IntArray = IntArray(0)
     private var executorService: ExecutorService? = null
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val wattageTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.BLACK
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create("sans-serif-semibold", Typeface.NORMAL)
+    }
+    private val wattageBgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val wattageTextBounds = Rect()
 
     override fun onConfigurationChanged(newConfig: Configuration?) {
         super.onConfigurationChanged(newConfig)
     }
 
-    fun preloadRes() {
-        val ta = resources.obtainTypedArray(R.array.config_chargingAnimFrames)
-        val frameCount = ta.length()
-        activeFrameResIds = IntArray(frameCount) { ta.getResourceId(it, 0) }
-        ta.recycle()
+    fun setRatedWatts(watts: Int) {
+        ratedWatts = watts
+    }
+
+    fun preloadRes(useSvoocFrames: Boolean = false) {
+        val frameArray = if (useSvoocFrames) {
+            val svooc = resources.obtainTypedArray(R.array.config_chargingAnimSvoocFrames)
+            if (svooc.length() > 0) svooc else {
+                svooc.recycle()
+                resources.obtainTypedArray(R.array.config_chargingAnimFrames)
+            }
+        } else {
+            resources.obtainTypedArray(R.array.config_chargingAnimFrames)
+        }
+        val frameCount = frameArray.length()
+        activeFrameResIds = IntArray(frameCount) { frameArray.getResourceId(it, 0) }
+        frameArray.recycle()
 
         animator.setIntValues(0, (frameCount - 1).coerceAtLeast(0))
+        // Keep the Nothing 800ms cadence; SuperVOOC's shorter sheet needs more time per frame.
+        animator.duration = if (useSvoocFrames) {
+            (frameCount * FRAME_DURATION_MS).coerceAtLeast(800L)
+        } else {
+            800L
+        }
 
         images = ArrayList<Bitmap?>(frameCount).apply {
             repeat(frameCount) { add(null) }
@@ -97,6 +135,30 @@ class AXRippleView @JvmOverloads constructor(
         val glareResId = if (glareTa.length() > 0) glareTa.getResourceId(0, 0) else 0
         glareTa.recycle()
         glare = if (glareResId != 0) BitmapFactory.decodeResource(resources, glareResId) else null
+
+        val wattTa = resources.obtainTypedArray(R.array.config_chargingAnimWattageBg)
+        val wattResId = if (wattTa.length() > 0) wattTa.getResourceId(0, 0) else 0
+        wattTa.recycle()
+        wattageBg = if (wattResId != 0) BitmapFactory.decodeResource(resources, wattResId) else null
+
+        val logoTa = resources.obtainTypedArray(R.array.config_chargingAnimLogo)
+        val logoResId = if (logoTa.length() > 0) logoTa.getResourceId(0, 0) else 0
+        logoTa.recycle()
+        logo = if (logoResId != 0) resources.getDrawable(logoResId, null)?.mutate() else null
+
+        // Draw SUPERVOOC + 100W whenever this overlay ships a wordmark.
+        showBranding = logo != null
+        dimEnabled = try {
+            resources.getBoolean(R.bool.config_chargingAnimDimEnabled)
+        } catch (_: Exception) {
+            true
+        }
+        val scalePct = try {
+            resources.getInteger(R.integer.config_chargingAnimFrameScale)
+        } catch (_: Exception) {
+            100
+        }
+        frameScale = (if (scalePct > 0) scalePct else 100) / 100f
     }
 
     private fun releaseRes() {
@@ -107,6 +169,9 @@ class AXRippleView @JvmOverloads constructor(
         images.clear()
         glare?.recycle()
         glare = null
+        wattageBg?.recycle()
+        wattageBg = null
+        logo = null
         executorService?.shutdown()
         executorService = null
     }
@@ -163,14 +228,20 @@ class AXRippleView @JvmOverloads constructor(
         darkOverlayReverseUpdateListener = alphaUpdateListener
 
         currentIndex = 0
-        currentAlpha = 0f
-
-        AnimatorSet().apply {
-            playSequentially(
-                darkOverlayAnimator,
-                AnimatorSet().apply { playTogether(animator, darkOverlayReverseAnimator) }
-            )
-            start()
+        if (dimEnabled) {
+            currentAlpha = 0f
+            darkOverlayReverseAnimator.duration = animator.duration
+            AnimatorSet().apply {
+                playSequentially(
+                    darkOverlayAnimator,
+                    AnimatorSet().apply { playTogether(animator, darkOverlayReverseAnimator) }
+                )
+                start()
+            }
+        } else {
+            // Transparent SuperVOOC path: no fade-to-black, start the ring immediately.
+            currentAlpha = 1f
+            animator.start()
         }
     }
 
@@ -190,15 +261,24 @@ class AXRippleView @JvmOverloads constructor(
             }
         }
 
-        canvas.drawARGB((currentAlpha * (255 * 0.2f)).toInt(), 0, 0, 0)
+        if (dimEnabled) {
+            canvas.drawARGB((currentAlpha * (255 * 0.2f)).toInt(), 0, 0, 0)
+        }
 
         if (currentIndex < images.size) {
             images.getOrNull(currentIndex)?.let { bitmap ->
                 if (!bitmap.isRecycled) {
-                    val scale = min / bitmap.width
+                    val scale = (min / bitmap.width) * frameScale
+                    val destW = bitmap.width * scale
                     val destH = bitmap.height * scale
+                    val destLeft = (min - destW) / 2f
                     val destTop = (max - destH) / 2f
-                    canvas.drawBitmap(bitmap, null, RectF(0f, destTop, min, destTop + destH), null)
+                    canvas.drawBitmap(
+                        bitmap,
+                        null,
+                        RectF(destLeft, destTop, destLeft + destW, destTop + destH),
+                        null
+                    )
                 }
             }
         }
@@ -215,6 +295,71 @@ class AXRippleView @JvmOverloads constructor(
                 )
             }
         }
+
+        if (showBranding && currentAlpha > 0f) {
+            drawBranding(canvas, min, max)
+        }
+    }
+
+    private fun drawBranding(canvas: Canvas, min: Float, max: Float) {
+        val cx = min / 2f
+        val cy = max / 2f
+        val alpha = (currentAlpha * 255).toInt()
+
+        val mark = logo
+        if (mark != null) {
+            val logoW = min * 0.34f * frameScale
+            val logoH = logoW * (12f / 78f)
+            mark.alpha = alpha
+            mark.setBounds(
+                (cx - logoW / 2f).toInt(),
+                (cy - logoH / 2f - min * 0.012f).toInt(),
+                (cx + logoW / 2f).toInt(),
+                (cy + logoH / 2f - min * 0.012f).toInt()
+            )
+            mark.draw(canvas)
+        }
+
+        val watts = if (ratedWatts > 0) ratedWatts else 100
+        val label = "${watts}W"
+        val textSize = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 16f, resources.displayMetrics
+        ) * frameScale
+        wattageTextPaint.textSize = textSize
+        wattageTextPaint.alpha = alpha
+        wattageTextPaint.getTextBounds(label, 0, label.length, wattageTextBounds)
+
+        val padX = textSize * 0.85f
+        val textW = wattageTextBounds.width().toFloat()
+        val pillCy = cy + min * 0.075f * frameScale
+
+        val destW = textW + padX * 2.4f
+        val destH = textSize * 1.65f
+        val dest = RectF(
+            cx - destW / 2f,
+            pillCy - destH / 2f,
+            cx + destW / 2f,
+            pillCy + destH / 2f
+        )
+        val bg = wattageBg
+        if (bg != null && !bg.isRecycled) {
+            val bgH = destW * bg.height / bg.width
+            val bgDest = RectF(
+                cx - destW / 2f,
+                pillCy - bgH / 2f,
+                cx + destW / 2f,
+                pillCy + bgH / 2f
+            )
+            wattageBgPaint.alpha = alpha
+            canvas.drawBitmap(bg, null, bgDest, wattageBgPaint)
+        } else {
+            wattageBgPaint.color = Color.WHITE
+            wattageBgPaint.alpha = alpha
+            canvas.drawRoundRect(dest, destH * 0.22f, destH * 0.22f, wattageBgPaint)
+        }
+
+        val textY = pillCy - (wattageTextPaint.descent() + wattageTextPaint.ascent()) / 2f
+        canvas.drawText(label, cx, textY, wattageTextPaint)
     }
 
     private fun startLoadExecutor() {

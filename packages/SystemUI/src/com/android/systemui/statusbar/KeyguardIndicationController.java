@@ -1923,7 +1923,7 @@ public class KeyguardIndicationController {
             final Intent stickyBattery = mContext.registerReceiver(null,
                     new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             mOemRatedWatts = stickyBattery != null
-                    ? stickyBattery.getIntExtra("oem_charger_watts", 0) : 0;
+                    ? stickyBattery.getIntExtra(BatteryManager.EXTRA_OEM_CHARGER_WATTS, 0) : 0;
             mBatteryDefender = isBatteryDefender(status);
             mBatteryDead = status.isDead();
             // when the battery is overheated, device doesn't charge so only guard on pluggedIn:

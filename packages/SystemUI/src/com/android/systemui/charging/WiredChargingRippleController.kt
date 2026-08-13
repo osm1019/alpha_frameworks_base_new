@@ -23,9 +23,15 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemProperties
 import android.os.UserHandle
 import android.provider.Settings
+import java.io.File
 import android.view.Gravity
 import android.view.Surface
 import android.view.View
@@ -95,6 +101,10 @@ class WiredChargingRippleController @Inject constructor(
     }
     private var lastTriggerTime: Long? = null
     private var debounceLevel = 0
+    private var handshakePending = false
+    private var handshakeAttempts = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val handshakePoll = Runnable { pollHandshakeAndStart() }
 
     @VisibleForTesting
     var rippleView: RippleView = RippleView(context, attrs = null).also { it.setupShader() }
@@ -259,13 +269,55 @@ class WiredChargingRippleController @Inject constructor(
     }
 
     private fun startRippleAnimation() {
-        if (axRippleView.rippleInProgress() || axRippleView.parent != null) {
-            // Skip if ripple is still playing, or not playing but already added the parent
-            // (which might happen just before the animation starts or right after
-            // the animation ends.)
+        if (axRippleView.rippleInProgress() || axRippleView.parent != null || handshakePending) {
+            // Skip if ripple is still playing, already attached, or waiting on SuperVOOC handshake.
             return
         }
-        axRippleView.preloadRes()
+        val detectSvooc = context.resources.getBoolean(R.bool.config_chargingAnimDetectSvooc)
+                || hasSvoocFrames()
+        if (detectSvooc) {
+            handshakePending = true
+            handshakeAttempts = 0
+            pollHandshakeAndStart()
+        } else {
+            playRippleFrames(useSvooc = false, ratedWatts = 0)
+        }
+    }
+
+    private fun hasSvoocFrames(): Boolean {
+        val ta = context.resources.obtainTypedArray(R.array.config_chargingAnimSvoocFrames)
+        val has = ta.length() > 0
+        ta.recycle()
+        return has
+    }
+
+    private fun pollHandshakeAndStart() {
+        if (!shouldPlayWiredChargingRipple() || !batteryController.isPluggedIn) {
+            handshakePending = false
+            return
+        }
+        val type = readFastChgType()
+        val svooc = isSuperVooc(type)
+        val timeoutMs = context.resources.getInteger(R.integer.config_chargingAnimHandshakeTimeoutMs)
+        val maxAttempts = (timeoutMs / HANDSHAKE_POLL_MS).coerceAtLeast(1)
+        handshakeAttempts++
+        if (svooc || handshakeAttempts >= maxAttempts) {
+            handshakePending = false
+            playRippleFrames(useSvooc = svooc, ratedWatts = if (svooc) readRatedWatts() else 0)
+        } else {
+            mainHandler.postDelayed(handshakePoll, HANDSHAKE_POLL_MS.toLong())
+        }
+    }
+
+    private fun playRippleFrames(useSvooc: Boolean, ratedWatts: Int) {
+        if (axRippleView.rippleInProgress() || axRippleView.parent != null) {
+            return
+        }
+        if (!shouldPlayWiredChargingRipple() || !batteryController.isPluggedIn) {
+            return
+        }
+        axRippleView.setRatedWatts(if (useSvooc && ratedWatts > 0) ratedWatts else if (useSvooc) 100 else 0)
+        axRippleView.preloadRes(useSvoocFrames = useSvooc)
         windowLayoutParams.packageName = context.opPackageName
         axRippleView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewDetachedFromWindow(view: View) {}
@@ -285,6 +337,42 @@ class WiredChargingRippleController @Inject constructor(
         windowManager.addView(axRippleView, windowLayoutParams)
         uiEventLogger.log(WiredChargingRippleEvent.CHARGING_RIPPLE_PLAYED)
     }
+
+    private fun readFastChgType(): Int {
+        val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val extra = sticky?.getIntExtra(BatteryManager.EXTRA_OEM_FAST_CHG_TYPE, 0) ?: 0
+        if (extra > 0) {
+            return extra
+        }
+        return readSysfsInt(FAST_CHG_TYPE_USB)
+            ?: readSysfsInt(FAST_CHG_TYPE_BATT)
+            ?: 0
+    }
+
+    private fun readRatedWatts(): Int {
+        val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val extra = sticky?.getIntExtra(BatteryManager.EXTRA_OEM_CHARGER_WATTS, 0) ?: 0
+        if (extra > 0) {
+            return extra
+        }
+        val type = readFastChgType()
+        // 100W SuperVOOC adapter ids (oplus table) + dodge 0x65.
+        if (type == 101 || (type in 0x3b..0x3e) || type == 0x69 || type == 0x6a) {
+            return 100
+        }
+        return 0
+    }
+
+    private fun readSysfsInt(path: String): Int? {
+        return try {
+            File(path).takeIf { it.canRead() }?.readText()?.trim()?.toIntOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun isSuperVooc(type: Int): Boolean =
+        type == CHARGER_SUBTYPE_FASTCHG_SVOOC || type >= OPLUS_SVOOC_ID_MIN
 
     private fun startCircleAnimation() {
         if (axChargingCircleView.animationInProgress() || axChargingCircleView.parent != null) {
@@ -317,6 +405,12 @@ class WiredChargingRippleController @Inject constructor(
 
     companion object {
         private const val CHARGING_ANIM_MODE_CIRCLE = 1
+        private const val HANDSHAKE_POLL_MS = 150
+        // Matches kernel CHARGER_SUBTYPE_FASTCHG_SVOOC / OPLUS_SVOOC_ID_MIN.
+        private const val CHARGER_SUBTYPE_FASTCHG_SVOOC = 2
+        private const val OPLUS_SVOOC_ID_MIN = 10
+        private const val FAST_CHG_TYPE_USB = "/sys/class/oplus_chg/usb/fast_chg_type"
+        private const val FAST_CHG_TYPE_BATT = "/sys/class/oplus_chg/battery/fast_chg_type"
     }
 
     private fun removeRippleContainer(container: FrameLayout) {

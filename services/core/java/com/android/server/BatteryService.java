@@ -288,6 +288,7 @@ public final class BatteryService extends SystemService {
      * the broadcast or not.
      */
     private int mLastBroadcastInvalidCharger;
+    private int mLastBroadcastOemFastChgType;
     /**
      * The last seen charging policy. This requires the
      * {@link android.Manifest.permission#BATTERY_STATS} permission and should therefore not be
@@ -819,6 +820,7 @@ public final class BatteryService extends SystemService {
         shutdownIfOverTempLocked();
 
         mOemCharger = mHasOemCharger && isOemCharger();
+        final int oemFastChgType = mOemChargeInfoReady ? oemFastChgType() : 0;
 
         if (force || mHealthInfo.chargingPolicy != mLastChargingPolicy) {
             mLastChargingPolicy = mHealthInfo.chargingPolicy;
@@ -846,7 +848,8 @@ public final class BatteryService extends SystemService {
                 || mHealthInfo.batteryCapacityLevel != mLastBroadcastBatteryCapacityLevel
                 || mHealthInfo.batteryFullChargeUah != mLastBroadcastBatteryFullCharge
                 || mHealthInfo.batteryFullChargeDesignCapacityUah !=
-                        mLastBroadcastBatteryFullChargeDesign)) {
+                        mLastBroadcastBatteryFullChargeDesign
+                || oemFastChgType != mLastBroadcastOemFastChgType)) {
 
             if (mPlugType != mLastBroadcastPlugType) {
                 if (mLastBroadcastPlugType == BATTERY_PLUGGED_NONE) {
@@ -1034,6 +1037,7 @@ public final class BatteryService extends SystemService {
                 mLastBroadcastBatteryLevelCritical = mBatteryLevelCritical;
                 mLastBroadcastInvalidCharger = mInvalidCharger;
                 mLastOemCharger = mOemCharger;
+                mLastBroadcastOemFastChgType = oemFastChgType;
                 mLastBroadcastBatteryCycleCount = mHealthInfo.batteryCycleCount;
                 mLastBroadcastChargingState = mHealthInfo.chargingState;
                 mLastBroadcastBatteryCapacityLevel = mHealthInfo.batteryCapacityLevel;
@@ -1103,7 +1107,9 @@ public final class BatteryService extends SystemService {
         }
         intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_CURRENT, chargeCurrentUa);
         intent.putExtra(BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE, chargeVoltageUv);
-        intent.putExtra("oem_charger_watts", oemRatedWatts);
+        intent.putExtra(BatteryManager.EXTRA_OEM_CHARGER_WATTS, oemRatedWatts);
+        intent.putExtra(BatteryManager.EXTRA_OEM_FAST_CHG_TYPE,
+                mOemChargeInfoReady ? oemFastChgType() : 0);
         intent.putExtra(BatteryManager.EXTRA_CHARGE_COUNTER, mHealthInfo.batteryChargeCounterUah);
         intent.putExtra(BatteryManager.EXTRA_CYCLE_COUNT, mHealthInfo.batteryCycleCount);
         intent.putExtra(BatteryManager.EXTRA_CHARGING_STATUS, mHealthInfo.chargingState);
@@ -1158,11 +1164,23 @@ public final class BatteryService extends SystemService {
             return 100;
         }
         // TODO: add the 80W-class sid (Type-A / 10A cable session) once captured.
-        // Unknown sid but SuperVOOC protocol active: fall back to class rating.
-        if (readUsbSupplyInt(FAST_CHG_TYPE_PATH) == 101) {
+        int type = readUsbSupplyInt(FAST_CHG_TYPE_PATH);
+        // 100W SuperVOOC adapter ids from oplus adapter_id_table, plus dodge 0x65 (101).
+        if (type == 101
+                || (type >= 0x3b && type <= 0x3e)
+                || type == 0x69
+                || type == 0x6a) {
             return 100;
         }
         return 0;
+    }
+
+    private int oemFastChgType() {
+        int type = readUsbSupplyInt(FAST_CHG_TYPE_PATH);
+        if (type == Integer.MIN_VALUE) {
+            type = readUsbSupplyInt("/sys/class/oplus_chg/battery/fast_chg_type");
+        }
+        return type == Integer.MIN_VALUE ? 0 : type;
     }
 
     private static final String BATT_LOG_HEAD_PATH =

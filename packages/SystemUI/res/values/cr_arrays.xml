@@ -20,4 +20,10 @@
     <!-- Themes -->
     <array name="config_chargingAnimFrames"/>
     <array name="config_chargingAnimGlare"/>
+    <!-- SuperVOOC / OEM fast-charge frame sequence. Used only after handshake. -->
+    <array name="config_chargingAnimSvoocFrames"/>
+    <!-- Optional slanted wattage pill behind the "100W" label. -->
+    <array name="config_chargingAnimWattageBg"/>
+    <!-- Optional SUPERVOOC / OEM wordmark drawn over the ring. -->
+    <array name="config_chargingAnimLogo"/>
 </resources>

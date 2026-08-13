@@ -288,6 +288,20 @@ public class BatteryManager {
      */
     public static final String EXTRA_OEM_CHARGER = "oem_charger";
 
+    /**
+     * Extra for {@link android.content.Intent#ACTION_BATTERY_CHANGED}:
+     * int oplus {@code fast_chg_type} (1 = VOOC, 2 = SuperVOOC, {@code >= 10} = SVOOC adapter id).
+     * {@hide}
+     */
+    public static final String EXTRA_OEM_FAST_CHG_TYPE = "oem_fast_chg_type";
+
+    /**
+     * Extra for {@link android.content.Intent#ACTION_BATTERY_CHANGED}:
+     * int negotiated SuperVOOC wattage class for display (e.g. 100), or 0 if unknown.
+     * {@hide}
+     */
+    public static final String EXTRA_OEM_CHARGER_WATTS = "oem_charger_watts";
+
     // values for "status" field in the ACTION_BATTERY_CHANGED Intent
     public static final int BATTERY_STATUS_UNKNOWN = Constants.BATTERY_STATUS_UNKNOWN;
     public static final int BATTERY_STATUS_CHARGING = Constants.BATTERY_STATUS_CHARGING;
