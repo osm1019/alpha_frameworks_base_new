@@ -67,6 +67,7 @@ import android.content.pm.UserInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.BatteryManager;
 import android.os.Handler;
@@ -80,8 +81,11 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.format.Formatter;
+import android.text.style.ImageSpan;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
@@ -814,6 +818,24 @@ public class KeyguardIndicationController {
         updateNowPlayingIndication();
     }
 
+    /**
+     * A compound drawable sits at the view's start edge, and the indication row is match_parent
+     * with centered text — so the note has to be an inline span to stay with the song.
+     */
+    private CharSequence withNowPlayingIcon(CharSequence text, int tintColor) {
+        final Drawable icon = mContext.getDrawable(R.drawable.ic_now_playing_note);
+        if (icon == null) {
+            return text;
+        }
+        icon.setBounds(0, 0, icon.getIntrinsicWidth(), icon.getIntrinsicHeight());
+        icon.setTint(tintColor);
+        final SpannableStringBuilder builder = new SpannableStringBuilder("  ");
+        builder.setSpan(new ImageSpan(icon, ImageSpan.ALIGN_CENTER), 0, 1,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.append(text);
+        return builder;
+    }
+
     private void updateNowPlayingIndication() {
         if (mDozing) {
             updateDeviceEntryIndication(false);
@@ -826,9 +848,9 @@ public class KeyguardIndicationController {
             mRotateTextViewController.updateIndication(
                     INDICATION_TYPE_NOW_PLAYING,
                     new KeyguardIndication.Builder()
-                            .setMessage(mNowPlayingText)
+                            .setMessage(withNowPlayingIcon(mNowPlayingText,
+                                    getInitialTextColorState().getDefaultColor()))
                             .setTextColor(getInitialTextColorState())
-                            .setIcon(mContext.getDrawable(R.drawable.ic_now_playing_note))
                             .setMinVisibilityMillis(IMPORTANT_MSG_MIN_DURATION)
                             .build(),
                     true);
@@ -1525,7 +1547,7 @@ public class KeyguardIndicationController {
                 newIndication = mTransientIndication;
             } else if (!TextUtils.isEmpty(mNowPlayingText)) {
                 // Show Now Playing in the same keyguard strip as Charged while dozing.
-                newIndication = mNowPlayingText;
+                newIndication = withNowPlayingIcon(mNowPlayingText, Color.WHITE);
             } else if (!mBatteryPresent) {
                 // If there is no battery detected, hide the indication area and bail
                 mIndicationArea.setVisibility(GONE);
