@@ -132,6 +132,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.AlphaMetrics
 import kotlin.math.roundToInt
 import com.android.compose.animation.Expandable as ExpandableContainer
 import com.android.compose.animation.rememberExpandableController
@@ -309,8 +310,8 @@ fun AxMediaPanel(
         pagerIndicator = { pagerState ->
             PagerDots(
                 pagerState = pagerState,
-                activeColor = AlphaColors.mediaPageDotColor,
-                nonActiveColor = AlphaColors.mediaPageDotInactiveColor,
+                activeColor = AlphaColors.QsMediaCard.pageDot,
+                nonActiveColor = AlphaColors.QsMediaCard.pageDotInactive,
                 dotSize = 3.dp,
                 spaceSize = 3.dp,
                 modifier =
@@ -399,7 +400,7 @@ private fun AxMediaCard(
         animateColorAsState(
             targetValue =
                 if (session != null) {
-                    if (isLockscreen) MediaChrome.OnGlass else tileForeground
+                    if (isLockscreen) AlphaColors.LockscreenMediaCard.text else tileForeground
                 } else {
                     tileForeground
                 },
@@ -428,7 +429,7 @@ private fun AxMediaCard(
         if (viewModel.lockscreenMediaStyle.effective == AxLockscreenMediaStyle.WAVEFORM) {
             MediaChrome.accentSweep(primary)
         } else {
-            SolidColor(MediaChrome.LockscreenGlassBorder)
+            SolidColor(AlphaColors.LockscreenMediaCard.rim)
         }
     val cardModifier =
         if (isLockscreen && session != null) {
@@ -438,16 +439,16 @@ private fun AxMediaCard(
             modifier
                 .fillMaxSize()
                 .shadow(
-                    elevation = MediaChrome.LockscreenGlassElevation,
+                    elevation = AlphaMetrics.mediaCardElevation,
                     shape = shape,
                     clip = false,
-                    ambientColor = AlphaColors.cardShadowAmbientColor,
-                    spotColor = AlphaColors.cardShadowSpotColor,
+                    ambientColor = AlphaColors.LockscreenMediaCard.shadowAmbient,
+                    spotColor = AlphaColors.LockscreenMediaCard.shadowSpot,
                 )
                 .clip(shape)
                 // Waveform rims the card with the same sweep it draws the band in; the other
                 // styles keep the neutral hairline.
-                .border(MediaChrome.LockscreenGlassBorderWidth, lockscreenRim, shape)
+                .border(AlphaMetrics.chipRimWidth, lockscreenRim, shape)
         } else {
             modifier.fillMaxSize().clip(shape)
         }
@@ -794,7 +795,7 @@ private fun CompactMediaContent(
                         colors =
                             colors.copy(
                                 primary = MediaChrome.accentFill(colors.primary),
-                                onPrimary = AlphaColors.onAccentColor,
+                                onPrimary = AlphaColors.QsMediaCard.playGlyph,
                             ),
                         interactive = interactive,
                         compact = compactOutput,
@@ -925,7 +926,7 @@ private fun ExpandedMediaContent(
                     if (subtitle.isNotEmpty()) {
                         AnimatedMediaText(
                             text = subtitle,
-                            color = MediaChrome.OnGlassSecondary,
+                            color = AlphaColors.QsMediaCard.textSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -944,7 +945,7 @@ private fun ExpandedMediaContent(
                     if (hasDuration) {
                         Text(
                             text = elapsedLabel,
-                            color = MediaChrome.OnGlassHint,
+                            color = AlphaColors.QsMediaCard.textHint,
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             modifier = Modifier.padding(end = 8.dp),
@@ -960,7 +961,7 @@ private fun ExpandedMediaContent(
                     if (hasDuration) {
                         Text(
                             text = totalLabel,
-                            color = MediaChrome.OnGlassHint,
+                            color = AlphaColors.QsMediaCard.textHint,
                             style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             modifier = Modifier.padding(start = 8.dp),
@@ -1017,7 +1018,7 @@ private fun ExpandedMediaContent(
                             iconSize = ExpandedMediaPlayIconSize,
                             // The card's one accent, normalised so the near-white glyph reads on
                             // it whatever the cover was.
-                            tint = AlphaColors.onAccentColor,
+                            tint = AlphaColors.QsMediaCard.playGlyph,
                             background = MediaChrome.accentFill(colors.primary),
                             shape = RoundedCornerShape(playPauseCornerRadius),
                             interactive = interactive,
@@ -1246,8 +1247,8 @@ private fun LockscreenGlassBackdrop(
         // Tint sits above whatever backdrop we got. Without frost behind it, an open body leaves
         // white text on bare wallpaper, so fall back to the dense one.
         val body =
-            if (blurEnabled || artwork != null) MediaChrome.LockscreenGlassBody
-            else MediaChrome.LockscreenGlassBodyNoBlur
+            if (blurEnabled || artwork != null) AlphaColors.LockscreenMediaCard.frostBody
+            else AlphaColors.LockscreenMediaCard.frostBodyNoBlur
         Box(Modifier.fillMaxSize().background(body))
     }
 }
@@ -1274,7 +1275,7 @@ private fun rememberCrossWindowBlurEnabled(): Boolean {
 private fun CrossWindowBlurBackdrop(corner: Dp) {
     val density = LocalDensity.current
     val cornerPx = with(density) { corner.toPx() }
-    val blurPx = with(density) { MediaChrome.LockscreenGlassBlurRadius.toPx().toInt() }
+    val blurPx = with(density) { AlphaMetrics.mediaCardBlurRadius.toPx().toInt() }
     AndroidView(
         factory = { context ->
             View(context).apply {
@@ -1335,7 +1336,7 @@ private fun InWindowArtBackdrop(artwork: IconModel) {
                         Modifier.size(rootSize.width.toDp(), rootSize.height.toDp())
                             .offset { cardOffset }
                             .blur(
-                                MediaChrome.LockscreenGlassBlurRadius,
+                                AlphaMetrics.mediaCardBlurRadius,
                                 BlurredEdgeTreatment.Unbounded,
                             ),
                 )
@@ -1369,11 +1370,11 @@ internal fun MediaSeekBar(
             }
             .orEmpty()
     // Capture theme tokens in composition — the AndroidView update block is not @Composable.
-    val trackColorArgb = MediaChrome.ProgressTrack.toArgb()
+    val trackColorArgb = AlphaColors.QsMediaCard.progressTrack.toArgb()
     // Neutral timeline, as on the lockscreen: the played portion is content, not accent. Painting
     // it with the art colour put a tone-90 pastel line on a light card, where it read as unfilled.
-    val progressArgb = MediaChrome.LockscreenProgress.toArgb()
-    val thumbArgb = MediaChrome.LockscreenProgressThumb.toArgb()
+    val progressArgb = AlphaColors.QsMediaCard.progressFill.toArgb()
+    val thumbArgb = AlphaColors.QsMediaCard.progressThumb.toArgb()
     Column(modifier = modifier) {
         AndroidView(
             factory = { context ->

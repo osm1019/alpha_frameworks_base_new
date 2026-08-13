@@ -77,7 +77,7 @@ import com.android.systemui.axdynamicbar.shared.TsBadge
 import com.android.systemui.axdynamicbar.shared.chipTintAccentFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.iconKeyFor
-import com.android.systemui.axdynamicbar.shared.islandGlassChrome
+import com.android.systemui.axdynamicbar.shared.dbStatusBarChipChrome
 import com.android.systemui.axdynamicbar.shared.textKeyFor
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
@@ -135,7 +135,7 @@ fun AxDynamicBarChip(
             ) { display ->
                 val rawAccent = chipTintAccentFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
-                val rawChrome = islandGlassChrome(rawAccent, neutralBody = false)
+                val rawChrome = dbStatusBarChipChrome(rawAccent)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
                 )

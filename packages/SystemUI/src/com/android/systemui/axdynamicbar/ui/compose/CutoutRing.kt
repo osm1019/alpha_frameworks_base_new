@@ -211,7 +211,7 @@ internal fun AnimatedCutoutRing(
             }
 
             RingMode.MEDIA_ROTATE -> {
-                val contrastColor = lerp(effAccent, AlphaColors.cutoutRingHighlightColor, 0.6f)
+                val contrastColor = lerp(effAccent, AlphaColors.DbStatusBarChip.ringHighlight, 0.6f)
                 val segmentSweep = 30f
                 drawCircle(color = ringColor, radius = radius, style = stroke)
                 drawArc(

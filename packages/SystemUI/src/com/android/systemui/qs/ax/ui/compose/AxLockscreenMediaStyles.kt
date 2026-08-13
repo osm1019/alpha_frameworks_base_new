@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.alpha.theme.AlphaMetrics
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import com.android.systemui.media.ax.ui.compose.MediaChrome
@@ -118,10 +119,10 @@ internal fun AxLockscreenMediaStyle.heightRes(): Int =
  */
 internal fun AxLockscreenMediaStyle.cornerRadius(): Dp =
     when (this) {
-        AxLockscreenMediaStyle.GLASS -> MediaChrome.LockscreenCornerRadius
+        AxLockscreenMediaStyle.GLASS -> AlphaMetrics.cardCornerRadius
         // Half of ax_lockscreen_media_height_minimal — a true pill.
         AxLockscreenMediaStyle.MINIMAL -> MinimalPillCorner
-        AxLockscreenMediaStyle.WAVEFORM -> MediaChrome.LockscreenCornerRadius
+        AxLockscreenMediaStyle.WAVEFORM -> AlphaMetrics.cardCornerRadius
     }
 
 /** Picks the lockscreen card layout the user asked for. */
@@ -170,7 +171,7 @@ internal fun LockscreenMediaContent(
  * the trailing edge, then a single-row neutral timeline and a centred transport.
  *
  * Controls and the seek bar are deliberately neutral — white play fill, bare skips
- * ([MediaChrome.ControlBare]), quiet white progress (no accent squiggle). The frosted body is
+ * ([AlphaColors.LockscreenMediaCard.skipGlyph]), quiet white progress (no accent squiggle). The frosted body is
  * painted by [LockscreenGlassBackdrop] on the host card, not here.
  */
 @Composable
@@ -206,13 +207,13 @@ private fun GlassLockscreenMedia(
                 .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(MediaChrome.LockscreenArtSize),
+            modifier = Modifier.fillMaxWidth().height(AlphaMetrics.mediaArtSize),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MediaArtPane(
                 session = session,
-                size = MediaChrome.LockscreenArtSize,
-                shape = RoundedCornerShape(MediaChrome.LockscreenArtCorner),
+                size = AlphaMetrics.mediaArtSize,
+                shape = RoundedCornerShape(AlphaMetrics.mediaArtCornerRadius),
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -224,7 +225,7 @@ private fun GlassLockscreenMedia(
                 if (subtitle.isNotEmpty()) {
                     AnimatedMediaText(
                         text = subtitle,
-                        color = MediaChrome.OnGlassSecondary,
+                        color = AlphaColors.LockscreenMediaCard.textSecondary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -250,7 +251,7 @@ private fun GlassLockscreenMedia(
                 if (hasDuration) {
                     Text(
                         text = elapsedLabel,
-                        color = MediaChrome.OnGlassHint,
+                        color = AlphaColors.LockscreenMediaCard.textHint,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         modifier = Modifier.padding(end = 8.dp),
@@ -265,7 +266,7 @@ private fun GlassLockscreenMedia(
                 if (hasDuration) {
                     Text(
                         text = totalLabel,
-                        color = MediaChrome.OnGlassHint,
+                        color = AlphaColors.LockscreenMediaCard.textHint,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         modifier = Modifier.padding(start = 8.dp),
@@ -291,7 +292,7 @@ private fun GlassLockscreenMedia(
                             viewModel = viewModel,
                             width = 44.dp,
                             iconSize = 28.dp,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                             interactive = interactive,
                         )
                         CoreMediaAction(
@@ -311,8 +312,8 @@ private fun GlassLockscreenMedia(
                             shape = CircleShape,
                             border =
                                 BorderStroke(
-                                    MediaChrome.LockscreenGlassBorderWidth,
-                                    MediaChrome.LockscreenGlassBorder,
+                                    AlphaMetrics.chipRimWidth,
+                                    AlphaColors.LockscreenMediaCard.artRim,
                                 ),
                             interactive = interactive,
                         )
@@ -323,7 +324,7 @@ private fun GlassLockscreenMedia(
                             viewModel = viewModel,
                             width = 44.dp,
                             iconSize = 28.dp,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                             interactive = interactive,
                         )
                     }
@@ -337,7 +338,7 @@ private fun GlassLockscreenMedia(
                     colors =
                         colors.copy(
                             primary = Color.Transparent,
-                            onPrimary = MediaChrome.ControlBare,
+                            onPrimary = AlphaColors.LockscreenMediaCard.skipGlyph,
                         ),
                     interactive = interactive,
                     compact = false,
@@ -351,7 +352,7 @@ private fun GlassLockscreenMedia(
                             viewModel = viewModel,
                             width = 40.dp,
                             iconSize = 22.dp,
-                            tint = MediaChrome.OnGlassSecondary,
+                            tint = AlphaColors.LockscreenMediaCard.textSecondary,
                             interactive = interactive,
                         )
                     }
@@ -388,10 +389,10 @@ private fun MinimalLockscreenMedia(
     ) {
         MediaArtPane(
             session = session,
-            size = MediaChrome.LockscreenArtSize,
+            size = AlphaMetrics.mediaArtSize,
             shape = CircleShape,
             borderWidth = MinimalArtRingWidth,
-            borderColor = MediaChrome.LockscreenGlassBorder,
+            borderColor = AlphaColors.LockscreenMediaCard.artRim,
         )
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -403,7 +404,7 @@ private fun MinimalLockscreenMedia(
             if (subtitle.isNotEmpty()) {
                 AnimatedMediaText(
                     text = subtitle,
-                    color = MediaChrome.OnGlassSecondary,
+                    color = AlphaColors.LockscreenMediaCard.textSecondary,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -430,7 +431,7 @@ private fun MinimalLockscreenMedia(
                         viewModel = viewModel,
                         width = 40.dp,
                         iconSize = 24.dp,
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                         interactive = interactive,
                     )
                     CoreMediaAction(
@@ -442,7 +443,7 @@ private fun MinimalLockscreenMedia(
                         viewModel = viewModel,
                         width = 48.dp,
                         iconSize = 32.dp,
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                         interactive = interactive,
                     )
                     CoreMediaAction(
@@ -452,7 +453,7 @@ private fun MinimalLockscreenMedia(
                         viewModel = viewModel,
                         width = 40.dp,
                         iconSize = 24.dp,
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                         interactive = interactive,
                     )
                 }
@@ -506,7 +507,7 @@ private fun WaveformLockscreenMedia(
             MediaArtPane(
                 session = session,
                 size = WaveformArtSize,
-                shape = RoundedCornerShape(MediaChrome.LockscreenArtCorner),
+                shape = RoundedCornerShape(AlphaMetrics.mediaArtCornerRadius),
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -520,7 +521,7 @@ private fun WaveformLockscreenMedia(
                         if (subtitle.isNotEmpty()) {
                             AnimatedMediaText(
                                 text = subtitle,
-                                color = MediaChrome.OnGlassSecondary,
+                                color = AlphaColors.LockscreenMediaCard.textSecondary,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -535,7 +536,7 @@ private fun WaveformLockscreenMedia(
                         colors =
                             colors.copy(
                                 primary = Color.Transparent,
-                                onPrimary = MediaChrome.ControlBare,
+                                onPrimary = AlphaColors.LockscreenMediaCard.skipGlyph,
                             ),
                         interactive = interactive,
                         compact = false,
@@ -570,7 +571,7 @@ private fun WaveformLockscreenMedia(
                         viewModel = viewModel,
                         width = 36.dp,
                         iconSize = 20.dp,
-                        tint = MediaChrome.OnGlassSecondary,
+                        tint = AlphaColors.LockscreenMediaCard.textSecondary,
                         interactive = interactive,
                     )
                 }
@@ -582,7 +583,7 @@ private fun WaveformLockscreenMedia(
                         viewModel = viewModel,
                         width = 40.dp,
                         iconSize = 26.dp,
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                         interactive = interactive,
                     )
                     // Hollow play, ringed with the same sweep the band uses.
@@ -601,7 +602,7 @@ private fun WaveformLockscreenMedia(
                             viewModel = viewModel,
                             width = WaveformPlaySize,
                             iconSize = 26.dp,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                             shape = CircleShape,
                             interactive = interactive,
                         )
@@ -613,7 +614,7 @@ private fun WaveformLockscreenMedia(
                         viewModel = viewModel,
                         width = 40.dp,
                         iconSize = 26.dp,
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.LockscreenMediaCard.skipGlyph,
                         interactive = interactive,
                     )
                 }
@@ -623,7 +624,7 @@ private fun WaveformLockscreenMedia(
                         viewModel = viewModel,
                         width = 36.dp,
                         iconSize = 20.dp,
-                        tint = MediaChrome.OnGlassSecondary,
+                        tint = AlphaColors.LockscreenMediaCard.textSecondary,
                         interactive = interactive,
                     )
                 }
@@ -640,7 +641,7 @@ private fun WaveformLockscreenMedia(
                 if (hasDuration) {
                     Text(
                         text = elapsedLabel,
-                        color = MediaChrome.OnGlassSecondary,
+                        color = AlphaColors.LockscreenMediaCard.textSecondary,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         modifier = Modifier.padding(end = 8.dp),
@@ -657,7 +658,7 @@ private fun WaveformLockscreenMedia(
                 if (hasDuration) {
                     Text(
                         text = totalLabel,
-                        color = MediaChrome.OnGlassSecondary,
+                        color = AlphaColors.LockscreenMediaCard.textSecondary,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         modifier = Modifier.padding(start = 8.dp),
@@ -671,8 +672,8 @@ private fun WaveformLockscreenMedia(
 /** Progress as a row of dashes, filled up to [progress]. Indicator only — never interactive. */
 @Composable
 private fun SegmentedProgress(progress: Float, modifier: Modifier = Modifier) {
-    val filledColor = MediaChrome.OnGlass
-    val emptyColor = MediaChrome.LockscreenProgressTrack
+    val filledColor = AlphaColors.LockscreenMediaCard.text
+    val emptyColor = AlphaColors.LockscreenMediaCard.progressTrack
     Canvas(modifier) {
         val segment = MinimalSegmentWidth.toPx()
         val gap = MinimalSegmentGap.toPx()
@@ -800,9 +801,9 @@ private fun LockscreenSeekBar(
     val progress = session?.let(viewModel::progress) ?: 0f
     val description = seekBarDescription(session, progress)
     // Capture theme colours here — Canvas draw scope is not @Composable.
-    val trackColor = MediaChrome.LockscreenProgressTrack
-    val thumbColor = MediaChrome.LockscreenProgressThumb
-    val progressTip = MediaChrome.LockscreenProgress
+    val trackColor = AlphaColors.LockscreenMediaCard.progressTrack
+    val thumbColor = AlphaColors.LockscreenMediaCard.progressThumb
+    val progressTip = AlphaColors.LockscreenMediaCard.progressTrail
     val resolvedTrail = trail ?: { endX -> MediaChrome.lockscreenProgressTrail(endX, progressTip) }
     // Inset by the thumb radius, the same margin the canvas paints with, so it tracks the finger at
     // both ends.
@@ -862,15 +863,15 @@ internal fun MediaArtPane(
     session: MediaSessionModel?,
     size: Dp,
     shape: Shape,
-    borderWidth: Dp = MediaChrome.LockscreenGlassBorderWidth,
+    borderWidth: Dp = AlphaMetrics.chipRimWidth,
     borderColor: Color? = null,
 ) {
-    val resolvedBorder = borderColor ?: MediaChrome.LockscreenGlassBorder
+    val resolvedBorder = borderColor ?: AlphaColors.LockscreenMediaCard.artRim
     Box(
         modifier =
             Modifier.size(size)
                 .clip(shape)
-                .background(MediaChrome.SkipNeutral)
+                .background(AlphaColors.LockscreenMediaCard.artPlate)
                 .border(borderWidth, resolvedBorder, shape),
         contentAlignment = Alignment.Center,
     ) {
@@ -891,7 +892,7 @@ internal fun MediaArtPane(
                     MediaAppIcon(
                         session = session,
                         size = size * 0.4f,
-                        tint = MediaChrome.OnGlassHint,
+                        tint = AlphaColors.LockscreenMediaCard.textHint,
                     )
             }
         }
@@ -902,12 +903,12 @@ internal fun MediaArtPane(
 @Composable
 private fun WaveformBadge(playing: Boolean, seed: Int, size: Dp) {
     Box(
-        modifier = Modifier.size(size).clip(CircleShape).background(MediaChrome.SkipNeutral),
+        modifier = Modifier.size(size).clip(CircleShape).background(AlphaColors.LockscreenMediaCard.badgePlate),
         contentAlignment = Alignment.Center,
     ) {
         AxWaveform(
             playing = playing,
-            color = SolidColor(MediaChrome.OnGlass),
+            color = SolidColor(AlphaColors.LockscreenMediaCard.text),
             // Count is derived from the width so the row always fits the inset. A fixed 13 bars did
             // not: 13 × 2dp + 12 × 2dp = 50dp of bars in a 37dp box, overflowing to the circle's
             // clip and leaving the badge looking edge to edge.

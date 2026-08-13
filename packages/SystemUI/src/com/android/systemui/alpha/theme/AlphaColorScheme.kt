@@ -23,30 +23,62 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+private val isDarkTheme: Boolean
+    @Composable @ReadOnlyComposable get() = isSystemInDarkTheme()
+
+private val onSurface: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+
+private val surfaceContainerHigh: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
+
 /**
- * Every colour Alpha's Compose surfaces paint with, in one place.
+ * Every Alpha surface, and every element it paints, as one map.
  *
- * Consumers: the media stack, the Dynamic Bar stack, the lockscreen pill, and the
- * statusbar / cutout chip. They reference these names and never author a colour of their own —
- * need a new one, add it here; need an exception, add the exception here and use it where it
- * applies.
+ * ```
+ * AlphaColors.DbLockscreenPill.textSecondary   // the object, then the element
+ * ```
  *
- * Members are named for the **element** they paint (`mediaButtonColor`, `chipBodyColor`), with a
- * `Light` / `Dark` suffix only where an element genuinely carries two values. The one exception
- * is the event palette at the top: those are shared crayons, assigned to events by
- * `eventStyleFor`, so naming them after any single element would be a lie.
+ * **The problem this exists to solve.** The first cut was organised by *kind of colour* — one
+ * `OnGlass`, one `LockscreenProgress`, one `SkipNeutral` — and every surface drank from the same
+ * handful. `LockscreenProgress` alone was read by five objects, so "make the QS timeline quieter"
+ * silently moved the lockscreen pill, both keyguard cards and the Dynamic Bar stack with it.
+ * Tuning meant grepping for consumers, checking none of them minded, and inventing an exception
+ * when one did.
  *
- * **This file is currently an extraction, not a design.** Every value is exactly what the call
- * site resolved to before it was lifted here, so adopting it changes nothing on screen. Tuning
- * happens from here afterwards, in one place instead of twenty.
+ * Here an element belongs to exactly one object. Changing [QsMediaCard.progressTrack] changes the
+ * QS timeline and nothing else, by construction — no consumer search, no special cases. Want to
+ * tune a colour: open this file, find the object, find the element.
  *
- * Two kinds of value live here, and the split is deliberately visible:
+ * **The six objects** are the surfaces a user can point at:
  *
- * - **Fixed** (`val x = Color(0x…)`) — the same colour in both themes.
- * - **Role-backed** (`@Composable val x get() = MaterialTheme.colorScheme.…`) — follows the
- *   user's Monet palette and flips with day / night on its own.
+ * | Object | Where it is |
+ * |---|---|
+ * | [DbStatusBarChip] | the chip in the status bar, and the same chip around the cutout |
+ * | [DbLockscreenPill] | the pill above the lockscreen shortcut row |
+ * | [DbKeyguardCard] | what the pill expands into on the lockscreen |
+ * | [LockscreenMediaCard] | the standalone lockscreen media card (Glass / Minimal / Waveform) |
+ * | [QsMediaCard] | the media card in Quick Settings, every span |
+ * | [DbStackCard] | the cards in the expanded Dynamic Bar stack |
  *
- * Knowing which is which is half the reason to have this file.
+ * `Db` marks the four that belong to the Dynamic Bar, so it is obvious at the call site which
+ * surfaces move together when the Dynamic Bar's look changes and which two are their own thing.
+ *
+ * **Two kinds of value**, and the split is deliberately visible:
+ *
+ * - **Role-backed** (`MaterialTheme.colorScheme.…`) — follows the user's Monet palette and flips
+ *   with day / night on its own.
+ * - **Fixed** (`Color(0x…)`) — the same in both themes, on purpose. Say why in a comment.
+ *
+ * Where an element differs by theme it says so inline (`if (isDarkTheme) … else …`) rather than
+ * pointing at an alpha table elsewhere in the file: one lookup has to be enough.
+ *
+ * Shared crayons — the event palette, [onAccentColor], the contrast floors — sit above the objects
+ * because they genuinely are one thing (the charging green *is* the battery green). An object that
+ * wants to break away declares its own element instead.
+ *
+ * Nothing else is flat. If you find yourself wanting a value that several objects would share,
+ * that is the old mistake asking to be repeated — give each object its own and let them drift.
  */
 object AlphaColors {
 
@@ -116,15 +148,6 @@ object AlphaColors {
     val pausedGray: Color
         @Composable @ReadOnlyComposable get() = if (isDark) pausedGrayDark else pausedGrayLight
 
-    // ── Media ────────────────────────────────────────────────────────────────────────────
-
-    /** Media chip accent when the session reports no colour of its own. */
-    val mediaFallbackColor: Color @Composable @ReadOnlyComposable get() = purple
-
-    /** Transport glyphs — play, skips, output — on a glass body. */
-    val mediaButtonColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
-
     /**
      * Glyph on any **filled accent** — play buttons, action circles, selected plates.
      *
@@ -137,99 +160,390 @@ object AlphaColors {
      */
     val onAccentColor = Color(0xFFFAFAFA)
 
-    /** Transport glyphs on the QS card, where the wash is artwork rather than glass. */
-    val mediaArtButtonColor = Color.White
-
-    /** Carousel page dots on the QS media card. */
-    val mediaPageDotColor = Color.White
-    val mediaPageDotInactiveColor = Color.White.copy(alpha = 0.42f)
-
-    // ── Chip and card bodies ─────────────────────────────────────────────────────────────
-    // Opaque: these sit over status icons, notifications and wallpaper.
-
-    /** Dynamic Bar chip / pill and expand-card body. Matches the lockscreen shortcut buttons. */
-    val chipBodyColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
-
-    /** Nested box inside an expand card — steps a role rather than going translucent. */
-    val chipBodyNestedColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
-
-    /** Expand-card shell on the island stack. */
-    val cardBodyColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceBright
-
-    /** Hairline between panes — an expand card can land on a notification card. */
-    val chipRimColor: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = AlphaOpacity.rimAlpha)
-
-    // ── Text ─────────────────────────────────────────────────────────────────────────────
-
-    val chipTextColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
-
-    val chipTextVariantColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
-
-    // ── Action buttons on expand cards ───────────────────────────────────────────────────
-
-    val actionButtonColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
-
-    val actionButtonTextColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimary
-
-    val destructiveButtonColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.errorContainer
-
-    val destructiveButtonTextColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onErrorContainer
-
-    // ── Battery ──────────────────────────────────────────────────────────────────────────
-
-    val batteryChargingColor: Color @Composable @ReadOnlyComposable get() = green
-    val batteryPowerSaveColor: Color @Composable @ReadOnlyComposable get() = orange
-
-    val batteryIdleColor: Color
-        @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
-
-    /**
-     * Charging ring on the expand card. Carries its own alpha in the literal (0xCC) and its own
-     * hues — deliberately *not* [red] / [orange] / [green], and not split per theme yet. A wart
-     * worth resolving when this file stops being a pure extraction.
-     */
-    val chargeRingLowColor = Color(0xCCF44336)
-    val chargeRingMidColor = Color(0xCCFF9800)
-    val chargeRingHighColor = Color(0xCC4CAF50)
-
-    // ── Cutout, badge, torch ─────────────────────────────────────────────────────────────
-
-    /** Cutout ring highlight — the event accent is lerped toward this. */
-    val cutoutRingHighlightColor = Color.White
-
-    /** Stack-count badge: body, rim and numeral. */
-    val badgeBodyColor = Color.Black
-    val badgeRimColor = Color.White
-
-    /** Torch pill bulb. */
-    val torchWindowColor = Color.Black
-    val torchFilamentColor = Color.White
-
-    // ── Lockscreen media card lift ───────────────────────────────────────────────────────
-
-    val cardShadowAmbientColor = Color.Black.copy(alpha = 0.30f)
-    val cardShadowSpotColor = Color.Black.copy(alpha = 0.42f)
-
     // ── Legibility floor ─────────────────────────────────────────────────────────────────
     // Used only when no palette role clears contrast on an arbitrary accent.
 
     val contrastFloorLightColor = Color.White
     val contrastFloorDarkColor = Color.Black
 
-    /** Declared by the old island tokens and never referenced. Kept for the audit trail. */
-    val unusedDarkChipTextColor = Color(0xFF1B1B1B)
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Status bar chip (and the cutout chip — same object, two mounts)
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The chip that floats in the status bar, and the identical one drawn around the cutout.
+     *
+     * Unlike every other object here it has **no neighbours to match** and its backdrop is the
+     * wallpaper, not a themed surface — it only shows while Quick Settings is closed. Every event
+     * carries its hue: [body] is the base the event accent tints, not the final colour.
+     */
+    object DbStatusBarChip {
+
+        /** Base the event accent is mixed into. The result, not this, is what you see. */
+        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+
+        /** How far [body] travels toward the event accent. 0 = untinted, 1 = solid accent. */
+        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
+
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.16f else 0.12f)
+
+        val rimWidth = 1.dp
+
+        /**
+         * Text and glyphs. Picked by measuring against the tinted [body] — see `contentColorOn` — so
+         * these two are candidates, not the answer: whichever contrasts better wins, and if neither
+         * clears [AlphaMetrics.minContentContrast] the chip falls back to the shared floors.
+         */
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val textInverse: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.inverseOnSurface
+
+        val textSecondaryAlpha = 0.7f
+        val textHintAlpha = 0.5f
+
+        /** Progress hairline along the bottom edge: both ends blend accent toward [text]. */
+        val progressTrackBlend = 0.2f
+        val progressFillBlend = 0.6f
+        val progressHeight = 2.dp
+
+        /** Stack-count badge: body is accent blended toward [text], numeral is [text]. */
+        val badgeBodyBlend = 0.3f
+
+        /**
+         * The badge the chip carries when several events are queued, and the cutout ring's
+         * highlight. Fixed black-on-white: both sit over the wallpaper, where a themed pair would
+         * disappear against half of them.
+         */
+        val badgeBody = Color.Black
+        val badgeRim = Color.White
+        val ringHighlight = Color.White
+
+        /**
+         * Lightness the album colour is normalised to before it tints [body]. Media used to opt out of
+         * the colour code here; it does not any more.
+         *
+         * Not the same number as a *fill* takes ([AlphaMetrics.mediaAccentFillLightnessDark]) — a fill has a hard
+         * ceiling because [AlphaColors.onAccentColor] must read on it, a tint has none because the text is
+         * measured against the mixed result afterwards. Set to where the event palette sits.
+         */
+        val accentTintLightness: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.55f else 0.55f
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Lockscreen pill
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The pill above the lockscreen shortcut row.
+     *
+     * It sits *between* the two keyguard shortcut buttons, so [body] deliberately matches what
+     * `KeyguardQuickAffordanceViewBinder` gives them — the bottom row has to read as one band. That is
+     * also why media alone skips the event tint here ([mediaBody]): a coloured media pill between two
+     * neutral circles broke the row.
+     */
+    object DbLockscreenPill {
+
+        /** Base the event accent tints, for every event except media. */
+        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+
+        /** Media takes the body untinted — see the class note. */
+        val mediaBody: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+
+        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
+
+        /** Hairline. Media uses the neutral rim, tinted events the brighter one. */
+        val mediaRim: Color
+            @Composable @ReadOnlyComposable
+            get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.16f else 0.12f)
+
+        val rimWidth = 1.dp
+
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        /** Second candidate when the tinted body is too light for [text] — see `contentColorOn`. */
+        val textInverse: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.inverseOnSurface
+
+        val textSecondary: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val textHint: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+
+        /** Album thumbnail: plate behind it while it loads, and the hairline around it. */
+        val artPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val artRim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
+
+        /** Transport. Play is the only filled control; skips are bare. */
+        val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+        val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+        val buttonPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+
+        /** Timeline along the bottom edge. */
+        val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.22f)
+        val progressFill: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
+        val progressHeight = 2.dp
+
+        /** Waveform is the one style that lets the album colour into the timeline. */
+        val waveformProgressTrack: Color
+            @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.18f)
+
+        val badgeBodyBlend = 0.3f
+        val badgeText: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        /** Battery pill — the variant shown when no event is on the pill. */
+        val batteryCharging: Color @Composable @ReadOnlyComposable get() = AlphaColors.green
+        val batteryPowerSave: Color @Composable @ReadOnlyComposable get() = AlphaColors.orange
+        val batteryIdle: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Keyguard expand card — what the pill opens into
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The card the lockscreen pill expands into. Not media-only — it hosts whatever event the pill
+     * was showing (media, timer, stopwatch, audio recording), which is why the transport elements
+     * below sit beside plain text and action buttons.
+     *
+     * Opaque: it lands on top of notification cards.
+     */
+    object DbKeyguardCard {
+
+        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+
+        /** A box nested inside the card steps a role rather than going translucent. */
+        val nestedBody: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        val rimWidth = 1.dp
+
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val textSecondary: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val textHint: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+
+        val artPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val artRim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
+        val artRimWidth = 1.dp
+
+        val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+        val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+        val buttonPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+
+        val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.22f)
+        val progressTrail: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
+        val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        /** Buttons that end up on the card from a notification action. */
+        val actionButton: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+        val actionButtonText: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimary
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Lockscreen media card — the standalone one, with the three styles
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The standalone lockscreen media card (Glass / Minimal / Waveform).
+     *
+     * The only object here whose body is **open**: blur or album art behind the pane is the whole
+     * point, so [frostBody] carries alpha and lets it through. Day needs a denser pane than night —
+     * what sits behind is wallpaper and cover art, and neither follows the theme, so a light seed at
+     * night's density loses to a dark wallpaper.
+     */
+    object LockscreenMediaCard {
+
+        val frostBody: Color
+            @Composable @ReadOnlyComposable
+            get() = surfaceContainerHigh.copy(alpha = if (isDarkTheme) 0x4D / 255f else 0.72f)
+
+        /** When the compositor refuses blur, an open pane leaves content on bare wallpaper. */
+        val frostBodyNoBlur: Color
+            @Composable @ReadOnlyComposable get() = surfaceContainerHigh.copy(alpha = 0xD9 / 255f)
+
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
+        val rimWidth = 1.dp
+
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val textSecondary: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val textHint: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+
+        val artPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val artRim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
+
+        val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+        val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+        val badgePlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+
+        val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.22f)
+        val progressTrail: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
+        val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        /** Lift. The card is the only thing here that casts a shadow. */
+        val shadowAmbient = Color.Black.copy(alpha = 0.30f)
+        val shadowSpot = Color.Black.copy(alpha = 0.42f)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // QS media card
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The Quick Settings media card, at every span.
+     *
+     * A **tile**, not glass: [body] is what the tiles beside it use, so the card never looks like a
+     * visitor. Album art is a thumbnail inside it rather than a wash behind it, which is what keeps
+     * these colours ours instead of the cover's.
+     */
+    object QsMediaCard {
+
+        /** Matches the inactive tiles around it. `surfaceEffect1` when blur is on. */
+        val body: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceBright
+
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val textSecondary: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val textHint: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+
+        val artPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val artRim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
+
+        /** Play is the card's one accent; everything else is content-coloured. */
+        val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+        val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+        val outputGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.18f)
+        val progressFill: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
+        val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        /** Carousel dots. Fixed: they sit over album art on the lockscreen mount. */
+        val pageDot = Color.White
+        val pageDotInactive = Color.White.copy(alpha = 0.42f)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+    // Dynamic Bar stack cards
+    // ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The cards in the expanded Dynamic Bar stack — media, charging, timer, notification, and the
+     * rest. One object, because they are one stack and a card that theme-drifted from its neighbours
+     * would be the bug.
+     */
+    object DbStackCard {
+
+        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+        val nestedBody: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+
+        /** An expand card can land on a notification card, which resolves to a neighbouring role. */
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        val rimWidth = 1.dp
+        val cornerRadius = 28.dp
+
+        val text: Color @Composable @ReadOnlyComposable get() = onSurface
+        val textSecondary: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val textHint: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+        val textVariant: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+
+        val artPlate: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val artGlyph: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
+
+        val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+        val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
+        val extraGlyph: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+        val disabledGlyphAlpha = 0.3f
+
+        val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.22f)
+        val progressTrail: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
+        val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
+
+        val actionButton: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+        val actionButtonText: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimary
+        val destructiveButton: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.errorContainer
+        val destructiveButtonText: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onErrorContainer
+
+        val batteryCharging: Color @Composable @ReadOnlyComposable get() = AlphaColors.green
+        val batteryPowerSave: Color @Composable @ReadOnlyComposable get() = AlphaColors.orange
+        val batteryIdle: Color
+            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
+
+        /**
+         * Charging ring. Its own hues and its own baked-in alpha (0xCC) — deliberately *not*
+         * [red] / [orange] / [green], and not split per theme. A
+         * wart inherited from the extraction; now at least it is a wart in one named place.
+         */
+        val chargeRingLow = Color(0xCCF44336)
+        val chargeRingMid = Color(0xCCFF9800)
+        val chargeRingHigh = Color(0xCC4CAF50)
+
+        /** Torch card bulb. Fixed: a bulb that followed the theme would stop reading as a bulb. */
+        val torchWindow = Color.Black
+        val torchFilament = Color.White
+    }
 }
 
 /**
@@ -286,10 +600,6 @@ object AlphaOpacity {
 
     /** Lockscreen media card when the compositor refuses blur. */
     const val mediaCardFrostAlphaNoBlur = 0xD9 / 255f
-
-    /** How hard a non-media event accent tints the chip body. */
-    const val eventTintAmountDark = 0.45f
-    const val eventTintAmountLight = 0.62f
 
     /** Blend of body toward accent for a secondary control plate. */
     const val buttonPlateBlendAmount = 0.55f

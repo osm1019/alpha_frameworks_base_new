@@ -95,6 +95,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.AlphaMetrics
+import com.android.systemui.alpha.theme.AlphaOpacity
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
@@ -249,7 +251,7 @@ fun AxDynamicBarKeyguardChip(
                     )
                     // Glyphs stay OnGlass; accent is body tint + progress only.
                     val contentColor by animateColorAsState(
-                        MediaChrome.OnGlass,
+                        AlphaColors.DbLockscreenPill.text,
                         MaterialTheme.motionScheme.fastEffectsSpec(),
                         label = "kg_content",
                     )
@@ -316,23 +318,23 @@ private fun KeyguardChipBody(
     // Glass shell for every event: media = neutral glass; others keep event hue as a tint
     // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
     // media buttons + progress.
-    val chrome = islandGlassChrome(accent, neutralBody = isMedia)
+    val chrome = dbLockscreenPillChrome(accent, isMedia = isMedia)
     val bodyColor = chrome.body
     val onBody = chrome.content
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
     val progressTrack =
         when {
             !isMedia -> lerp(accent, contentColor, 0.2f)
-            neutralChrome -> MediaChrome.LockscreenProgressTrack
-            else -> MediaChrome.ProgressTrack
+            neutralChrome -> AlphaColors.DbLockscreenPill.progressTrack
+            else -> AlphaColors.DbLockscreenPill.waveformProgressTrack
         }
     val progressFill =
         when {
             !isMedia -> lerp(accent, contentColor, 0.6f)
-            neutralChrome -> MediaChrome.LockscreenProgress
+            neutralChrome -> AlphaColors.DbLockscreenPill.progressFill
             else -> accent
         }
-    val progressBarH = if (isMedia) MediaChrome.ProgressHeight else SizeStrokeWidth
+    val progressBarH = if (isMedia) AlphaColors.DbLockscreenPill.progressHeight else SizeStrokeWidth
 
     // Media needs room for art + text + 3 transport buttons + optional stack badge.
     val chipMaxWidth = if (isMedia) 280.dp else 260.dp
@@ -471,7 +473,7 @@ private fun KeyguardChipBody(
                         .height(CountBadgeHeight)
                         .widthIn(min = CountBadgeHeight)
                         .background(
-                            if (isMedia) MediaChrome.SkipNeutral
+                            if (isMedia) AlphaColors.DbLockscreenPill.buttonPlate
                             else lerp(accent, contentColor, AlphaDisabled),
                             ShapeChip,
                         )
@@ -510,20 +512,20 @@ private fun RowScope.KeyguardMediaChipContent(
     val minimal = mediaStyle == AxLockscreenMediaStyle.MINIMAL
     val glass = mediaStyle == AxLockscreenMediaStyle.GLASS
     val skipBg =
-        if (minimal || glass) Color.Transparent else MediaChrome.skipBackground(accent)
+        if (minimal || glass) Color.Transparent else lerp(AlphaColors.DbLockscreenPill.body, accent, AlphaOpacity.buttonPlateBlendAmount)
     // Waveform's skip plate is a blend of the body and the accent, not the accent — colour the
     // glyph against the plate it actually sits on or it goes light-on-light in day mode.
     val skipIcon =
-        if (minimal || glass) MediaChrome.ControlBare else chipContentColorOn(skipBg)
+        if (minimal || glass) AlphaColors.DbLockscreenPill.skipGlyph else chipContentColorOn(skipBg)
     val playBg = if (minimal) Color.Transparent else accent
     // Filled accent behind the glyph -> near-white by rule, matching the expand card's play.
-    val playIcon = if (minimal) MediaChrome.ControlBare else AlphaColors.onAccentColor
+    val playIcon = if (minimal) AlphaColors.DbLockscreenPill.skipGlyph else AlphaColors.DbLockscreenPill.playGlyph
     // Same hairline the expand card's play button carries — one control, two surfaces.
     val playBorder =
         if (glass) {
             BorderStroke(
-                MediaChrome.LockscreenGlassBorderWidth,
-                MediaChrome.LockscreenGlassBorder,
+                AlphaMetrics.chipRimWidth,
+                AlphaColors.DbLockscreenPill.artRim,
             )
         } else {
             null
@@ -584,7 +586,7 @@ private fun RowScope.KeyguardMediaChipContent(
                 contentScale = ContentScale.Crop,
             )
         } else {
-            PillEventIcon(event, tint = MediaChrome.OnGlass)
+            PillEventIcon(event, tint = AlphaColors.DbLockscreenPill.text)
         }
     }
 
@@ -632,7 +634,7 @@ private fun RowScope.KeyguardMediaChipContent(
                         Text(
                             ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
                             style = PillPrimary,
-                            color = MediaChrome.OnGlass,
+                            color = AlphaColors.DbLockscreenPill.text,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
@@ -642,12 +644,12 @@ private fun RowScope.KeyguardMediaChipContent(
                         Text(
                             " · ",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MediaChrome.OnGlassHint,
+                            color = AlphaColors.DbLockscreenPill.textHint,
                         )
                         Text(
                             ev.artist,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MediaChrome.OnGlassSecondary,
+                            color = AlphaColors.DbLockscreenPill.textSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 48.dp),
@@ -657,7 +659,7 @@ private fun RowScope.KeyguardMediaChipContent(
                     Text(
                         ev.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_music) },
                         style = PillPrimary,
-                        color = MediaChrome.OnGlass,
+                        color = AlphaColors.DbLockscreenPill.text,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -726,7 +728,7 @@ private fun KeyguardBatteryChip(
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }
-    val chrome = islandGlassChrome(accent, neutralBody = false)
+    val chrome = dbLockscreenPillChrome(accent, isMedia = false)
     val contentColor = chrome.content
 
     val parts = rememberChargingParts(batteryString)

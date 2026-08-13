@@ -98,12 +98,12 @@ import com.android.systemui.axdynamicbar.shared.CutoutPadBottom
 import com.android.systemui.axdynamicbar.shared.CutoutPadSide
 import com.android.systemui.axdynamicbar.shared.CutoutPadTop
 import com.android.systemui.axdynamicbar.shared.StatusBarContentWidth
-import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.axdynamicbar.shared.StatusBarIconWidth
 import com.android.systemui.axdynamicbar.shared.StatusBarPillWidth
 import com.android.systemui.axdynamicbar.shared.chipTintAccentFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
-import com.android.systemui.axdynamicbar.shared.islandGlassChrome
+import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.axdynamicbar.shared.dbStatusBarChipChrome
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
@@ -295,7 +295,7 @@ fun CutoutChip(
                 val rawAccent = chipTintAccentFor(display.event)
                 val motionScheme = MaterialTheme.motionScheme
                 val accent by animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "accent")
-                val rawChrome = islandGlassChrome(rawAccent, neutralBody = false)
+                val rawChrome = dbStatusBarChipChrome(rawAccent)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, motionScheme.fastEffectsSpec(), label = "glass_body",
                 )
@@ -331,7 +331,7 @@ fun CutoutChip(
                 } else 1f
                 // Pulse the event tint, not the body alpha: the chip sits over status bar content,
                 // so fading it out would show icons through. Breathes between tinted and neutral.
-                val pulsedBody = lerp(MediaChrome.GlassBody, bodyColor, pulseAnim)
+                val pulsedBody = lerp(AlphaColors.DbStatusBarChip.body, bodyColor, pulseAnim)
                 val pulsedAccent = accent.copy(alpha = accent.alpha * pulseAnim)
 
                 when (placementHint) {

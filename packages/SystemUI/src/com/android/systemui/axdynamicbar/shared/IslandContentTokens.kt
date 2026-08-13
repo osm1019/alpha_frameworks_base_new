@@ -151,12 +151,11 @@ internal val TsBadge: TextStyle
 // Palette lives in AlphaColors; these names stay so call sites are untouched.
 // Composable because the palette now resolves per theme.
 internal val BatteryChargingColor: Color
-    @Composable get() = AlphaColors.batteryChargingColor
+    @Composable get() = AlphaColors.DbStackCard.batteryCharging
 internal val BatteryPowerSaveColor: Color
-    @Composable get() = AlphaColors.batteryPowerSaveColor
+    @Composable get() = AlphaColors.DbStackCard.batteryPowerSave
 internal val BatteryNeutralColor: Color
-    @Composable get() = AlphaColors.batteryIdleColor
-internal val ChipContentDark = AlphaColors.unusedDarkChipTextColor
+    @Composable get() = AlphaColors.DbStackCard.batteryIdle
 
 internal val RedAccent: Color @Composable get() = AlphaColors.red
 internal val PinkAccent: Color @Composable get() = AlphaColors.pink
@@ -172,31 +171,32 @@ internal val PausedGray: Color @Composable get() = AlphaColors.pausedGray
 
 internal val ExpandedMaxWidth = 420.dp
 
-// Card chrome lives in AlphaColors; these names stay so call sites are untouched.
+// Short names for the stack cards, which read them from twenty-odd files. Every one resolves to
+// AlphaColors.DbStackCard — tune the stack there, not here.
 internal val SubtleGray: Color
-    @Composable get() = MediaChrome.OnGlassSecondary
+    @Composable get() = AlphaColors.DbStackCard.textSecondary
 internal val CardBg: Color
-    @Composable get() = AlphaColors.chipBodyColor
+    @Composable get() = AlphaColors.DbStackCard.body
 internal val DarkCard: Color
-    @Composable get() = AlphaColors.chipBodyNestedColor
+    @Composable get() = AlphaColors.DbStackCard.nestedBody
 internal val OnCardText: Color
-    @Composable get() = AlphaColors.chipTextColor
+    @Composable get() = AlphaColors.DbStackCard.text
 internal val OnCardSecondary: Color
-    @Composable get() = MediaChrome.OnGlassSecondary
+    @Composable get() = AlphaColors.DbStackCard.textSecondary
 internal val ActionBg: Color
-    @Composable get() = AlphaColors.actionButtonColor
+    @Composable get() = AlphaColors.DbStackCard.actionButton
 internal val OnActionText: Color
-    @Composable get() = AlphaColors.actionButtonTextColor
+    @Composable get() = AlphaColors.DbStackCard.actionButtonText
 internal val DestructiveBg: Color
-    @Composable get() = AlphaColors.destructiveButtonColor
+    @Composable get() = AlphaColors.DbStackCard.destructiveButton
 internal val OnDestructiveText: Color
-    @Composable get() = AlphaColors.destructiveButtonTextColor
+    @Composable get() = AlphaColors.DbStackCard.destructiveButtonText
 
-/** Hairline on glass expand shells — flat, matches [MediaChrome.GlassBorder] weight. */
+/** Hairline on the stack's expand shells — flat, matches [AlphaColors.DbStackCard.rim]. */
 internal val CardBorderBrush: Brush
     @Composable
     get() {
-        val border = MediaChrome.GlassBorder
+        val border = AlphaColors.DbStackCard.rim
         return Brush.verticalGradient(colors = listOf(border, border))
     }
 
@@ -218,29 +218,29 @@ internal data class IslandGlassChrome(
  * The day surface role is a light, low-chroma grey, so the same mix reads washed-out against it —
  * push harder in day mode to keep charging / timer / call distinguishable at arm's length.
  */
-private const val IslandGlassEventTintDark = AlphaOpacity.eventTintAmountDark
-private const val IslandGlassEventTintLight = AlphaOpacity.eventTintAmountLight
 
 /** WCAG AA for icons and short labels at the sizes these chips use. */
 private const val MinContentContrast = AlphaMetrics.minContentContrast
 
 /**
- * Content that stays legible on [body].
+ * Content that stays legible on [body], picked from [first] and [second].
+ *
+ * Candidates come from the caller's own surface object, so a chip and a pill are free to disagree
+ * about what their text may be.
  *
  * The event palette is fixed hex (see [RedAccent] and friends) and does not follow the theme, so a
  * tinted body can land anywhere on the luminance range regardless of mode.
  *
  * Measure contrast rather than testing which side of mid-grey the body falls on: a body at ~0.45
  * luminance is "not light" by that test and gets a light glyph, which is only about 2:1. Prefer the
- * palette's own on-surface roles, and only fall back to plain black/white when neither clears AA.
+ * surface's own candidates, and only fall back to plain black/white when neither clears AA.
  */
 @Composable
-private fun contentColorOn(body: Color): Color {
+private fun contentColorOn(body: Color, first: Color, second: Color): Color {
     // calculateContrast demands an opaque background; tinted bodies may carry alpha.
     val bg = body.copy(alpha = 1f).toArgb()
     val best =
-        listOf(MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.inverseOnSurface)
-            .maxByOrNull { ColorUtils.calculateContrast(it.toArgb(), bg) }!!
+        listOf(first, second).maxByOrNull { ColorUtils.calculateContrast(it.toArgb(), bg) }!!
     if (ColorUtils.calculateContrast(best.toArgb(), bg) >= MinContentContrast) return best
     return if (
         ColorUtils.calculateContrast(AlphaColors.contrastFloorLightColor.toArgb(), bg) >=
@@ -250,42 +250,53 @@ private fun contentColorOn(body: Color): Color {
 }
 
 /**
- * Chip / pill glass. [accent] is from [chipAccentColorFor] or [chipTintAccentFor].
+ * Chrome for the status bar chip and the cutout chip. [accent] is from [chipTintAccentFor].
  *
- * @param neutralBody skip the event tint and leave the body plain glass. Only the lockscreen pill
- *   asks for it, and only for media: it sits between the keyguard shortcut buttons and has to read
- *   as one band with them. The status bar and cutout chips colour-code every event, media included.
+ * Every event carries its hue here, media included — these two float over the wallpaper with no
+ * neighbours to match, so opting anything out of the colour code would just make it look broken.
  */
 @Composable
-internal fun islandGlassChrome(
-    accent: Color,
-    neutralBody: Boolean,
-): IslandGlassChrome {
-    val body = MediaChrome.GlassBody
-    if (neutralBody) {
-        return IslandGlassChrome(
-            body = body,
-            border = MediaChrome.GlassBorder,
-            content = MediaChrome.OnGlass,
-        )
-    }
-    val tintAmount =
-        if (isSystemInDarkTheme()) IslandGlassEventTintDark else IslandGlassEventTintLight
-    val mixed = lerp(body, accent.copy(alpha = 1f), tintAmount)
+internal fun dbStatusBarChipChrome(accent: Color): IslandGlassChrome {
+    val chip = AlphaColors.DbStatusBarChip
+    val mixed = lerp(chip.body, accent.copy(alpha = 1f), chip.tintAmount)
     return IslandGlassChrome(
         body = mixed,
-        border = MediaChrome.EventTintBorder,
-        content = contentColorOn(mixed),
+        border = chip.rim,
+        content = contentColorOn(mixed, chip.text, chip.textInverse),
     )
 }
 
-/** Expand-card shell — neutral dense glass; accent lives in content chrome. */
+/**
+ * Chrome for the lockscreen pill. [accent] is from [chipAccentColorFor].
+ *
+ * @param isMedia media alone keeps the body untinted: the pill sits between the two keyguard
+ *   shortcut buttons and the bottom row has to read as one band.
+ */
+@Composable
+internal fun dbLockscreenPillChrome(accent: Color, isMedia: Boolean): IslandGlassChrome {
+    val pill = AlphaColors.DbLockscreenPill
+    if (isMedia) {
+        return IslandGlassChrome(
+            body = pill.mediaBody,
+            border = pill.mediaRim,
+            content = pill.text,
+        )
+    }
+    val mixed = lerp(pill.body, accent.copy(alpha = 1f), pill.tintAmount)
+    return IslandGlassChrome(
+        body = mixed,
+        border = pill.rim,
+        content = contentColorOn(mixed, pill.text, pill.textInverse),
+    )
+}
+
+/** Expand-card shell on the stack — neutral; accent lives in content chrome. */
 @Composable
 internal fun islandCardChrome(): IslandGlassChrome =
     IslandGlassChrome(
-        body = MediaChrome.GlassBody,
-        border = MediaChrome.GlassBorder,
-        content = MediaChrome.OnGlass,
+        body = AlphaColors.DbStackCard.body,
+        border = AlphaColors.DbStackCard.rim,
+        content = AlphaColors.DbStackCard.text,
     )
 
 internal val PillPrimary: TextStyle
@@ -315,11 +326,18 @@ internal fun accentColorFor(event: IslandEvent): Color = eventStyleFor(event).ac
 
 /**
  * Glyph / label colour on a solid accent fill (play button, call actions, action circles).
- * Was unconditionally white, which fails on the light end of the palette — [YellowAccent] and a
- * light Monet media colour both take a white glyph and lose it.
+ *
+ * Twelve call sites across the alert card, the stack and the pill, none of which own a surface
+ * object yet — so the candidates stay the palette pair they have always been. Switching this to the
+ * near-white rule is a design change for those twelve, not a side effect of the migration.
  */
 @Composable
-internal fun chipContentColorOn(background: Color): Color = contentColorOn(background)
+internal fun chipContentColorOn(background: Color): Color =
+    contentColorOn(
+        background,
+        MaterialTheme.colorScheme.onSurface,
+        MaterialTheme.colorScheme.inverseOnSurface,
+    )
 
 internal fun darkenColor(color: Color, keep: Float = AlphaMetrics.mediaAccentDarkenKeep): Color =
     Color(
@@ -824,12 +842,12 @@ internal fun PendingIntent.sendWithBal(context: Context, fillIntent: Intent? = n
 internal fun IslandStackCountBadge(
     count: Int,
     modifier: Modifier = Modifier,
-    backgroundColor: Color = AlphaColors.badgeBodyColor,
+    backgroundColor: Color = AlphaColors.DbStatusBarChip.badgeBody,
 ) {
     Box(
         modifier = modifier
             .background(backgroundColor, CircleShape)
-            .border(AlphaMetrics.chipRimWidth, AlphaColors.badgeRimColor, CircleShape)
+            .border(AlphaMetrics.chipRimWidth, AlphaColors.DbStatusBarChip.badgeRim, CircleShape)
             .padding(horizontal = 6.dp, vertical = 1.dp)
     ) {
         Text(
@@ -839,7 +857,7 @@ internal fun IslandStackCountBadge(
                 fontWeight = FontWeight.Black,
                 letterSpacing = (-0.5).sp
             ),
-            color = AlphaColors.badgeRimColor
+            color = AlphaColors.DbStatusBarChip.badgeRim
         )
     }
 }

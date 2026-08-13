@@ -66,7 +66,7 @@ import com.android.systemui.axdynamicbar.shared.SpaceXs
 import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.iconKeyFor
-import com.android.systemui.axdynamicbar.shared.islandGlassChrome
+import com.android.systemui.axdynamicbar.shared.dbLockscreenPillChrome
 import com.android.systemui.axdynamicbar.shared.textKeyFor
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipState
@@ -112,7 +112,7 @@ fun AxDynamicBarNowBar(
                 val rawAccent = chipAccentColorFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
                 val isMedia = display.event is IslandEvent.Media
-                val rawChrome = islandGlassChrome(rawAccent, neutralBody = isMedia)
+                val rawChrome = dbLockscreenPillChrome(rawAccent, isMedia = isMedia)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
                 )

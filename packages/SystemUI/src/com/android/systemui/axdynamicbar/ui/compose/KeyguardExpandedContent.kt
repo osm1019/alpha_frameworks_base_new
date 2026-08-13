@@ -279,7 +279,7 @@ private fun KeyguardMediaCard(
     // One rim for the sheet and the art, so the two panes read as the same material.
     val rimBrush: Brush =
         if (style == AxLockscreenMediaStyle.WAVEFORM) MediaChrome.accentSweep(accent)
-        else SolidColor(MediaChrome.LockscreenGlassBorder)
+        else SolidColor(AlphaColors.DbKeyguardCard.artRim)
     val trackText = event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) }
 
     Column(
@@ -311,8 +311,8 @@ private fun KeyguardMediaCard(
                     modifier =
                         Modifier.size(artSide)
                             .clip(artShape)
-                            .border(MediaChrome.LockscreenGlassBorderWidth, rimBrush, artShape)
-                            .background(MediaChrome.SkipNeutral),
+                            .border(AlphaColors.DbKeyguardCard.artRimWidth, rimBrush, artShape)
+                            .background(AlphaColors.DbKeyguardCard.buttonPlate),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (art != null) {
@@ -341,8 +341,8 @@ private fun KeyguardMediaCard(
             modifier =
                 Modifier.fillMaxWidth()
                     .clip(sheetShape)
-                    .background(MediaChrome.GlassBody)
-                    .border(MediaChrome.LockscreenGlassBorderWidth, rimBrush, sheetShape)
+                    .background(AlphaColors.DbKeyguardCard.body)
+                    .border(AlphaColors.DbKeyguardCard.artRimWidth, rimBrush, sheetShape)
                     .padding(
                         horizontal = SpaceXxl + KeyguardSheetIconInset,
                         vertical = SpaceMd,
@@ -367,13 +367,13 @@ private fun KeyguardMediaCard(
                             bitmap = appIcon.toScaledBitmap(KeyguardBareIconSize),
                             contentDescription = null,
                             modifier = Modifier.size(KeyguardBareIconSize),
-                            colorFilter = ColorFilter.tint(MediaChrome.ControlBare),
+                            colorFilter = ColorFilter.tint(AlphaColors.DbKeyguardCard.skipGlyph),
                         )
                     } else {
                         Icon(
                             Icons.Filled.MusicNote,
                             null,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.DbKeyguardCard.skipGlyph,
                             modifier = Modifier.size(KeyguardBareIconSize),
                         )
                     }
@@ -394,7 +394,7 @@ private fun KeyguardMediaCard(
                     ) { title ->
                         Text(
                             title,
-                            color = MediaChrome.OnGlass,
+                            color = AlphaColors.DbKeyguardCard.text,
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             minLines = 1,
@@ -414,7 +414,7 @@ private fun KeyguardMediaCard(
                     ) { artist ->
                         Text(
                             artist,
-                            color = MediaChrome.OnGlassSecondary,
+                            color = AlphaColors.DbKeyguardCard.textSecondary,
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
                             minLines = 1,
@@ -433,7 +433,7 @@ private fun KeyguardMediaCard(
                     Icon(
                         painterResource(R.drawable.ic_ax_media_output),
                         stringResource(R.string.ax_dynamic_bar_output),
-                        tint = MediaChrome.ControlBare,
+                        tint = AlphaColors.DbKeyguardCard.skipGlyph,
                         modifier = Modifier.size(KeyguardBareIconSize),
                     )
                 }
@@ -469,7 +469,7 @@ private fun KeyguardMediaCard(
                         Icon(
                             Icons.Filled.SkipPrevious,
                             stringResource(R.string.ax_dynamic_bar_previous),
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.DbKeyguardCard.skipGlyph,
                             modifier = Modifier.size(KeyguardBareIconSize),
                         )
                     }
@@ -486,7 +486,7 @@ private fun KeyguardMediaCard(
                         Icon(
                             Icons.Filled.SkipNext,
                             stringResource(R.string.ax_dynamic_bar_next),
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.DbKeyguardCard.skipGlyph,
                             modifier = Modifier.size(KeyguardBareIconSize),
                         )
                     }
@@ -499,7 +499,7 @@ private fun KeyguardMediaCard(
                     ) {
                         CustomActionIcon(
                             leadingExtra,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.DbKeyguardCard.skipGlyph,
                             modifier = Modifier.size(KeyguardBareIconSize),
                         )
                     }
@@ -512,7 +512,7 @@ private fun KeyguardMediaCard(
                     ) {
                         CustomActionIcon(
                             trailingExtra,
-                            tint = MediaChrome.ControlBare,
+                            tint = AlphaColors.DbKeyguardCard.skipGlyph,
                             modifier = Modifier.size(KeyguardBareIconSize),
                         )
                     }
@@ -574,11 +574,11 @@ private fun KeyguardPlayButton(
                 tint =
                     when (style) {
                         // Bare glyphs sit on the sheet, so they take the sheet's content colour.
-                        AxLockscreenMediaStyle.MINIMAL -> MediaChrome.ControlBare
-                        AxLockscreenMediaStyle.WAVEFORM -> MediaChrome.ControlBare
+                        AxLockscreenMediaStyle.MINIMAL -> AlphaColors.DbKeyguardCard.skipGlyph
+                        AxLockscreenMediaStyle.WAVEFORM -> AlphaColors.DbKeyguardCard.skipGlyph
                         // Glass fills the button with chipAccent, so the glyph follows the
                         // filled-accent rule rather than a colour derived from a different accent.
-                        AxLockscreenMediaStyle.GLASS -> AlphaColors.onAccentColor
+                        AxLockscreenMediaStyle.GLASS -> AlphaColors.DbKeyguardCard.playGlyph
                     },
                 modifier = Modifier.size(26.dp),
             )
@@ -629,8 +629,8 @@ private fun KeyguardPlayButton(
                 color = chipAccent,
                 border =
                     BorderStroke(
-                        MediaChrome.LockscreenGlassBorderWidth,
-                        MediaChrome.LockscreenGlassBorder,
+                        AlphaColors.DbKeyguardCard.artRimWidth,
+                        AlphaColors.DbKeyguardCard.artRim,
                     ),
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -760,12 +760,12 @@ private fun ScrubTimes(fraction: FloatState, durationMs: Long) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(
             formatElapsedTime((fraction.floatValue * durationMs).toLong()),
-            color = MediaChrome.OnGlassHint,
+            color = AlphaColors.DbKeyguardCard.textHint,
             style = MaterialTheme.typography.labelSmall,
         )
         Text(
             formatElapsedTime(durationMs),
-            color = MediaChrome.OnGlassHint,
+            color = AlphaColors.DbKeyguardCard.textHint,
             style = MaterialTheme.typography.labelSmall,
         )
     }
@@ -799,9 +799,9 @@ private fun KeyguardMediaWaveformProgress(
  */
 @Composable
 private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: IslandActions) {
-    val trackColor = MediaChrome.LockscreenProgressTrack
-    val thumbColor = MediaChrome.LockscreenProgressThumb
-    val progressTip = MediaChrome.LockscreenProgress
+    val trackColor = AlphaColors.DbKeyguardCard.progressTrack
+    val thumbColor = AlphaColors.DbKeyguardCard.progressThumb
+    val progressTip = AlphaColors.DbKeyguardCard.progressTrail
     KeyguardMediaScrubber(
         event = event,
         interactor = interactor,
@@ -850,8 +850,8 @@ private fun KeyguardMediaSegmentedProgress(
     interactor: IslandActions,
     showTimes: Boolean = true,
 ) {
-    val filledColor = MediaChrome.OnGlass
-    val emptyColor = MediaChrome.LockscreenProgressTrack
+    val filledColor = AlphaColors.DbKeyguardCard.text
+    val emptyColor = AlphaColors.DbKeyguardCard.progressTrack
     KeyguardMediaScrubber(event, interactor, KeyguardSegmentHeight, showTimes) { fraction, _ ->
         Canvas(modifier = Modifier.fillMaxWidth().height(KeyguardSegmentHeight)) {
             val segment = KeyguardSegmentDash.toPx()
@@ -915,7 +915,7 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
                     .background(colors.accent),
                 contentAlignment = Alignment.Center,
             ) {
-                eventStyleFor(event).icon?.let { Icon(it, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp)) }
+                eventStyleFor(event).icon?.let { Icon(it, null, tint = AlphaColors.DbKeyguardCard.playGlyph, modifier = Modifier.size(18.dp)) }
             }
             Text(
                 event.label.ifEmpty { stringResource(R.string.ax_dynamic_bar_timer) }.uppercase(),
@@ -936,7 +936,7 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
             )
             Text(
                 if (event.isPaused) stringResource(R.string.ax_dynamic_bar_paused) else formatCountdownLong(remainingMs),
-                color = OnCardText,
+                color = AlphaColors.DbKeyguardCard.text,
                 style = MaterialTheme.typography.displayMedium,
             )
         }
@@ -1002,7 +1002,7 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
                     .background(colors.accent),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.AvTimer, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.AvTimer, null, tint = AlphaColors.DbKeyguardCard.playGlyph, modifier = Modifier.size(18.dp))
             }
             Text(
                 event.label.ifEmpty { stringResource(R.string.ax_dynamic_bar_stopwatch) }.uppercase(),
@@ -1019,7 +1019,7 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
             )
             Text(
                 if (event.isRunning) formatStopwatch(elapsedMs) else stringResource(R.string.ax_dynamic_bar_paused),
-                color = OnCardText,
+                color = AlphaColors.DbKeyguardCard.text,
                 style = MaterialTheme.typography.displayMedium,
             )
         }
@@ -1095,7 +1095,7 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
 
         Text(
             formatElapsedTime(elapsedMs),
-            color = OnCardText,
+            color = AlphaColors.DbKeyguardCard.text,
             style = MaterialTheme.typography.displayLarge,
         )
 

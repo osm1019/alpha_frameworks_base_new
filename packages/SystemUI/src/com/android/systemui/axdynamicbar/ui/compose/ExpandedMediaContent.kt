@@ -159,13 +159,13 @@ private fun MediaArtThumbnail(event: IslandEvent.Media, size: Dp) {
         return
     }
     Box(
-        modifier = Modifier.size(size).clip(ShapeLg).background(MediaChrome.SkipNeutral),
+        modifier = Modifier.size(size).clip(ShapeLg).background(AlphaColors.DbStackCard.artPlate),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             Icons.Filled.MusicNote,
             null,
-            tint = MediaChrome.OnGlassHint,
+            tint = AlphaColors.DbStackCard.artGlyph,
             modifier = Modifier.size(size / 2),
         )
     }
@@ -251,7 +251,7 @@ private fun MediaControls(
         BareControlButton(onClick = { interactor.skipPrev() }) {
             Icon(
                 Icons.Filled.SkipPrevious, null,
-                tint = OnCardText,
+                tint = AlphaColors.DbStackCard.skipGlyph,
                 modifier = Modifier.size(ControlIconSize),
             )
         }
@@ -269,7 +269,7 @@ private fun MediaControls(
                         stringResource(R.string.ax_dynamic_bar_pause)
                     else
                         stringResource(R.string.ax_dynamic_bar_play),
-                    tint = AlphaColors.onAccentColor,
+                    tint = AlphaColors.DbStackCard.playGlyph,
                     modifier = Modifier.size(22.dp),
                 )
             }
@@ -278,7 +278,7 @@ private fun MediaControls(
         BareControlButton(onClick = { interactor.skipNext() }) {
             Icon(
                 Icons.Filled.SkipNext, null,
-                tint = OnCardText,
+                tint = AlphaColors.DbStackCard.skipGlyph,
                 modifier = Modifier.size(ControlIconSize),
             )
         }
@@ -355,9 +355,9 @@ private fun MediaTimeline(
 
     val displayMs = (displayFraction * durationMs).toLong()
     // Captured in composition — the Canvas draw scope is not @Composable.
-    val trackColor = MediaChrome.LockscreenProgressTrack
-    val thumbColor = MediaChrome.LockscreenProgressThumb
-    val progressTip = MediaChrome.LockscreenProgress
+    val trackColor = AlphaColors.DbStackCard.progressTrack
+    val thumbColor = AlphaColors.DbStackCard.progressThumb
+    val progressTip = AlphaColors.DbStackCard.progressTrail
     val thumbRadiusDp = AlphaMetrics.mediaTimelineThumbRadius
     val trackWidthDp = AlphaMetrics.mediaTimelineTrackWidth
 
@@ -367,7 +367,7 @@ private fun MediaTimeline(
     ) {
         Text(
             formatElapsedTime(displayMs),
-            color = MediaChrome.OnGlassHint,
+            color = AlphaColors.DbStackCard.textHint,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             modifier = Modifier.padding(end = SpaceMd),
@@ -448,7 +448,7 @@ private fun MediaTimeline(
 
         Text(
             formatElapsedTime(durationMs),
-            color = MediaChrome.OnGlassHint,
+            color = AlphaColors.DbStackCard.textHint,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             modifier = Modifier.padding(start = SpaceMd),
@@ -467,13 +467,13 @@ private fun MediaCustomActionButton(event: IslandEvent.Media, interactor: Island
     val ca = event.customActions.firstOrNull()
     if (ca != null) {
         BareControlButton(onClick = { interactor.sendCustomAction(ca.action) }) {
-            CustomActionIcon(ca, tint = SubtleGray, modifier = Modifier.size(ControlIconSize))
+            CustomActionIcon(ca, tint = AlphaColors.DbStackCard.extraGlyph, modifier = Modifier.size(ControlIconSize))
         }
     } else {
         BareControlButton(onClick = { }, enabled = false) {
             Icon(
                 Icons.Filled.Shuffle, null,
-                tint = OnCardText.copy(alpha = AlphaDisabled),
+                tint = AlphaColors.DbStackCard.text.copy(alpha = AlphaColors.DbStackCard.disabledGlyphAlpha),
                 modifier = Modifier.size(ControlIconSize),
             )
         }
@@ -485,7 +485,7 @@ private fun MediaEndActionButton(event: IslandEvent.Media, interactor: IslandAct
     val ca = event.customActions.getOrNull(1)
     if (ca != null) {
         BareControlButton(onClick = { interactor.sendCustomAction(ca.action) }) {
-            CustomActionIcon(ca, tint = SubtleGray, modifier = Modifier.size(ControlIconSize))
+            CustomActionIcon(ca, tint = AlphaColors.DbStackCard.extraGlyph, modifier = Modifier.size(ControlIconSize))
         }
     } else {
         BareControlButton(
@@ -496,7 +496,7 @@ private fun MediaEndActionButton(event: IslandEvent.Media, interactor: IslandAct
         ) {
             Icon(
                 Icons.Filled.VolumeUp, null,
-                tint = OnCardText,
+                tint = AlphaColors.DbStackCard.skipGlyph,
                 modifier = Modifier.size(ControlIconSize),
             )
         }
@@ -523,7 +523,7 @@ internal fun RowScope.CompactMediaRow(
                 .background(accent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.MusicNote, null, tint = AlphaColors.onAccentColor, modifier = Modifier.size(20.dp))
+            Icon(Icons.Filled.MusicNote, null, tint = AlphaColors.DbStackCard.playGlyph, modifier = Modifier.size(20.dp))
         }
     }
     Spacer(Modifier.width(SpaceLg))
