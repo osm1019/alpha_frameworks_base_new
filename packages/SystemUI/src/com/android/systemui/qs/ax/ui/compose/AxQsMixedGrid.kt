@@ -16,7 +16,6 @@
 
 package com.android.systemui.qs.ax.ui.compose
 
-import android.content.res.Configuration
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -36,7 +36,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,7 +57,6 @@ import com.android.systemui.qs.ax.ui.model.AxQsGridValue
 import com.android.systemui.qs.ax.ui.viewmodel.AxMediaViewModel
 import com.android.systemui.qs.ax.ui.viewmodel.AxQsViewModel
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
-import com.android.systemui.qs.panels.ui.compose.TileListener
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileCornerFraction
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalQSTileShape
@@ -94,28 +92,27 @@ internal fun ContentScope.AxQsMixedGrid(
             }
         }
 
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    LaunchedEffect(landscape) {
-        if (landscape) {
+    val splitShade = viewModel.isInSplitShade
+    LaunchedEffect(splitShade) {
+        if (splitShade) {
             scrollState.scrollTo(0)
         }
     }
-    val controlGridLayout = AxQsGridLayout.from(qqs, landscape, AxQsGridSection.CONTROLS)
-    val tileGridLayout = AxQsGridLayout.from(qqs, landscape, AxQsGridSection.TILES)
-    val controlColumns = axQsViewModel.columns(controlGridLayout)
-    val controlRows = axQsViewModel.defaultRows(controlGridLayout)
-    val tileColumns = axQsViewModel.columns(tileGridLayout)
-    val tileRows = axQsViewModel.rows(tileGridLayout)
-    val showTileLabels = axQsViewModel.showTileLabels(tileGridLayout)
-    val allowCustomShapeCells =
-        controlColumns >= axQsViewModel.defaultColumns(controlGridLayout) &&
-            (landscape || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
     val layout =
         when {
-            landscape -> AxQsLayout.LANDSCAPE
+            splitShade -> AxQsLayout.SPLIT_SHADE
             qqs -> AxQsLayout.QQS
             else -> AxQsLayout.QS
         }
+    val controlGridLayout = AxQsGridLayout.from(layout, AxQsGridSection.CONTROLS)
+    val tileGridLayout = AxQsGridLayout.from(layout, AxQsGridSection.TILES)
+    val controlColumns = axQsViewModel.columns(controlGridLayout)
+    val tileColumns = axQsViewModel.columns(tileGridLayout)
+    val tileRowLimit = axQsViewModel.rows(tileGridLayout)
+    val showTileLabels = axQsViewModel.showTileLabels(tileGridLayout)
+    val allowCustomShapeCells =
+        controlColumns >= axQsViewModel.defaultColumns(controlGridLayout) &&
+            (splitShade || tileColumns >= axQsViewModel.defaultColumns(tileGridLayout))
     val controlPositions = axQsViewModel.controlPositions(layout)
     val controlIds =
         axQsViewModel.orderedIds(
@@ -128,7 +125,9 @@ internal fun ContentScope.AxQsMixedGrid(
         axQsViewModel.orderedIds(
             layout = layout,
             section = AxQsGridSection.TILES,
-            availableIds = tiles.map { it.spec.spec },
+            availableIds =
+                tiles.map { it.spec.spec } +
+                    AxQsControl.entries.filter { it.canUseTileGrid }.map(AxQsControl::id),
             defaultIds = tiles.map { it.spec.spec },
         )
     val controlItems: List<AxQsGridItem<AxQsGridValue>> =
@@ -163,30 +162,44 @@ internal fun ContentScope.AxQsMixedGrid(
             }
         }
     val tileItems: List<AxQsGridItem<AxQsGridValue>> =
-        tileIds.mapNotNull { id ->
-            (values[id] as? AxQsGridValue.Tile)?.let { value ->
-                AxQsGridItem<AxQsGridValue>(
-                    id = id,
-                    span = AxQsSpan.TileDefault,
-                    minSpan = AxQsSpan.TileDefault,
-                    maxSpan = AxQsSpan.TileDefault,
-                    value = value,
-                )
-            }
+        tileIds.map { id ->
+            AxQsGridItem<AxQsGridValue>(
+                id = id,
+                span = AxQsSpan.TileDefault,
+                minSpan = AxQsSpan.TileDefault,
+                maxSpan = AxQsSpan.TileDefault,
+                value = values.getValue(id),
+            )
+        }
+    val rows =
+        if (layout == AxQsLayout.QS) {
+            AxQsGridRows(
+                controls = AX_QS_CONTROL_MAX_ROWS,
+                tiles = axQsVisibleTileRows(tileItems.size, tileColumns, tileRowLimit),
+            )
+        } else {
+            axQsSharedGridRows(
+                controlItems,
+                controlColumns,
+                tileItems.size,
+                tileColumns,
+                maxTileRows = tileRowLimit,
+            )
         }
     val fittedControlItems: List<AxQsGridItem<AxQsGridValue>> =
-        fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, controlRows)
-    val fittedTileItems = if (qqs) tileItems.take(tileColumns * tileRows) else tileItems
+        fitAxQsGridItems<AxQsGridValue>(controlItems, controlColumns, rows.controls)
     val visibleTiles =
-        (fittedControlItems + fittedTileItems).mapNotNull {
+        (fittedControlItems + tileItems).mapNotNull {
             (it.value as? AxQsGridValue.Tile)?.viewModel
         }
     val rowHeight = CommonTileDefaults.TileHeight * LocalTileScale.current
     val spacing = CommonTileDefaults.TileSpacing * LocalTileScale.current
-    val qsEntranceProgress =
+    val qsEntranceProgress = {
         ((viewModel.expansionState.progress - QS_ENTRANCE_START) / (1f - QS_ENTRANCE_START))
             .coerceIn(0f, 1f)
-    val separateQqs = qqs && (landscape || axQsViewModel.panelMode == AxQsPanelMode.SEPARATE)
+    }
+    val separateQqs =
+        qqs && !splitShade && axQsViewModel.panelMode == AxQsPanelMode.SEPARATE
     val qqsHideBypass = separateQqs && axQsViewModel.isQsBypassingShade
     val controlContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
         when (val value = item.value) {
@@ -220,40 +233,54 @@ internal fun ContentScope.AxQsMixedGrid(
         }
     }
     val tileContent: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
-        val tile = (item.value as AxQsGridValue.Tile).viewModel
-        this@AxQsMixedGrid.AxLiveTile(
-            tile = tile,
-            item = item,
-            iconOnly = true,
-            qqs = qqs,
-            separateQqs = separateQqs,
-            listening = listening,
-            detailsViewModel = detailsViewModel,
-            viewModel = viewModel,
-            modifier = Modifier.fillMaxSize(),
-        )
+        when (val value = item.value) {
+            is AxQsGridValue.Tile ->
+                this@AxQsMixedGrid.AxLiveTile(
+                    tile = value.viewModel,
+                    item = item,
+                    iconOnly = true,
+                    qqs = qqs,
+                    separateQqs = separateQqs,
+                    listening = listening,
+                    detailsViewModel = detailsViewModel,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            is AxQsGridValue.Control ->
+                AxLiveControl(
+                    control = value.control,
+                    span = item.span,
+                    mediaViewModel = mediaViewModel,
+                    mediaViewModelFactory = viewModel.mediaViewModelFactory,
+                    brightnessSliderViewModel = brightnessSliderViewModel,
+                    volumeSliderViewModel = volumeSliderViewModel,
+                    verticalSliderStyle =
+                        axQsViewModel.verticalSliderStyle(layout, value.control),
+                    entranceProgress = {
+                        viewModel.quickQuickSettingsViewModel.squishinessViewModel.squishiness.value
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+        }
     }
     val tileLabel: @Composable (AxQsGridItem<AxQsGridValue>) -> Unit = { item ->
-        AxTileGridLabel((item.value as AxQsGridValue.Tile).viewModel)
+        (item.value as? AxQsGridValue.Tile)?.let { AxTileGridLabel(it.viewModel) }
     }
 
     QuickSettingsTheme {
         BoxWithConstraints(modifier) {
             val portraitPadding =
                 maxWidth * AxQuickSettingsLayoutDefaults.PORTRAIT_SIDE_PADDING_FRACTION
-            val splitShadePadding = maxWidth * AxQuickSettingsLayoutDefaults.LANDSCAPE_SIDE_PADDING_FRACTION
-            val landscapePadding = if (qqs) 0.dp else splitShadePadding
-            val contentPadding = if (landscape) landscapePadding else portraitPadding
-            val gridWidth =
-                if (landscape) {
-                    val contentWidth = maxWidth - landscapePadding * 2
-                    if (fittedControlItems.isNotEmpty() && fittedTileItems.isNotEmpty()) {
-                        (contentWidth - AxQuickSettingsLayoutDefaults.LandscapeSplitGridSpacing) / 2
-                    } else {
-                        contentWidth
-                    }
+            val splitShadePadding =
+                maxWidth * AxQuickSettingsLayoutDefaults.LANDSCAPE_SIDE_PADDING_FRACTION
+            val contentPadding = if (splitShade) splitShadePadding else portraitPadding
+            val gridWidth = (maxWidth - contentPadding * 2).coerceAtLeast(0.dp)
+            val contentTopPadding =
+                if (splitShade) {
+                    AxQuickSettingsLayoutDefaults.LandscapeHeaderHeight +
+                        AxQuickSettingsLayoutDefaults.LandscapeHeaderContentSpacing
                 } else {
-                    maxWidth - portraitPadding * 2
+                    0.dp
                 }
             val customShapeCells =
                 useAxQsCustomShapeCells(
@@ -263,10 +290,11 @@ internal fun ContentScope.AxQsMixedGrid(
                     allowCustomShapes = allowCustomShapeCells,
                 )
             when {
+                qqs && splitShade -> Unit
                 qqs ->
                     Column(
                         Modifier.fillMaxWidth().graphicsLayer {
-                            alpha = if (!landscape && qqsHideBypass) 0f else 1f
+                            alpha = if (qqsHideBypass) 0f else 1f
                         }
                     ) {
                         AxQQS(
@@ -274,11 +302,11 @@ internal fun ContentScope.AxQsMixedGrid(
                             shadeHeaderViewModel =
                                 viewModel.containerViewModel.shadeHeaderViewModel,
                             controlItems = fittedControlItems,
-                            tileItems = fittedTileItems,
+                            tileItems = tileItems,
                             controlColumns = controlColumns,
-                            controlRows = controlRows,
+                            controlRows = rows.controls,
                             tileColumns = tileColumns,
-                            tileRows = tileRows,
+                            tileRows = rows.tiles,
                             showTileLabels = showTileLabels,
                             rowHeight = rowHeight,
                             spacing = spacing,
@@ -287,9 +315,8 @@ internal fun ContentScope.AxQsMixedGrid(
                             isFullyVisible = {
                                 viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing
                             },
-                            editButtonProgress = { qsEntranceProgress },
+                            editButtonProgress = qsEntranceProgress,
                             separateMode = separateQqs,
-                            landscape = landscape,
                             modifier =
                                 Modifier.fillMaxWidth()
                                     .padding(horizontal = contentPadding),
@@ -298,7 +325,6 @@ internal fun ContentScope.AxQsMixedGrid(
                         )
                         if (
                             separateQqs &&
-                                !landscape &&
                                 mediaViewModel.hasVisibleSessions(AxMediaSurface.SEPARATE_QQS)
                         ) {
                             Spacer(Modifier.layoutHeight(spacing))
@@ -324,23 +350,28 @@ internal fun ContentScope.AxQsMixedGrid(
                             }
                         }
                     }
-                landscape ->
-                    AxSplitShadeQS(
+                splitShade ->
+                    AxQS(
                         toolbarViewModel = viewModel.toolbarViewModel,
+                        shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
                         isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
                         controlItems = fittedControlItems,
-                        tileItems = fittedTileItems,
+                        tileItems = tileItems,
                         controlColumns = controlColumns,
-                        controlRows = controlRows,
+                        controlRows = rows.controls,
                         tileColumns = tileColumns,
-                        tileRows = tileRows,
+                        tileRows = rows.tiles,
                         showTileLabels = showTileLabels,
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        customShapeCells = customShapeCells,
                         onSideSwipe = viewModel::emitMotionEventForFalsingSwipeSide,
-                        editButtonProgress = { qsEntranceProgress },
-                        modifier = Modifier.fillMaxSize(),
+                        editButtonProgress = qsEntranceProgress,
+                        scrollState = scrollState,
+                        customShapeCells = customShapeCells,
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .padding(top = contentTopPadding)
+                                .padding(horizontal = contentPadding),
                         controlContent = controlContent,
                         tileContent = tileContent,
                         tileLabel = tileLabel,
@@ -351,27 +382,38 @@ internal fun ContentScope.AxQsMixedGrid(
                         shadeHeaderViewModel = viewModel.containerViewModel.shadeHeaderViewModel,
                         isFullyVisible = { viewModel.isQsFullyExpanded && !viewModel.isEditing },
                         controlItems = fittedControlItems,
-                        tileItems = fittedTileItems,
+                        tileItems = tileItems,
                         controlColumns = controlColumns,
-                        controlRows = controlRows,
+                        controlRows = rows.controls,
                         tileColumns = tileColumns,
-                        tileRows = tileRows,
+                        tileRows = rows.tiles,
                         showTileLabels = showTileLabels,
                         rowHeight = rowHeight,
                         spacing = spacing,
-                        customShapeCells = customShapeCells,
                         onSideSwipe = viewModel::emitMotionEventForFalsingSwipeSide,
-                        editButtonProgress = { qsEntranceProgress },
+                        editButtonProgress = qsEntranceProgress,
                         scrollState = scrollState,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = portraitPadding),
+                        customShapeCells = customShapeCells,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = contentPadding),
                         controlContent = controlContent,
                         tileContent = tileContent,
                         tileLabel = tileLabel,
                     )
             }
+    }
+    }
+    val tilesListening = !separateQqs && !(qqs && splitShade) && listening()
+    DisposableEffect(visibleTiles, tilesListening) {
+        val token = Any()
+        if (tilesListening) {
+            visibleTiles.forEach { it.startListening(token) }
+        }
+        onDispose {
+            if (tilesListening) {
+                visibleTiles.forEach { it.stopListening(token) }
+            }
         }
     }
-    TileListener(visibleTiles, if (separateQqs) ({ false }) else listening)
 }
 
 @Composable

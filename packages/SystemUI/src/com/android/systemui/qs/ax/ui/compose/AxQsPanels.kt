@@ -23,10 +23,8 @@ import androidx.compose.foundation.clipScrollableContainer
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -50,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,7 +104,6 @@ internal fun <T> ContentScope.AxQQS(
     isFullyVisible: () -> Boolean,
     editButtonProgress: () -> Float,
     separateMode: Boolean,
-    landscape: Boolean,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -114,16 +112,14 @@ internal fun <T> ContentScope.AxQQS(
         modifier = modifier.fillMaxWidth().heightIn(ShadeHeader.Dimensions.StatusBarHeight),
         verticalArrangement = Arrangement.spacedBy(spacing),
     ) {
-        if (!landscape) {
-            AxQsDateHeader(
-                toolbarViewModel = toolbarViewModel,
-                shadeHeaderViewModel = shadeHeaderViewModel,
-                showEdit = false,
-                isFullyVisible = isFullyVisible,
-                editButtonProgress = editButtonProgress,
-            )
-        }
-        if (!separateMode && !landscape) {
+        AxQsDateHeader(
+            toolbarViewModel = toolbarViewModel,
+            shadeHeaderViewModel = shadeHeaderViewModel,
+            showEdit = false,
+            isFullyVisible = isFullyVisible,
+            editButtonProgress = editButtonProgress,
+        )
+        if (!separateMode) {
             val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
             if (controlItems.isNotEmpty()) {
                 AxQsGrid(
@@ -182,10 +178,11 @@ internal fun <T> ContentScope.AxQS(
     showTileLabels: Boolean,
     rowHeight: Dp,
     spacing: Dp,
-    customShapeCells: Boolean,
     onSideSwipe: () -> Unit,
     editButtonProgress: () -> Float,
     scrollState: ScrollState,
+    customShapeCells: Boolean,
+    showDate: Boolean = true,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
@@ -197,6 +194,7 @@ internal fun <T> ContentScope.AxQS(
             toolbarViewModel = toolbarViewModel,
             shadeHeaderViewModel = shadeHeaderViewModel,
             showEdit = true,
+            showDate = showDate,
             isFullyVisible = isFullyVisible,
             editButtonProgress = editButtonProgress,
         )
@@ -247,109 +245,6 @@ internal fun <T> ContentScope.AxQS(
 }
 
 @Composable
-internal fun <T> ContentScope.AxSplitShadeQS(
-    toolbarViewModel: ToolbarViewModel,
-    isFullyVisible: () -> Boolean,
-    controlItems: List<AxQsGridItem<T>>,
-    tileItems: List<AxQsGridItem<T>>,
-    controlColumns: Int,
-    controlRows: Int,
-    tileColumns: Int,
-    tileRows: Int,
-    showTileLabels: Boolean,
-    rowHeight: Dp,
-    spacing: Dp,
-    customShapeCells: Boolean,
-    onSideSwipe: () -> Unit,
-    editButtonProgress: () -> Float,
-    modifier: Modifier = Modifier,
-    controlContent: @Composable (AxQsGridItem<T>) -> Unit,
-    tileContent: @Composable (AxQsGridItem<T>) -> Unit,
-    tileLabel: @Composable (AxQsGridItem<T>) -> Unit,
-) {
-    val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
-    val hasControls = controlItems.isNotEmpty()
-    val hasTiles = tileItems.isNotEmpty()
-    val footer: @Composable () -> Unit = {
-        AxSplitShadeFooter(
-            viewModel = toolbarViewModel,
-            isFullyVisible = isFullyVisible,
-            editButtonProgress = editButtonProgress,
-        )
-    }
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val sidePadding = maxWidth * AxQuickSettingsLayoutDefaults.LANDSCAPE_SIDE_PADDING_FRACTION
-        Row(
-            modifier =
-                Modifier.fillMaxSize()
-                    .padding(
-                        top =
-                            AxQuickSettingsLayoutDefaults.LandscapeHeaderHeight +
-                                AxQuickSettingsLayoutDefaults.LandscapeHeaderContentSpacing,
-                        start = sidePadding,
-                        end = sidePadding,
-                    ),
-            verticalAlignment = Alignment.Top,
-        ) {
-            if (hasControls) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(spacing),
-                ) {
-                    AxQsGrid(
-                        items = controlItems,
-                        columns = controlColumns,
-                        rowHeight = rowHeight,
-                        spacing = spacing,
-                        maxRows = controlRows,
-                        customShapeCells = customShapeCells,
-                        modifier = Modifier.fillMaxWidth(),
-                        content = controlContent,
-                    )
-                    footer()
-                }
-            }
-            if (hasTiles) {
-                if (hasControls) {
-                    Spacer(
-                        Modifier.width(AxQuickSettingsLayoutDefaults.LandscapeSplitGridSpacing)
-                    )
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(spacing),
-                ) {
-                    AxQsTileGrid(
-                        items = tileItems,
-                        columns = tileColumns,
-                        rows = tileRows,
-                        spacing = spacing,
-                        showLabels = showTileLabels,
-                        customShapeCells = customShapeCells,
-                        pagerState = pagerState,
-                        onSideSwipe = onSideSwipe,
-                        modifier = Modifier.fillMaxWidth(),
-                        content = tileContent,
-                        label = tileLabel,
-                    )
-                    AxQsPagerIndicator(pagerState = pagerState)
-                    if (!hasControls) {
-                        footer()
-                    }
-                }
-            }
-            if (!hasControls && !hasTiles) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                    footer()
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun <T> rememberAxQsTilePagerState(
     items: List<AxQsGridItem<T>>,
     columns: Int,
@@ -361,13 +256,16 @@ private fun ContentScope.AxQsDateHeader(
     toolbarViewModel: ToolbarViewModel,
     shadeHeaderViewModel: ShadeHeaderViewModel,
     showEdit: Boolean,
+    showDate: Boolean = true,
     isFullyVisible: () -> Boolean,
     editButtonProgress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            AxQuickSettingsDate(viewModel = shadeHeaderViewModel)
+            if (showDate) {
+                AxQuickSettingsDate(viewModel = shadeHeaderViewModel)
+            }
         }
         AxQsHeaderActions(
             viewModel = toolbarViewModel,
@@ -402,28 +300,6 @@ internal fun ContentScope.AxQsHeaderActions(
 }
 
 @Composable
-internal fun ContentScope.AxSplitShadeFooter(
-    viewModel: ToolbarViewModel,
-    isFullyVisible: () -> Boolean,
-    editButtonProgress: () -> Float,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AxEditButton(viewModel, isFullyVisible, editButtonProgress)
-        FooterIconButton(
-            model = viewModel.settingsButtonViewModel,
-            containerColor = AxTileDefaults.backgroundColor(),
-            modifier =
-                Modifier.sysuiResTag("settings_button_container").minimumInteractiveComponentSize(),
-        )
-        AxFooterOverflowMenu(viewModel)
-    }
-}
-
-@Composable
 internal fun AxQsPagerIndicator(pagerState: PagerState, modifier: Modifier = Modifier) {
     if (pagerState.pageCount > 1) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -446,11 +322,14 @@ private fun AxEditButton(
     val editModeButtonViewModel =
         rememberViewModel("AxQsActions") { viewModel.editModeButtonViewModelFactory.create() }
     if (!editModeButtonViewModel.isEditButtonVisible) return
-    val editAlpha = editButtonProgress().coerceIn(0f, 1f)
-    val editEnabled = editAlpha >= EDIT_BUTTON_ENABLE_THRESHOLD && isFullyVisible()
+    val editEnabled by remember(editButtonProgress, isFullyVisible) {
+        derivedStateOf {
+            editButtonProgress() >= EDIT_BUTTON_ENABLE_THRESHOLD && isFullyVisible()
+        }
+    }
     Box(
         modifier =
-            Modifier.graphicsLayer { alpha = editAlpha }
+            Modifier.graphicsLayer { alpha = editButtonProgress().coerceIn(0f, 1f) }
                 .then(
                     if (editEnabled) Modifier
                     else Modifier.gesturesDisabled().clearAndSetSemantics {}
