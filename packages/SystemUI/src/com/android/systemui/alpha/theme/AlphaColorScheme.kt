@@ -331,7 +331,18 @@ object AlphaMetrics {
     const val mediaAccentFillLightnessDark = 0.46f
     const val mediaAccentFillLightnessLight = 0.46f
 
-    /** Chroma floor, so a grey cover still yields a coloured fill rather than a slab of concrete. */
+    /**
+     * Lightness the album colour takes when it *tints* a body instead of filling a control.
+     *
+     * Deliberately not the fill value. A fill has a hard ceiling — [AlphaColors.onAccentColor] has
+     * to read on it — while a tint has none, because the content colour is measured against the
+     * mixed result afterwards. Set to where the event palette sits (mean lightness of the eleven
+     * hues is ≈0.55), so a media chip carries the same weight of colour as a charging or timer one.
+     */
+    const val mediaAccentTintLightnessDark = 0.55f
+    const val mediaAccentTintLightnessLight = 0.55f
+
+    /** Chroma floor, so a grey cover still yields a coloured accent rather than a slab of concrete. */
     const val mediaAccentFillSaturationFloor = 0.55f
 
     /** WCAG AA for icons and short labels at chip sizes. */

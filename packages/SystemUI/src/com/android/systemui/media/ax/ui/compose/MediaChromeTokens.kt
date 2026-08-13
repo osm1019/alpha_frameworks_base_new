@@ -135,13 +135,31 @@ object MediaChrome {
      */
     @Composable
     @ReadOnlyComposable
-    fun accentFill(accent: Color): Color {
+    fun accentFill(accent: Color): Color =
+        normalisedAccent(
+            accent,
+            if (isDark) AlphaMetrics.mediaAccentFillLightnessDark
+            else AlphaMetrics.mediaAccentFillLightnessLight,
+        )
+
+    /**
+     * The same album colour normalised for *tinting* a body rather than filling a control — see
+     * [AlphaMetrics.mediaAccentTintLightnessDark] for why that is a different number.
+     */
+    @Composable
+    @ReadOnlyComposable
+    fun accentTint(accent: Color): Color =
+        normalisedAccent(
+            accent,
+            if (isDark) AlphaMetrics.mediaAccentTintLightnessDark
+            else AlphaMetrics.mediaAccentTintLightnessLight,
+        )
+
+    private fun normalisedAccent(accent: Color, lightness: Float): Color {
         val hsl = FloatArray(3)
         ColorUtils.colorToHSL(accent.toArgb(), hsl)
         hsl[1] = hsl[1].coerceAtLeast(AlphaMetrics.mediaAccentFillSaturationFloor)
-        hsl[2] =
-            if (isDark) AlphaMetrics.mediaAccentFillLightnessDark
-            else AlphaMetrics.mediaAccentFillLightnessLight
+        hsl[2] = lightness
         return Color(ColorUtils.HSLToColor(hsl))
     }
 

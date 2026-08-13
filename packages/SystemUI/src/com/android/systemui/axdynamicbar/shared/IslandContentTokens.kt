@@ -250,16 +250,19 @@ private fun contentColorOn(body: Color): Color {
 }
 
 /**
- * Chip / pill glass. [accent] is from [chipAccentColorFor].
- * @param isMedia media keeps neutral glass; accent stays on controls
+ * Chip / pill glass. [accent] is from [chipAccentColorFor] or [chipTintAccentFor].
+ *
+ * @param neutralBody skip the event tint and leave the body plain glass. Only the lockscreen pill
+ *   asks for it, and only for media: it sits between the keyguard shortcut buttons and has to read
+ *   as one band with them. The status bar and cutout chips colour-code every event, media included.
  */
 @Composable
 internal fun islandGlassChrome(
     accent: Color,
-    isMedia: Boolean,
+    neutralBody: Boolean,
 ): IslandGlassChrome {
     val body = MediaChrome.GlassBody
-    if (isMedia) {
+    if (neutralBody) {
         return IslandGlassChrome(
             body = body,
             border = MediaChrome.GlassBorder,
@@ -402,6 +405,25 @@ internal fun chipAccentColorFor(event: IslandEvent): Color {
     }
     return accentColorFor(event)
 }
+
+/**
+ * Chip accent for the surfaces that colour-code **every** event, media included.
+ *
+ * [chipAccentColorFor] is no use as a tint source for media. It runs the colour through
+ * [darkenColor] at `keep = 0.35`, which was calibrated back when the chip was a solid fill under
+ * white text — and the colour it darkens is remedia's `primaryFixed`, a tone-90 pastel, so
+ * multiplying every channel by 0.35 lands on a near-grey slate rather than the album's hue.
+ *
+ * Normalising instead keeps the artwork's hue and chroma at the vividness the event palette sits
+ * at, so a media chip carries the same weight of colour as a charging or timer one.
+ */
+@Composable
+internal fun chipTintAccentFor(event: IslandEvent): Color =
+    if (event is IslandEvent.Media && event.mediaColor != 0) {
+        MediaChrome.accentTint(Color(event.mediaColor))
+    } else {
+        chipAccentColorFor(event)
+    }
 
 @Composable
 private fun rememberPaletteColor(drawable: Drawable): Color? {

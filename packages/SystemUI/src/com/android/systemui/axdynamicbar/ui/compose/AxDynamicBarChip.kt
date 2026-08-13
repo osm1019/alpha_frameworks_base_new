@@ -74,7 +74,7 @@ import com.android.systemui.axdynamicbar.shared.SpaceXs
 import com.android.systemui.axdynamicbar.shared.StatusBarPillWidth
 import com.android.systemui.axdynamicbar.shared.StatusBarPillWidthWithBadge
 import com.android.systemui.axdynamicbar.shared.TsBadge
-import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
+import com.android.systemui.axdynamicbar.shared.chipTintAccentFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.iconKeyFor
 import com.android.systemui.axdynamicbar.shared.islandGlassChrome
@@ -133,10 +133,9 @@ fun AxDynamicBarChip(
                 contentKey = { if (it.isAlert) "alert" else it.event::class.simpleName },
                 label = "chip_event",
             ) { display ->
-                val rawAccent = chipAccentColorFor(display.event)
+                val rawAccent = chipTintAccentFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
-                val isMedia = display.event is IslandEvent.Media
-                val rawChrome = islandGlassChrome(rawAccent, isMedia = isMedia)
+                val rawChrome = islandGlassChrome(rawAccent, neutralBody = false)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
                 )

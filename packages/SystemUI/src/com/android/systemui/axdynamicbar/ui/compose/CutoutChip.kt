@@ -101,7 +101,7 @@ import com.android.systemui.axdynamicbar.shared.StatusBarContentWidth
 import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.axdynamicbar.shared.StatusBarIconWidth
 import com.android.systemui.axdynamicbar.shared.StatusBarPillWidth
-import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
+import com.android.systemui.axdynamicbar.shared.chipTintAccentFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.islandGlassChrome
 import androidx.compose.runtime.mutableStateOf
@@ -292,11 +292,10 @@ fun CutoutChip(
                 contentKey = { if (it.isAlert) "alert" else it.event::class.simpleName },
                 label = "cutout_chip_event",
             ) { display ->
-                val rawAccent = chipAccentColorFor(display.event)
+                val rawAccent = chipTintAccentFor(display.event)
                 val motionScheme = MaterialTheme.motionScheme
                 val accent by animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "accent")
-                val isMedia = display.event is IslandEvent.Media
-                val rawChrome = islandGlassChrome(rawAccent, isMedia = isMedia)
+                val rawChrome = islandGlassChrome(rawAccent, neutralBody = false)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, motionScheme.fastEffectsSpec(), label = "glass_body",
                 )

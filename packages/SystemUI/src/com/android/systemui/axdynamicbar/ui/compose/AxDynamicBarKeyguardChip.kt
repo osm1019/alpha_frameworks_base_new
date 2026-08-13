@@ -316,7 +316,7 @@ private fun KeyguardChipBody(
     // Glass shell for every event: media = neutral glass; others keep event hue as a tint
     // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
     // media buttons + progress.
-    val chrome = islandGlassChrome(accent, isMedia = isMedia)
+    val chrome = islandGlassChrome(accent, neutralBody = isMedia)
     val bodyColor = chrome.body
     val onBody = chrome.content
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
@@ -726,7 +726,7 @@ private fun KeyguardBatteryChip(
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }
-    val chrome = islandGlassChrome(accent, isMedia = false)
+    val chrome = islandGlassChrome(accent, neutralBody = false)
     val contentColor = chrome.content
 
     val parts = rememberChargingParts(batteryString)

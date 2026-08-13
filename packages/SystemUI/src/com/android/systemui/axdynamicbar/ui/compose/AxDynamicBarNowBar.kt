@@ -112,7 +112,7 @@ fun AxDynamicBarNowBar(
                 val rawAccent = chipAccentColorFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
                 val isMedia = display.event is IslandEvent.Media
-                val rawChrome = islandGlassChrome(rawAccent, isMedia = isMedia)
+                val rawChrome = islandGlassChrome(rawAccent, neutralBody = isMedia)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
                 )
