@@ -1,10 +1,7 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
-import android.util.TypedValue
-import android.widget.SeekBar
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,31 +44,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
-import com.android.systemui.media.ax.ui.compose.rememberSquiggleAnimationEnabled
-import com.android.systemui.media.controls.ui.drawable.SquigglyProgress
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.AlphaMetrics
+import com.android.systemui.media.ax.ui.compose.MediaChrome
 
 // Compact stack card — keep controls usable but shave vertical bulk vs full-sheet media.
 private val AlbumArtSize = 56.dp
 private val PlayPauseSize = 44.dp
 private val ControlButtonSize = 36.dp
 private val ControlIconSize = 20.dp
-private val SeekBarHeight = 22.dp
 
+/**
+ * Stack card. Reads as one pane, not a header over a tinted tray: the media chip and the expand
+ * shell are both neutral glass, so a tinted band under the transport was the only tinted thing in
+ * an otherwise neutral stack — and it split the card in two.
+ *
+ * Track text, timeline and transport follow the lockscreen styles (neutral chrome, one accented
+ * control) while the shell, shape and padding stay whatever the rest of the stack uses.
+ */
 @Composable
 internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
     val colors = rememberMediaColors(event)
@@ -84,34 +90,21 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
         shape = ShapeCard,
         color = chrome.body,
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = SpaceXxl, vertical = SpaceLg),
+            verticalArrangement = Arrangement.spacedBy(SpaceMd),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
                         interactor.openMediaApp()
                         interactor.collapseIsland()
-                    }
-                    .padding(horizontal = SpaceXxl, vertical = SpaceLg),
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(SpaceLg),
             ) {
-                event.albumArt?.let { art ->
-                    Image(
-                        bitmap = art.toScaledBitmap(AlbumArtSize),
-                        contentDescription = null,
-                        modifier = Modifier.size(AlbumArtSize).clip(ShapeLg),
-                        contentScale = ContentScale.Crop,
-                    )
-                } ?: Box(
-                    modifier = Modifier
-                        .size(AlbumArtSize)
-                        .clip(ShapeLg)
-                        .background(accent.copy(alpha = AlphaFaint)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.MusicNote, null, tint = accent, modifier = Modifier.size(28.dp))
-                }
+                MediaArtThumbnail(event, AlbumArtSize)
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -127,7 +120,7 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
                     if (event.artist.isNotEmpty()) {
                         Text(
                             event.artist,
-                            color = accent,
+                            color = SubtleGray,
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -144,19 +137,37 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(accent.copy(alpha = AlphaFaint))
-                    .padding(horizontal = SpaceXxl, vertical = SpaceMd),
-                verticalArrangement = Arrangement.spacedBy(SpaceMd),
-            ) {
-                if (event.duration > 0L) {
-                    MediaSeekBar(event, interactor, accent)
-                }
-                MediaControls(event, interactor, accent)
+            if (event.duration > 0L) {
+                MediaTimeline(event, interactor)
             }
+            MediaControls(event, interactor, accent)
         }
+    }
+}
+
+/** Album art, or a neutral plate carrying the note glyph — the same pair [MediaArtPane] draws. */
+@Composable
+private fun MediaArtThumbnail(event: IslandEvent.Media, size: Dp) {
+    val art = event.albumArt
+    if (art != null) {
+        Image(
+            bitmap = art.toScaledBitmap(size),
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(ShapeLg),
+            contentScale = ContentScale.Crop,
+        )
+        return
+    }
+    Box(
+        modifier = Modifier.size(size).clip(ShapeLg).background(MediaChrome.SkipNeutral),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.MusicNote,
+            null,
+            tint = MediaChrome.OnGlassHint,
+            modifier = Modifier.size(size / 2),
+        )
     }
 }
 
@@ -178,26 +189,7 @@ internal fun MediaExpanded(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceXxl),
         ) {
-            event.albumArt?.let { art ->
-                Image(
-                    bitmap = art.toScaledBitmap(SizeAlbumSm),
-                    contentDescription = null,
-                    modifier = Modifier.size(SizeAlbumSm).clip(ShapeLg),
-                    contentScale = ContentScale.Crop,
-                )
-            } ?: Surface(
-                modifier = Modifier.size(SizeAlbumSm),
-                shape = ShapeLg,
-                color = accent,
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        Icons.Filled.MusicNote, null,
-                        tint = AlphaColors.onAccentColor,
-                        modifier = Modifier.size(SpacePanel),
-                    )
-                }
-            }
+            MediaArtThumbnail(event, SizeAlbumSm)
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -213,7 +205,7 @@ internal fun MediaExpanded(
                 if (event.artist.isNotEmpty()) {
                     Text(
                         event.artist,
-                        color = accent,
+                        color = SubtleGray,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -233,46 +225,41 @@ internal fun MediaExpanded(
 
         MediaControls(event, interactor, accent)
         if (event.duration > 0L) {
-            MediaSeekBar(event, interactor, accent)
+            MediaTimeline(event, interactor)
         }
     }
 }
 
+/**
+ * Transport, in the lockscreen grammar: everything bare except play, which is the card's one
+ * accented control. The plates the skips used to carry were `accent.copy(alpha = 0.15f)` — over a
+ * light body that is a pastel wash with a pastel glyph on it.
+ */
 @Composable
 private fun MediaControls(
     event: IslandEvent.Media,
     interactor: IslandActions,
     accent: Color,
 ) {
-    val onAccent = chipContentColorOn(accent)
-    val tonalBg = accent.copy(alpha = AlphaSubtle)
-
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MediaCustomActionButton(event, interactor, accent, tonalBg)
+        MediaCustomActionButton(event, interactor)
 
-        Surface(
-            onClick = { interactor.skipPrev() },
-            shape = CircleShape,
-            color = tonalBg,
-            modifier = Modifier.size(ControlButtonSize),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(
-                    Icons.Filled.SkipPrevious, null,
-                    tint = accent,
-                    modifier = Modifier.size(ControlIconSize),
-                )
-            }
+        BareControlButton(onClick = { interactor.skipPrev() }) {
+            Icon(
+                Icons.Filled.SkipPrevious, null,
+                tint = OnCardText,
+                modifier = Modifier.size(ControlIconSize),
+            )
         }
 
         Surface(
             onClick = { interactor.togglePlayPause() },
             shape = CircleShape,
-            color = accent,
+            color = MediaChrome.accentFill(accent),
             modifier = Modifier.size(PlayPauseSize),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -282,39 +269,57 @@ private fun MediaControls(
                         stringResource(R.string.ax_dynamic_bar_pause)
                     else
                         stringResource(R.string.ax_dynamic_bar_play),
-                    tint = onAccent,
+                    tint = AlphaColors.onAccentColor,
                     modifier = Modifier.size(22.dp),
                 )
             }
         }
 
-        Surface(
-            onClick = { interactor.skipNext() },
-            shape = CircleShape,
-            color = tonalBg,
-            modifier = Modifier.size(ControlButtonSize),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(
-                    Icons.Filled.SkipNext, null,
-                    tint = accent,
-                    modifier = Modifier.size(ControlIconSize),
-                )
-            }
+        BareControlButton(onClick = { interactor.skipNext() }) {
+            Icon(
+                Icons.Filled.SkipNext, null,
+                tint = OnCardText,
+                modifier = Modifier.size(ControlIconSize),
+            )
         }
 
-        MediaEndActionButton(event, interactor, accent, tonalBg)
+        MediaEndActionButton(event, interactor)
     }
 }
 
+/** Secondary transport slot: hit target and ripple, no plate. */
 @Composable
-private fun MediaSeekBar(
+private fun BareControlButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color.Transparent,
+        enabled = enabled,
+        modifier = Modifier.size(ControlButtonSize),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) { content() }
+    }
+}
+
+/**
+ * The stack card's timeline — elapsed, bar, total on one row, drawn with the same track / trail /
+ * thumb the lockscreen styles use. It replaces an accent-tinted platform `SeekBar` whose squiggle
+ * matched no style we ship and whose colour came from the artwork, so on a light card the played
+ * portion read as unfilled.
+ *
+ * Gestures were already Compose (the old `SeekBar` was `isEnabled = false` and painted only), so
+ * only the renderer changed.
+ */
+@Composable
+private fun MediaTimeline(
     event: IslandEvent.Media,
     interactor: IslandActions,
-    accent: Color,
 ) {
     val mediaProgress = rememberMediaProgress(event)
-    val squiggleAnimationEnabled = rememberSquiggleAnimationEnabled()
     val isPlaying = event.isPlaying
     val durationMs = event.duration
     val positionMs = mediaProgress.positionMs
@@ -349,30 +354,29 @@ private fun MediaSeekBar(
     }
 
     val displayMs = (displayFraction * durationMs).toLong()
-    val accentArgb = accent.toArgb()
-    val trackAlphaArgb = accent.copy(alpha = AlphaSubtle).toArgb()
+    // Captured in composition — the Canvas draw scope is not @Composable.
+    val trackColor = MediaChrome.LockscreenProgressTrack
+    val thumbColor = MediaChrome.LockscreenProgressThumb
+    val progressTip = MediaChrome.LockscreenProgress
+    val thumbRadiusDp = AlphaMetrics.mediaTimelineThumbRadius
+    val trackWidthDp = AlphaMetrics.mediaTimelineTrackWidth
 
-    Column(verticalArrangement = Arrangement.spacedBy(SpaceXs)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                formatElapsedTime(displayMs),
-                color = SubtleGray,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Text(
-                formatElapsedTime(durationMs),
-                color = SubtleGray,
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth().height(AlphaMetrics.mediaTimelineHeight),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            formatElapsedTime(displayMs),
+            color = MediaChrome.OnGlassHint,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(end = SpaceMd),
+        )
 
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(SeekBarHeight)
+                .weight(1f)
+                .fillMaxHeight()
                 .pointerInput(swipeLock) {
                     awaitEachGesture {
                         awaitPointerEvent() // DOWN
@@ -388,7 +392,7 @@ private fun MediaSeekBar(
                 }
                 .pointerInput("tap") {
                     detectTapGestures { offset ->
-                        val fraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val fraction = progressAt(offset.x, size.width, thumbRadiusDp.toPx())
                         displayFraction = fraction
                         interactorRef.value.seekTo((fraction * durationMs).toLong())
                     }
@@ -397,7 +401,8 @@ private fun MediaSeekBar(
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
                             isScrubbing = true
-                            displayFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                            displayFraction =
+                                progressAt(offset.x, size.width, thumbRadiusDp.toPx())
                         },
                         onDragEnd = {
                             interactorRef.value.seekTo((displayFraction * durationMs).toLong())
@@ -406,194 +411,94 @@ private fun MediaSeekBar(
                         onDragCancel = { isScrubbing = false },
                         onHorizontalDrag = { change, _ ->
                             displayFraction =
-                                (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                                progressAt(change.position.x, size.width, thumbRadiusDp.toPx())
                             change.consume()
                         },
                     )
                 },
             contentAlignment = Alignment.Center,
         ) {
-            AndroidView(
-                factory = { context ->
-                    SeekBar(context).apply {
-                        max = 10_000
-                        splitTrack = false
-                        setPadding(0, 0, 0, 0)
-                        // Disable direct touch — Compose handles all gestures above
-                        isEnabled = false
+            Canvas(Modifier.fillMaxSize()) {
+                val centreY = size.height / 2f
+                val stroke = trackWidthDp.toPx()
+                val thumbRadius = thumbRadiusDp.toPx()
+                // Keep the thumb fully inside the bar at either extreme — the same inset the
+                // gesture mapping takes, so it tracks the finger all the way to both ends.
+                val usable = (size.width - thumbRadius * 2f).coerceAtLeast(0f)
+                val playedX = thumbRadius + usable * displayFraction.coerceIn(0f, 1f)
+                drawLine(
+                    color = trackColor,
+                    start = Offset(thumbRadius, centreY),
+                    end = Offset(size.width - thumbRadius, centreY),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                if (playedX > thumbRadius) {
+                    drawLine(
+                        brush = MediaChrome.lockscreenProgressTrail(playedX, progressTip),
+                        start = Offset(thumbRadius, centreY),
+                        end = Offset(playedX, centreY),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                }
+                drawCircle(color = thumbColor, radius = thumbRadius, center = Offset(playedX, centreY))
+            }
+        }
 
-                        // Pill-shaped thumb
-                        thumb = createSeekBarThumb(context, accentArgb)
-                        thumbOffset = thumb.intrinsicWidth / 2
+        Text(
+            formatElapsedTime(durationMs),
+            color = MediaChrome.OnGlassHint,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(start = SpaceMd),
+        )
+    }
+}
 
-                        // Set up SquigglyProgress on the progress layer
-                        val layer = (progressDrawable?.mutate() as? LayerDrawable)
-                        if (layer != null) {
-                            layer.findDrawableByLayerId(android.R.id.background)
-                                ?.mutate()?.setTint(trackAlphaArgb)
+/** Tap / drag x to progress, inset by the thumb radius so the mapping matches what is painted. */
+private fun progressAt(x: Float, width: Int, inset: Float): Float {
+    val usable = (width - inset * 2f).coerceAtLeast(1f)
+    return ((x - inset) / usable).coerceIn(0f, 1f)
+}
 
-                            layer.findDrawableByLayerId(android.R.id.secondaryProgress)
-                                ?.mutate()?.setTint(
-                                    com.android.internal.graphics.ColorUtils
-                                        .setAlphaComponent(accentArgb, 60)
-                                )
-
-                            val squiggle = SquigglyProgress().apply {
-                                waveLength = context.resources.getDimensionPixelSize(
-                                    R.dimen.qs_media_seekbar_progress_wavelength
-                                ).toFloat()
-                                lineAmplitude = context.resources.getDimensionPixelSize(
-                                    R.dimen.qs_media_seekbar_progress_amplitude
-                                ).toFloat()
-                                phaseSpeed = context.resources.getDimensionPixelSize(
-                                    R.dimen.qs_media_seekbar_progress_phase
-                                ).toFloat()
-                                strokeWidth = context.resources.getDimensionPixelSize(
-                                    R.dimen.qs_media_seekbar_progress_stroke_width
-                                ).toFloat()
-                                setTint(accentArgb)
-                                drawRemainingLine = false
-                                transitionEnabled = false
-                                animate = false
-                            }
-                            layer.setDrawableByLayerId(android.R.id.progress, squiggle)
-                            progressDrawable = layer
-                        }
-                    }
-                },
-                update = { bar ->
-                    val target = (displayFraction * 10_000f).toInt().coerceIn(0, 10_000)
-                    bar.progress = target
-
-                    // Re-tint thumb for accent color changes (e.g. track switch)
-                    (bar.thumb as? GradientDrawable)?.setColor(accentArgb)
-
-                    val alpha = if (isPlaying) 255 else (255 * 0.55f).toInt()
-                    bar.thumb?.alpha = alpha
-
-                    val layer = bar.progressDrawable as? LayerDrawable
-
-                    // Re-tint track colors
-                    layer?.findDrawableByLayerId(android.R.id.background)
-                        ?.setTint(trackAlphaArgb)
-                    layer?.findDrawableByLayerId(android.R.id.secondaryProgress)
-                        ?.setTint(
-                            com.android.internal.graphics.ColorUtils
-                                .setAlphaComponent(accentArgb, 60)
-                        )
-
-                    val squiggle = layer
-                        ?.findDrawableByLayerId(android.R.id.progress) as? SquigglyProgress
-
-                    squiggle?.apply {
-                        setTint(accentArgb)
-                        setAlpha(alpha)
-                        animate = isPlaying && !isScrubbing && squiggleAnimationEnabled
-                    }
-
-                    layer?.alpha = alpha
-                },
-                modifier = Modifier.fillMaxWidth().height(SeekBarHeight),
+@Composable
+private fun MediaCustomActionButton(event: IslandEvent.Media, interactor: IslandActions) {
+    val ca = event.customActions.firstOrNull()
+    if (ca != null) {
+        BareControlButton(onClick = { interactor.sendCustomAction(ca.action) }) {
+            CustomActionIcon(ca, tint = SubtleGray, modifier = Modifier.size(ControlIconSize))
+        }
+    } else {
+        BareControlButton(onClick = { }, enabled = false) {
+            Icon(
+                Icons.Filled.Shuffle, null,
+                tint = OnCardText.copy(alpha = AlphaDisabled),
+                modifier = Modifier.size(ControlIconSize),
             )
         }
     }
 }
 
-/**
- * Creates a pill-shaped thumb drawable for the seekbar.
- */
-private fun createSeekBarThumb(context: android.content.Context, tintColor: Int): GradientDrawable {
-    val wPx = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, 4f, context.resources.displayMetrics
-    ).toInt().coerceAtLeast(1)
-    val hPx = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
-    ).toInt().coerceAtLeast(1)
-    val radiusPx = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
-    )
-    return GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setSize(wPx, hPx)
-        cornerRadius = radiusPx
-        setColor(tintColor)
-    }
-}
-
 @Composable
-private fun MediaCustomActionButton(
-    event: IslandEvent.Media,
-    interactor: IslandActions,
-    accent: Color,
-    tonalBg: Color,
-) {
-    if (event.customActions.isNotEmpty()) {
-        val ca = event.customActions.first()
-        Surface(
-            onClick = { interactor.sendCustomAction(ca.action) },
-            shape = CircleShape,
-            color = tonalBg,
-            modifier = Modifier.size(ControlButtonSize),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                CustomActionIcon(ca, tint = accent, modifier = Modifier.size(ControlIconSize))
-            }
+private fun MediaEndActionButton(event: IslandEvent.Media, interactor: IslandActions) {
+    val ca = event.customActions.getOrNull(1)
+    if (ca != null) {
+        BareControlButton(onClick = { interactor.sendCustomAction(ca.action) }) {
+            CustomActionIcon(ca, tint = SubtleGray, modifier = Modifier.size(ControlIconSize))
         }
     } else {
-        Surface(
-            onClick = { },
-            shape = CircleShape,
-            color = tonalBg.copy(alpha = AlphaSubtle),
-            modifier = Modifier.size(ControlButtonSize),
-            enabled = false,
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(
-                    Icons.Filled.Shuffle, null,
-                    tint = accent.copy(alpha = AlphaDisabled),
-                    modifier = Modifier.size(ControlIconSize),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MediaEndActionButton(
-    event: IslandEvent.Media,
-    interactor: IslandActions,
-    accent: Color,
-    tonalBg: Color,
-) {
-    if (event.customActions.size > 1) {
-        val ca = event.customActions[1]
-        Surface(
-            onClick = { interactor.sendCustomAction(ca.action) },
-            shape = CircleShape,
-            color = tonalBg,
-            modifier = Modifier.size(ControlButtonSize),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                CustomActionIcon(ca, tint = accent, modifier = Modifier.size(ControlIconSize))
-            }
-        }
-    } else {
-        Surface(
+        BareControlButton(
             onClick = {
                 interactor.openMediaOutputSwitcher()
                 interactor.collapseIsland()
-            },
-            shape = CircleShape,
-            color = tonalBg,
-            modifier = Modifier.size(ControlButtonSize),
-        ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(
-                    Icons.Filled.VolumeUp, null,
-                    tint = accent,
-                    modifier = Modifier.size(ControlIconSize),
-                )
             }
+        ) {
+            Icon(
+                Icons.Filled.VolumeUp, null,
+                tint = OnCardText,
+                modifier = Modifier.size(ControlIconSize),
+            )
         }
     }
 }

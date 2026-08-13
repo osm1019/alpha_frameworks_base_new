@@ -306,6 +306,11 @@ object AlphaMetrics {
     val mediaArtSize = 88.dp
     val mediaArtCornerRadius = 20.dp
 
+    /** Timeline geometry, shared by every card that draws our own bar rather than a platform one. */
+    val mediaTimelineHeight = 20.dp
+    val mediaTimelineTrackWidth = 3.dp
+    val mediaTimelineThumbRadius = 5.dp
+
     /** Hue rotation for the Waveform accent sweep. */
     const val accentSweepDegrees = 62f
 

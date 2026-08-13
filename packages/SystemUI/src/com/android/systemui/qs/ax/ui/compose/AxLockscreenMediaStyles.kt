@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.common.ui.compose.Icon
+import com.android.systemui.alpha.theme.AlphaMetrics
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import com.android.systemui.media.ax.ui.compose.MediaChrome
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
@@ -929,9 +930,9 @@ private val WaveformBadgeInset = 13.dp
 
 private val PlayButtonSize = 56.dp
 private val TransportRowHeight = 56.dp
-private val GlassSeekBarHeight = 20.dp
-private val GlassSeekBarTrack = 3.dp
-private val GlassSeekBarThumb = 5.dp
+private val GlassSeekBarHeight = AlphaMetrics.mediaTimelineHeight
+private val GlassSeekBarTrack = AlphaMetrics.mediaTimelineTrackWidth
+private val GlassSeekBarThumb = AlphaMetrics.mediaTimelineThumbRadius
 
 // Waveform budget inside ax_lockscreen_media_height_waveform (204dp): 20 padding + 104 art row +
 // 48 transport + 4 + 20 timeline = 196, leaving the weighted spacer ~8dp. The band lives inside the
