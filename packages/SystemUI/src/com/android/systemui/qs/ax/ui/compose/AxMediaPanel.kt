@@ -754,6 +754,15 @@ private fun CompactMediaContent(
         val actionSize = mediaCompactActionSize(maxWidth, maxHeight)
         val compactOutput = actionSize < 32.dp
         val contentHeight = maxHeight.coerceAtMost(CompactMediaMaxHeight)
+        // Decided once from the card's own span, like the 3x2 art, so it never moves while the card
+        // is on screen. Short cards fall to the smaller square: the art is the tallest thing in the
+        // middle row, so it is what overflows first once the subtitle has already been dropped.
+        val compactArtSize =
+            if (compactOutput || availableHeight < CompactMediaSubtitleMinHeight) {
+                CompactMediaArtDenseSize
+            } else {
+                CompactMediaArtSize
+            }
         Column(
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.SpaceBetween,
@@ -790,12 +799,12 @@ private fun CompactMediaContent(
                     MediaOutputChip(
                         session = session,
                         viewModel = viewModel,
-                        // The 2x2's only filled control, so it takes the normalised accent and the
-                        // near-white glyph that goes with it.
+                        // Bare, like the 3x2: on a card this small a filled pill in the corner was
+                        // the loudest thing on it, and it is not the card's subject.
                         colors =
                             colors.copy(
-                                primary = MediaChrome.accentFill(colors.primary),
-                                onPrimary = AlphaColors.QsMediaCard.playGlyph,
+                                primary = Color.Transparent,
+                                onPrimary = AlphaColors.QsMediaCard.outputGlyph,
                             ),
                         interactive = interactive,
                         compact = compactOutput,
@@ -803,7 +812,10 @@ private fun CompactMediaContent(
                     )
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Column(horizontalAlignment = Alignment.Start, modifier = Modifier.weight(1f)) {
                     AnimatedMediaText(
                         text = title,
@@ -817,7 +829,7 @@ private fun CompactMediaContent(
                         textAlign = if (session == null) TextAlign.Center else TextAlign.Start,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (subtitle.isNotEmpty() && availableHeight >= 112.dp) {
+                    if (subtitle.isNotEmpty() && availableHeight >= CompactMediaSubtitleMinHeight) {
                         AnimatedMediaText(
                             text = subtitle,
                             color = colors.foreground.copy(alpha = 0.72f),
@@ -827,6 +839,17 @@ private fun CompactMediaContent(
                         )
                     }
                 }
+                // Trails the track text rather than leading it: on two columns the text needs the
+                // left edge, and the art is the same object the 3x2 draws, only smaller.
+                Spacer(Modifier.width(8.dp))
+                MediaArtPane(
+                    session = session,
+                    size = compactArtSize,
+                    shape = RoundedCornerShape(compactArtSize * CompactMediaArtCornerFraction),
+                    borderColor = AlphaColors.QsMediaCard.artRim,
+                    plateColor = AlphaColors.QsMediaCard.artPlate,
+                    glyphColor = AlphaColors.QsMediaCard.textHint,
+                )
             }
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
                 MediaControls(
@@ -837,6 +860,11 @@ private fun CompactMediaContent(
                     maxActions = mediaActionLimit(AxQsSpan.MediaDefault.columns),
                     actionSize = actionSize,
                     spreadCoreActions = true,
+                    // The card's one accent, now that the output chip is bare. Normalised so the
+                    // near-white glyph reads on it whatever the cover was.
+                    playBackground = MediaChrome.accentFill(colors.primary),
+                    playTint = AlphaColors.QsMediaCard.playGlyph,
+                    playAnimatedIconRes = R.drawable.ic_media_play_button,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 )
             }
@@ -915,6 +943,9 @@ private fun ExpandedMediaContent(
                     session = session,
                     size = artSize,
                     shape = RoundedCornerShape(ExpandedMediaArtCorner),
+                    borderColor = AlphaColors.QsMediaCard.artRim,
+                    plateColor = AlphaColors.QsMediaCard.artPlate,
+                    glyphColor = AlphaColors.QsMediaCard.textHint,
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -1460,8 +1491,18 @@ private fun MediaControls(
     actionSize: Dp,
     maxActions: Int = 3,
     spreadCoreActions: Boolean = false,
+    /** Filled play button, for the cards that let it carry the card's one accent. */
+    playBackground: Color = Color.Transparent,
+    playTint: Color? = null,
+    playShape: Shape = CircleShape,
+    /**
+     * Morphing play/pause glyph. Opt-in: the one-row layouts draw the transport at 16dp or less,
+     * where the morph is illegible and the static vector's cross-fade is the better read.
+     */
+    @DrawableRes playAnimatedIconRes: Int? = null,
     modifier: Modifier = Modifier,
 ) {
+    val resolvedPlayTint = playTint ?: colors.foreground
     val spacing = dimensionResource(R.dimen.qs_media_action_spacing)
     val iconSize = if (actionSize < 32.dp) 18.dp else 20.dp
     val navigationIconSize = minOf(iconSize, MediaNavigationIconSize)
@@ -1509,10 +1550,14 @@ private fun MediaControls(
                     action = session.playPauseAction,
                     imageVector = playPauseIcon(session),
                     descriptionRes = playPauseDescription(session),
+                    animatedIconRes = playAnimatedIconRes,
+                    animatedIconAtEnd = session.state == MediaSessionState.Playing,
                     viewModel = viewModel,
                     width = actionSize,
                     iconSize = iconSize,
-                    tint = colors.foreground,
+                    tint = resolvedPlayTint,
+                    background = playBackground,
+                    shape = playShape,
                     interactive = interactive,
                 )
                 if (showSideActions) {
@@ -1554,7 +1599,9 @@ private fun MediaControls(
                     descriptionRes = R.string.controls_media_button_play,
                     width = actionSize,
                     iconSize = iconSize,
-                    tint = colors.foreground,
+                    tint = resolvedPlayTint,
+                    background = playBackground,
+                    shape = playShape,
                 )
                 if (showSideActions) {
                     PlaceholderMediaAction(
@@ -1718,6 +1765,12 @@ private val ExpandedMediaExtraSize = 34.dp
 private val ExpandedMediaExtraIconSize = 20.dp
 
 private val CompactMediaMaxHeight = 220.dp
+/** Below this the subtitle is dropped and the art falls to its dense size — one call, one number. */
+private val CompactMediaSubtitleMinHeight = 112.dp
+private val CompactMediaArtSize = 56.dp
+private val CompactMediaArtDenseSize = 40.dp
+/** The 3x2's 16dp on 72dp, kept as a fraction so the small square reads as the same object. */
+private const val CompactMediaArtCornerFraction = 0.22f
 private val MediaNavigationIconSize = 16.dp
 
 @Composable

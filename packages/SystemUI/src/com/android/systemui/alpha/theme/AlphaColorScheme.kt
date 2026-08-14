@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.internal.R
 
@@ -634,7 +635,17 @@ object AlphaMetrics {
     val cardCornerRadius = 28.dp
     val progressHeight = 2.dp
 
-    val mediaCardBlurRadius = 56.dp
+    /**
+     * Light blurs harder. Its frost is the denser of the two (0.72 against dark's 0.30) but sits on
+     * a bright wallpaper, so whatever structure survives the tint reads as noise under dark text —
+     * where the dark theme's frost is doing half the work already by darkening what it covers.
+     */
+    val mediaCardBlurRadius: Dp
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isDarkTheme) mediaCardBlurRadiusDark else mediaCardBlurRadiusLight
+    val mediaCardBlurRadiusDark = 56.dp
+    val mediaCardBlurRadiusLight = 80.dp
     val mediaCardElevation = 14.dp
     val mediaArtSize = 88.dp
     val mediaArtCornerRadius = 20.dp

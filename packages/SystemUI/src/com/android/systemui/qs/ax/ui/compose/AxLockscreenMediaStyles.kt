@@ -865,13 +865,17 @@ internal fun MediaArtPane(
     shape: Shape,
     borderWidth: Dp = AlphaMetrics.chipRimWidth,
     borderColor: Color? = null,
+    plateColor: Color? = null,
+    glyphColor: Color? = null,
 ) {
     val resolvedBorder = borderColor ?: AlphaColors.LockscreenMediaCard.artRim
+    val resolvedPlate = plateColor ?: AlphaColors.LockscreenMediaCard.artPlate
+    val resolvedGlyph = glyphColor ?: AlphaColors.LockscreenMediaCard.textHint
     Box(
         modifier =
             Modifier.size(size)
                 .clip(shape)
-                .background(AlphaColors.LockscreenMediaCard.artPlate)
+                .background(resolvedPlate)
                 .border(borderWidth, resolvedBorder, shape),
         contentAlignment = Alignment.Center,
     ) {
@@ -889,11 +893,7 @@ internal fun MediaArtPane(
                 is IconModel.Resource ->
                     Icon(icon = artwork, tint = Color.Unspecified, modifier = Modifier.fillMaxSize())
                 null ->
-                    MediaAppIcon(
-                        session = session,
-                        size = size * 0.4f,
-                        tint = AlphaColors.LockscreenMediaCard.textHint,
-                    )
+                    MediaAppIcon(session = session, size = size * 0.4f, tint = resolvedGlyph)
             }
         }
     }
