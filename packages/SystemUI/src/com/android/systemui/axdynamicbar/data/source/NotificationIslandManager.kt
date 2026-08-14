@@ -23,7 +23,12 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.util.ScrimUtils
 import javax.inject.Inject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,6 +36,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 @SysUISingleton
 class NotificationIslandManager
@@ -73,6 +80,11 @@ constructor(
 
         private const val NOW_PLAYING_PACKAGE = "com.google.android.as"
         private const val NOW_PLAYING_CHANNEL = "ambientmusic"
+        /** ASI often omits largeIcon on non-Pixel; resolve cover by title+artist. */
+        private const val ITUNES_SEARCH_URL =
+            "https://itunes.apple.com/search?term=%s&media=music&entity=song&limit=1"
+        private const val ART_HTTP_CONNECT_MS = 4000
+        private const val ART_HTTP_READ_MS = 6000
 
         private val RECORDER_PACKAGES =
             setOf("com.google.android.apps.recorder", "com.android.soundrecorder")
@@ -1239,6 +1251,18 @@ constructor(
             a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
         }
         val appIcon = loadNotificationIcon(sbn, sbn.packageName)
+        // Prefer existing art on same-song re-post so we don't flash back to the note.
+        val previous = _nowPlayingEvent.value
+        val sameSong = previous != null
+            && previous.songTitle == songTitle
+            && previous.artist == artist
+        val largeIcon = try {
+            sbn.notification?.getLargeIcon()?.loadDrawable(context)
+        } catch (_: Exception) {
+            null
+        }
+        val albumArt = largeIcon
+            ?: if (sameSong) previous?.albumArt else null
 
         _nowPlayingEvent.value = IslandEvent.NowPlaying(
             songTitle = songTitle,
@@ -1246,8 +1270,88 @@ constructor(
             key = sbn.key,
             sbn = sbn,
             appIcon = appIcon,
+            albumArt = albumArt,
             actions = notifActions,
         )
+
+        if (albumArt == null && songTitle.isNotBlank()) {
+            val searchTerm = listOf(songTitle, artist).filter { it.isNotBlank() }.joinToString(" ")
+            val eventKey = sbn.key
+            applicationScope.launch {
+                val art = loadItunesAlbumArt(searchTerm) ?: return@launch
+                val current = _nowPlayingEvent.value
+                if (current != null
+                    && current.key == eventKey
+                    && current.songTitle == songTitle
+                    && current.artist == artist
+                    && current.albumArt == null) {
+                    _nowPlayingEvent.value = current.copy(albumArt = art)
+                    Log.i(TAG, "Now Playing album art applied via iTunes for $songTitle")
+                }
+            }
+        }
+    }
+
+    /**
+     * Lightweight cover lookup — same approach as keyguard Now Playing strip when ASI
+     * omits ALBUM_ART_URI / largeIcon on non-Pixel ports.
+     */
+    private suspend fun loadItunesAlbumArt(term: String): Drawable? = withContext(Dispatchers.IO) {
+        if (term.isBlank()) return@withContext null
+        try {
+            val encoded = URLEncoder.encode(term, StandardCharsets.UTF_8.name())
+            val searchUrl = ITUNES_SEARCH_URL.format(encoded)
+            val json = httpGetString(searchUrl) ?: return@withContext null
+            val results = JSONObject(json).optJSONArray("results") ?: return@withContext null
+            if (results.length() == 0) return@withContext null
+            val artwork = results.getJSONObject(0).optString("artworkUrl100")
+                .ifBlank { return@withContext null }
+                // Request a larger tile for the expanded island card.
+                .replace("100x100bb", "300x300bb")
+            val bytes = httpGetBytes(artwork) ?: return@withContext null
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: return@withContext null
+            BitmapDrawable(context.resources, bmp)
+        } catch (e: Exception) {
+            Log.w(TAG, "iTunes album art failed for '$term'", e)
+            null
+        }
+    }
+
+    private fun httpGetString(url: String): String? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = ART_HTTP_CONNECT_MS
+                readTimeout = ART_HTTP_READ_MS
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "AlphaDroid-DynamicBar-NowPlaying")
+            }
+            if (conn.responseCode !in 200..299) return null
+            conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } catch (_: Exception) {
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun httpGetBytes(url: String): ByteArray? {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = ART_HTTP_CONNECT_MS
+                readTimeout = ART_HTTP_READ_MS
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "AlphaDroid-DynamicBar-NowPlaying")
+            }
+            if (conn.responseCode !in 200..299) return null
+            conn.inputStream.use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        } finally {
+            conn?.disconnect()
+        }
     }
 
     private fun handleSportsScore(

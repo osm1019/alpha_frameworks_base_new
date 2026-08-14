@@ -47,6 +47,9 @@ import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewCont
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_SECURE_LOCK_DEVICE;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_TRUST;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_USER_LOCKED;
+import static android.service.notification.NotificationListenerService.REASON_CANCEL;
+import static android.service.notification.NotificationListenerService.REASON_CANCEL_ALL;
+import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_NOW_PLAYING;
 import static com.android.systemui.keyguard.KeyguardIndicationRotateTextViewController.INDICATION_TYPE_WATCH_DISCONNECTED;
 import static com.android.systemui.keyguard.ScreenLifecycle.SCREEN_ON;
 import static com.android.systemui.log.core.LogLevel.ERROR;
@@ -54,6 +57,7 @@ import static com.android.systemui.plugins.FalsingManager.LOW_PENALTY;
 import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 
 import android.app.AlarmManager;
+import android.app.Notification;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -62,8 +66,21 @@ import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageDecoder;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.hardware.biometrics.BiometricSourceType;
+import android.net.Uri;
+import android.util.Log;
+import android.util.TypedValue;
 import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.IBatteryPropertiesRegistrar;
@@ -73,10 +90,14 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.service.notification.StatusBarNotification;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.format.Formatter;
+import android.text.style.ImageSpan;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
@@ -84,6 +105,17 @@ import android.view.accessibility.AccessibilityManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
@@ -122,6 +154,9 @@ import com.android.systemui.res.R;
 import com.android.systemui.securelockdevice.domain.interactor.SecureLockDeviceInteractor;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.phone.FaceUnlockImageView;
+import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardIndicationTextView;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -162,6 +197,35 @@ public class KeyguardIndicationController {
 
     public static final String TAG = "KeyguardIndication";
     private static final boolean DEBUG_CHARGING_SPEED = false;
+
+    private static final String ACTION_AMBIENT_INDICATION_SHOW =
+            "com.google.android.ambientindication.action.AMBIENT_INDICATION_SHOW";
+    private static final String ACTION_AMBIENT_INDICATION_HIDE =
+            "com.google.android.ambientindication.action.AMBIENT_INDICATION_HIDE";
+    private static final String PERMISSION_AMBIENT_INDICATION =
+            "com.google.android.ambientindication.permission.AMBIENT_INDICATION";
+    /** ASI ambient-music channel + standalone Pixel Now Playing package. */
+    private static final String PKG_ASI = "com.google.android.as";
+    private static final String PKG_NOW_PLAYING = "com.google.android.apps.pixel.nowplaying";
+    /** Alpha software poller FGS — not a song match notification. */
+    private static final String PKG_NP_SOFTWARE = "com.alpha.nowplaying.software";
+    private static final String CHANNEL_AMBIENT_MUSIC = "ambientmusic";
+    private static final String EXTRA_AMBIENT_TEXT =
+            "com.google.android.ambientindication.extra.TEXT";
+    private static final String EXTRA_AMBIENT_SONG_TITLE =
+            "com.google.android.ambientindication.extra.SONG_TITLE";
+    private static final String EXTRA_AMBIENT_ARTIST_NAME =
+            "com.google.android.ambientindication.extra.ARTIST_NAME";
+    /** Stock Pixel AmbientIndication album cover (string URI). */
+    private static final String EXTRA_AMBIENT_ALBUM_ART_URI =
+            "com.google.android.ambientindication.extra.ALBUM_ART_URI";
+    /** Inline album-art size next to Now Playing text (replaces music-note when loaded). */
+    private static final float NOW_PLAYING_ART_SIZE_DP = 20f;
+    /** iTunes Search — ASI often omits ALBUM_ART_URI on non-Pixel; covers still resolve by title/artist. */
+    private static final String ITUNES_SEARCH_URL =
+            "https://itunes.apple.com/search?term=%s&media=music&entity=song&limit=1";
+    private static final int ART_HTTP_CONNECT_MS = 4000;
+    private static final int ART_HTTP_READ_MS = 6000;
 
     private static final int MSG_SHOW_ACTION_TO_UNLOCK = 1;
     private static final int MSG_RESET_ERROR_MESSAGE_ON_SCREEN_ON = 2;
@@ -215,6 +279,20 @@ public class KeyguardIndicationController {
     private boolean mForceIsDismissible;
     private CharSequence mTrustGrantedIndication;
     private CharSequence mTransientIndication;
+    /** Song title for Ambient Now Playing, shown in the keyguard indication area (Charged). */
+    private CharSequence mNowPlayingText;
+    /**
+     * Album art for the current song. When non-null, shown instead of {@code ic_now_playing_note}.
+     * Loaded async from SHOW {@link #EXTRA_AMBIENT_ALBUM_ART_URI} or notification largeIcon.
+     */
+    @Nullable private Bitmap mNowPlayingAlbumArt;
+    /** Bumps on each new song / hide so stale art loads are dropped. */
+    private int mNowPlayingArtGeneration;
+    private BroadcastReceiver mAmbientIndicationReceiver;
+    private CommonNotifCollection mNotifCollection;
+    private NotifCollectionListener mNowPlayingNotifListener;
+    /** Active Now Playing notification keys — strip clears when this set empties after dismiss. */
+    private final java.util.HashSet<String> mNowPlayingNotifKeys = new java.util.HashSet<>();
     private CharSequence mTrustAgentErrorMessage;
     private CharSequence mBiometricMessage;
     private CharSequence mBiometricMessageFollowUp;
@@ -388,7 +466,8 @@ public class KeyguardIndicationController {
             DeviceEntryFingerprintAuthInteractor deviceEntryFingerprintAuthInteractor,
             DeviceEntryFaceAuthInteractor deviceEntryFaceAuthInteractor,
             UserLogoutInteractor userLogoutInteractor,
-            Lazy<SecureLockDeviceInteractor> secureLockDeviceInteractor
+            Lazy<SecureLockDeviceInteractor> secureLockDeviceInteractor,
+            CommonNotifCollection notifCollection
     ) {
         mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -422,6 +501,7 @@ public class KeyguardIndicationController {
         mDeviceEntryFaceAuthInteractor = deviceEntryFaceAuthInteractor;
         mUserLogoutInteractor = userLogoutInteractor;
         mSecureLockDeviceInteractor = secureLockDeviceInteractor;
+        mNotifCollection = notifCollection;
 
         mFaceAcquiredMessageDeferral = faceHelpMessageDeferral.create();
 
@@ -545,6 +625,8 @@ public class KeyguardIndicationController {
             intentFilter.addAction(Intent.ACTION_USER_REMOVED);
             mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, intentFilter);
         }
+        registerAmbientIndicationReceiver();
+        registerNowPlayingNotifListener();
 
         collectFlow(mIndicationArea,
                 mBiometricMessageInteractor.getCoExFaceAcquisitionMsgIdsToShow(),
@@ -573,6 +655,599 @@ public class KeyguardIndicationController {
         mHideBiometricMessageHandler.cancel();
         mHideTransientMessageHandler.cancel();
         mBroadcastDispatcher.unregisterReceiver(mBroadcastReceiver);
+        if (mAmbientIndicationReceiver != null) {
+            try {
+                mContext.unregisterReceiver(mAmbientIndicationReceiver);
+            } catch (IllegalArgumentException ignored) {
+                // already unregistered
+            }
+            mAmbientIndicationReceiver = null;
+        }
+        if (mNowPlayingNotifListener != null && mNotifCollection != null) {
+            mNotifCollection.removeCollectionListener(mNowPlayingNotifListener);
+            mNowPlayingNotifListener = null;
+        }
+        mNowPlayingNotifKeys.clear();
+    }
+
+    /**
+     * When the user swipes away the Now Playing notification, ASI often does not send
+     * AMBIENT_INDICATION_HIDE. Only clear the keyguard strip on explicit user cancel —
+     * ranking updates/reposts use remove+add and must not wipe the strip mid-song.
+     */
+    private void registerNowPlayingNotifListener() {
+        if (mNotifCollection == null || mNowPlayingNotifListener != null) {
+            return;
+        }
+        mNowPlayingNotifListener = new NotifCollectionListener() {
+            @Override
+            public void onEntryAdded(@NonNull NotificationEntry entry) {
+                trackNowPlayingNotif(entry, /* present= */ true, /* userDismissed= */ false);
+            }
+
+            @Override
+            public void onEntryUpdated(NotificationEntry entry) {
+                trackNowPlayingNotif(entry, /* present= */ true, /* userDismissed= */ false);
+            }
+
+            @Override
+            public void onEntryRemoved(@NonNull NotificationEntry entry, int reason) {
+                final boolean userDismissed =
+                        reason == REASON_CANCEL || reason == REASON_CANCEL_ALL;
+                trackNowPlayingNotif(entry, /* present= */ false, userDismissed);
+            }
+        };
+        mNotifCollection.addCollectionListener(mNowPlayingNotifListener);
+    }
+
+    private void trackNowPlayingNotif(
+            NotificationEntry entry, boolean present, boolean userDismissed) {
+        if (entry == null || entry.getSbn() == null) {
+            return;
+        }
+        if (!isNowPlayingNotification(entry.getSbn())) {
+            return;
+        }
+        final String key = entry.getKey();
+        final CharSequence notifText =
+                present ? extractNowPlayingTextFromNotif(entry.getSbn()) : null;
+        mHandler.post(() -> {
+            if (present) {
+                mNowPlayingNotifKeys.add(key);
+                // ASI sometimes sends AMBIENT_INDICATION_SHOW with empty TEXT while
+                // the song notif has a real title. Prefer notif title for the strip.
+                if (!TextUtils.isEmpty(notifText)
+                        && (TextUtils.isEmpty(mNowPlayingText)
+                                || !TextUtils.equals(mNowPlayingText, notifText))) {
+                    mNowPlayingText = notifText;
+                    updateNowPlayingIndication();
+                }
+                // Prefer real cover art over the music-note fallback when notif has a largeIcon.
+                if (present && mNowPlayingAlbumArt == null) {
+                    loadNowPlayingArtFromNotifAsync(entry.getSbn(), mNowPlayingArtGeneration);
+                }
+            } else {
+                mNowPlayingNotifKeys.remove(key);
+                // System reposts/updates must not clear the strip. Only user swipe/clear-all.
+                if (userDismissed
+                        && mNowPlayingNotifKeys.isEmpty()
+                        && !TextUtils.isEmpty(mNowPlayingText)) {
+                    mNowPlayingText = null;
+                    clearNowPlayingAlbumArt();
+                    updateNowPlayingIndication();
+                }
+            }
+        });
+    }
+
+    /**
+     * Song match notifications only — not the software FGS placeholder.
+     */
+    private static boolean isNowPlayingNotification(StatusBarNotification sbn) {
+        final String pkg = sbn.getPackageName();
+        if (pkg == null || PKG_NP_SOFTWARE.equals(pkg)) {
+            return false;
+        }
+        if (PKG_NOW_PLAYING.equals(pkg)) {
+            return true;
+        }
+        if (PKG_ASI.equals(pkg)) {
+            final Notification n = sbn.getNotification();
+            final String channel = n != null ? n.getChannelId() : null;
+            if (channel == null) {
+                return false;
+            }
+            final String ch = channel.toLowerCase(java.util.Locale.US);
+            return ch.contains(CHANNEL_AMBIENT_MUSIC)
+                    || ch.contains("musicnotification")
+                    || ch.contains("now_playing");
+        }
+        return false;
+    }
+
+    /**
+     * Build "Title • Artist" (or title alone) from a Now Playing notification.
+     * Handles "Song by Artist" and "Song - Artist" styles used by ASI / NP app.
+     */
+    @Nullable
+    private static CharSequence extractNowPlayingTextFromNotif(StatusBarNotification sbn) {
+        final Notification n = sbn.getNotification();
+        if (n == null || n.extras == null) {
+            return null;
+        }
+        CharSequence titleCs = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+        CharSequence textCs = n.extras.getCharSequence(Notification.EXTRA_TEXT);
+        if (TextUtils.isEmpty(titleCs) && TextUtils.isEmpty(textCs)) {
+            return null;
+        }
+        final String title = titleCs != null ? titleCs.toString().trim() : "";
+        final String text = textCs != null ? textCs.toString().trim() : "";
+        // "Song by Artist"
+        final java.util.regex.Matcher by =
+                java.util.regex.Pattern.compile(
+                                "(.+?)\\s+by\\s+(.+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(title);
+        if (by.matches()) {
+            return by.group(1).trim() + " • " + by.group(2).trim();
+        }
+        // "Song - Artist" / en-dash
+        final String[] dash = title.split("\\s[-–]\\s", 2);
+        if (dash.length == 2
+                && !dash[0].isEmpty()
+                && !dash[1].isEmpty()) {
+            return dash[0].trim() + " • " + dash[1].trim();
+        }
+        if (!title.isEmpty() && !text.isEmpty() && !title.equals(text)) {
+            return title + " • " + text;
+        }
+        if (!title.isEmpty()) {
+            return title;
+        }
+        return text.isEmpty() ? null : text;
+    }
+
+    private void registerAmbientIndicationReceiver() {
+        if (mAmbientIndicationReceiver != null) {
+            return;
+        }
+        mAmbientIndicationReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || intent.getAction() == null) {
+                    return;
+                }
+                final String action = intent.getAction();
+                mHandler.post(() -> handleAmbientIndication(action, intent));
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ACTION_AMBIENT_INDICATION_SHOW);
+        filter.addAction(ACTION_AMBIENT_INDICATION_HIDE);
+        mContext.registerReceiverAsUser(
+                mAmbientIndicationReceiver,
+                UserHandle.ALL,
+                filter,
+                PERMISSION_AMBIENT_INDICATION,
+                mHandler,
+                Context.RECEIVER_EXPORTED);
+    }
+
+    private void handleAmbientIndication(String action, Intent intent) {
+        if (ACTION_AMBIENT_INDICATION_HIDE.equals(action)) {
+            mNowPlayingText = null;
+            clearNowPlayingAlbumArt();
+            updateNowPlayingIndication();
+            return;
+        }
+        if (!ACTION_AMBIENT_INDICATION_SHOW.equals(action)) {
+            return;
+        }
+        CharSequence text = intent.getCharSequenceExtra(EXTRA_AMBIENT_TEXT);
+        CharSequence title = intent.getCharSequenceExtra(EXTRA_AMBIENT_SONG_TITLE);
+        CharSequence artist = intent.getCharSequenceExtra(EXTRA_AMBIENT_ARTIST_NAME);
+        CharSequence message = null;
+        if (!TextUtils.isEmpty(title) && !TextUtils.isEmpty(artist)) {
+            message = title + " • " + artist;
+        } else if (!TextUtils.isEmpty(title)) {
+            message = title;
+        } else if (!TextUtils.isEmpty(text)) {
+            message = text;
+        } else if (!TextUtils.isEmpty(artist)) {
+            message = artist;
+        }
+        if (TextUtils.isEmpty(message)) {
+            mNowPlayingText = null;
+            clearNowPlayingAlbumArt();
+        } else {
+            final boolean sameSong = TextUtils.equals(mNowPlayingText, message);
+            mNowPlayingText = message;
+            final String artUri = intent.getStringExtra(EXTRA_AMBIENT_ALBUM_ART_URI);
+            // ASI re-broadcasts SHOW every ~30s, almost always without ALBUM_ART_URI
+            // (LockScreenAlbumArtManager rarely fills albumart_exports on non-Pixel).
+            // Do not wipe a cover we already resolved for the same song.
+            if (!sameSong) {
+                clearNowPlayingAlbumArt();
+                loadNowPlayingArtAsync(artUri, title, artist, mNowPlayingArtGeneration);
+            } else if (!TextUtils.isEmpty(artUri)) {
+                // Same song + ASI finally provided a FileProvider URI — upgrade art.
+                loadNowPlayingArtAsync(artUri, title, artist, mNowPlayingArtGeneration);
+            } else if (mNowPlayingAlbumArt == null) {
+                // Same song still missing art — retry notif / metadata fallbacks.
+                loadNowPlayingArtAsync(/* uriString= */ null, title, artist,
+                        mNowPlayingArtGeneration);
+            }
+        }
+        updateNowPlayingIndication();
+    }
+
+    private void clearNowPlayingAlbumArt() {
+        mNowPlayingArtGeneration++;
+        mNowPlayingAlbumArt = null;
+    }
+
+    /**
+     * Load album art on a background thread.
+     * <ol>
+     *   <li>ASI {@code ALBUM_ART_URI} (content FileProvider)</li>
+     *   <li>ASI / Now Playing notification largeIcon</li>
+     *   <li>iTunes Search by title + artist (non-Pixel ASI often never exports covers)</li>
+     * </ol>
+     * Only applied if {@code generation} still matches.
+     */
+    private void loadNowPlayingArtAsync(
+            @Nullable String uriString,
+            @Nullable CharSequence title,
+            @Nullable CharSequence artist,
+            int generation) {
+        mBackgroundExecutor.execute(() -> {
+            Bitmap bitmap = decodeAlbumArtUri(uriString);
+            if (bitmap == null) {
+                bitmap = loadAlbumArtFromActiveNotification();
+            }
+            if (bitmap == null) {
+                bitmap = loadAlbumArtFromMetadata(title, artist);
+            }
+            final Bitmap result = bitmap;
+            mHandler.post(() -> {
+                if (generation != mNowPlayingArtGeneration) {
+                    return;
+                }
+                if (result == null || result.isRecycled()) {
+                    Log.i(TAG, "Now Playing album art unavailable"
+                            + " uri=" + (TextUtils.isEmpty(uriString) ? "null" : "set")
+                            + " title=" + title);
+                    return;
+                }
+                mNowPlayingAlbumArt = result;
+                Log.i(TAG, "Now Playing album art applied "
+                        + result.getWidth() + "x" + result.getHeight());
+                updateNowPlayingIndication();
+            });
+        });
+    }
+
+    private void loadNowPlayingArtFromNotifAsync(StatusBarNotification sbn, int generation) {
+        mBackgroundExecutor.execute(() -> {
+            Bitmap bitmap = extractAlbumArtFromNotif(sbn);
+            if (bitmap == null) {
+                // ASI ambient notifs almost never ship largeIcon; resolve by title line.
+                final CharSequence notifText = extractNowPlayingTextFromNotif(sbn);
+                if (!TextUtils.isEmpty(notifText)) {
+                    bitmap = loadAlbumArtFromSearchTerm(
+                            notifText.toString().replace('•', ' ').trim());
+                }
+            }
+            if (bitmap == null) {
+                return;
+            }
+            final Bitmap result = bitmap;
+            mHandler.post(() -> {
+                if (generation != mNowPlayingArtGeneration || mNowPlayingAlbumArt != null) {
+                    return;
+                }
+                mNowPlayingAlbumArt = result;
+                Log.i(TAG, "Now Playing album art from notification/metadata "
+                        + result.getWidth() + "x" + result.getHeight());
+                updateNowPlayingIndication();
+            });
+        });
+    }
+
+    @Nullable
+    private Bitmap decodeAlbumArtUri(@Nullable String uriString) {
+        if (TextUtils.isEmpty(uriString)) {
+            return null;
+        }
+        try {
+            final Uri uri = Uri.parse(uriString.trim());
+            // HTTP(S) covers (rare in SHOW; used if ASI ever passes a network URL).
+            final String scheme = uri.getScheme();
+            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                return downloadBitmap(uriString.trim());
+            }
+            ImageDecoder.Source source =
+                    ImageDecoder.createSource(mContext.getContentResolver(), uri);
+            return ImageDecoder.decodeBitmap(source, (decoder, info, src) -> {
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+                final int max = Math.round(TypedValue.applyDimension(
+                        TypedValue.COMPLEX_UNIT_DIP, NOW_PLAYING_ART_SIZE_DP * 3,
+                        mContext.getResources().getDisplayMetrics()));
+                decoder.setTargetSize(
+                        Math.min(info.getSize().getWidth(), max),
+                        Math.min(info.getSize().getHeight(), max));
+            });
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to decode ALBUM_ART_URI: " + uriString, e);
+            return null;
+        }
+    }
+
+    /**
+     * Fallback when ASI never exports a lockscreen FileProvider cover: resolve artwork
+     * by song title + artist via iTunes Search (same metadata NP already has in history).
+     */
+    @Nullable
+    private Bitmap loadAlbumArtFromMetadata(
+            @Nullable CharSequence title, @Nullable CharSequence artist) {
+        final String t = title != null ? title.toString().trim() : "";
+        final String a = artist != null ? artist.toString().trim() : "";
+        if (t.isEmpty() && a.isEmpty()) {
+            // Fall back to the combined strip text ("Title • Artist") if split extras missing.
+            if (!TextUtils.isEmpty(mNowPlayingText)) {
+                return loadAlbumArtFromSearchTerm(mNowPlayingText.toString()
+                        .replace('•', ' ').trim());
+            }
+            return null;
+        }
+        final String term = t.isEmpty() ? a : (a.isEmpty() ? t : (t + " " + a));
+        return loadAlbumArtFromSearchTerm(term);
+    }
+
+    @Nullable
+    private Bitmap loadAlbumArtFromSearchTerm(String term) {
+        if (TextUtils.isEmpty(term)) {
+            return null;
+        }
+        HttpURLConnection conn = null;
+        try {
+            final String encoded = URLEncoder.encode(term, StandardCharsets.UTF_8.name());
+            final URL url = new URL(String.format(ITUNES_SEARCH_URL, encoded));
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(ART_HTTP_CONNECT_MS);
+            conn.setReadTimeout(ART_HTTP_READ_MS);
+            conn.setRequestProperty("User-Agent", "AlphaDroid-SystemUI-NowPlaying");
+            conn.setInstanceFollowRedirects(true);
+            final int code = conn.getResponseCode();
+            if (code != HttpURLConnection.HTTP_OK) {
+                Log.w(TAG, "iTunes search HTTP " + code + " for: " + term);
+                return null;
+            }
+            final StringBuilder json = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    json.append(line);
+                }
+            }
+            final JSONObject root = new JSONObject(json.toString());
+            final JSONArray results = root.optJSONArray("results");
+            if (results == null || results.length() == 0) {
+                Log.i(TAG, "iTunes search: no results for: " + term);
+                return null;
+            }
+            String artUrl = results.getJSONObject(0).optString("artworkUrl100", null);
+            if (TextUtils.isEmpty(artUrl)) {
+                return null;
+            }
+            // Prefer a larger asset when Apple serves the 100px placeholder size in the path.
+            artUrl = artUrl.replace("100x100bb", "300x300bb").replace("100x100", "300x300");
+            final Bitmap bmp = downloadBitmap(artUrl);
+            if (bmp != null) {
+                Log.i(TAG, "iTunes album art for: " + term);
+            }
+            return bmp;
+        } catch (Exception e) {
+            Log.w(TAG, "iTunes album art lookup failed for: " + term, e);
+            return null;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    @Nullable
+    private static Bitmap downloadBitmap(String urlString) {
+        HttpURLConnection conn = null;
+        try {
+            final URL url = new URL(urlString);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(ART_HTTP_CONNECT_MS);
+            conn.setReadTimeout(ART_HTTP_READ_MS);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "AlphaDroid-SystemUI-NowPlaying");
+            final int code = conn.getResponseCode();
+            if (code != HttpURLConnection.HTTP_OK) {
+                return null;
+            }
+            try (InputStream in = conn.getInputStream()) {
+                return android.graphics.BitmapFactory.decodeStream(in);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "downloadBitmap failed: " + urlString, e);
+            return null;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    @Nullable
+    private Bitmap loadAlbumArtFromActiveNotification() {
+        try {
+            android.app.NotificationManager nm =
+                    mContext.getSystemService(android.app.NotificationManager.class);
+            if (nm == null) {
+                return null;
+            }
+            StatusBarNotification[] notifs = nm.getActiveNotifications();
+            if (notifs == null) {
+                return null;
+            }
+            for (StatusBarNotification sbn : notifs) {
+                if (sbn != null && isNowPlayingNotification(sbn)) {
+                    Bitmap bmp = extractAlbumArtFromNotif(sbn);
+                    if (bmp != null) {
+                        return bmp;
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "notif album art scan failed", e);
+        }
+        return null;
+    }
+
+    @Nullable
+    private Bitmap extractAlbumArtFromNotif(@Nullable StatusBarNotification sbn) {
+        if (sbn == null || sbn.getNotification() == null) {
+            return null;
+        }
+        final Notification n = sbn.getNotification();
+        // Prefer largeIcon (album cover). Small icon is usually the music-note resource.
+        Bitmap bmp = iconToBitmap(n.getLargeIcon());
+        if (bmp == null && n.extras != null) {
+            Object o = n.extras.get(Notification.EXTRA_LARGE_ICON);
+            if (o instanceof Bitmap) {
+                bmp = (Bitmap) o;
+            } else if (o instanceof Icon) {
+                bmp = iconToBitmap((Icon) o);
+            }
+            if (bmp == null) {
+                o = n.extras.get(Notification.EXTRA_LARGE_ICON_BIG);
+                if (o instanceof Bitmap) {
+                    bmp = (Bitmap) o;
+                } else if (o instanceof Icon) {
+                    bmp = iconToBitmap((Icon) o);
+                }
+            }
+        }
+        return bmp;
+    }
+
+    @Nullable
+    private Bitmap iconToBitmap(@Nullable Icon icon) {
+        if (icon == null) {
+            return null;
+        }
+        // Skip package resource icons (music note / app icon) — not album art.
+        if (icon.getType() == Icon.TYPE_RESOURCE) {
+            return null;
+        }
+        try {
+            Drawable d = icon.loadDrawable(mContext);
+            if (d == null) {
+                return null;
+            }
+            int w = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : 128;
+            int h = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : 128;
+            w = Math.min(Math.max(w, 1), 256);
+            h = Math.min(Math.max(h, 1), 256);
+            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bmp);
+            d.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+            d.draw(canvas);
+            return bmp;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Inline leading glyph next to the song. Prefer rounded album art when loaded;
+     * otherwise fall back to the music-note drawable we added for the strip.
+     *
+     * <p>A compound drawable sits at the view's start edge, and the indication row is
+     * match_parent with centered text — so the icon has to be an inline span to stay
+     * with the song.
+     */
+    private CharSequence withNowPlayingIcon(CharSequence text, int tintColor) {
+        Drawable icon = null;
+        if (mNowPlayingAlbumArt != null && !mNowPlayingAlbumArt.isRecycled()) {
+            final int sizePx = Math.round(TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    NOW_PLAYING_ART_SIZE_DP,
+                    mContext.getResources().getDisplayMetrics()));
+            icon = new BitmapDrawable(mContext.getResources(),
+                    createRoundedBitmap(mNowPlayingAlbumArt, sizePx));
+            icon.setBounds(0, 0, sizePx, sizePx);
+            // Do not tint album art white — that would wash out the cover.
+        } else {
+            icon = mContext.getDrawable(R.drawable.ic_now_playing_note);
+            if (icon != null) {
+                icon = icon.mutate();
+                icon.setBounds(0, 0, icon.getIntrinsicWidth(), icon.getIntrinsicHeight());
+                icon.setTint(tintColor);
+            }
+        }
+        if (icon == null) {
+            return text;
+        }
+        final SpannableStringBuilder builder = new SpannableStringBuilder("  ");
+        builder.setSpan(new ImageSpan(icon, ImageSpan.ALIGN_CENTER), 0, 1,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        builder.append(text);
+        return builder;
+    }
+
+    /** Square center-crop with rounded corners for the inline keyguard strip. */
+    private static Bitmap createRoundedBitmap(Bitmap src, int sizePx) {
+        final int w = src.getWidth();
+        final int h = src.getHeight();
+        final float scale = Math.max((float) sizePx / w, (float) sizePx / h);
+        final int scaledW = Math.max(1, Math.round(w * scale));
+        final int scaledH = Math.max(1, Math.round(h * scale));
+        Bitmap scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true);
+        final int x = Math.max(0, (scaledW - sizePx) / 2);
+        final int y = Math.max(0, (scaledH - sizePx) / 2);
+        Bitmap square = Bitmap.createBitmap(scaled, x, y,
+                Math.min(sizePx, scaled.getWidth()),
+                Math.min(sizePx, scaled.getHeight()));
+        if (square.getWidth() != sizePx || square.getHeight() != sizePx) {
+            square = Bitmap.createScaledBitmap(square, sizePx, sizePx, true);
+        }
+        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(out);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        paint.setShader(new BitmapShader(square, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+        final float radius = sizePx * 0.2f;
+        canvas.drawRoundRect(new RectF(0, 0, sizePx, sizePx), radius, radius, paint);
+        return out;
+    }
+
+    private void updateNowPlayingIndication() {
+        if (mDozing) {
+            updateDeviceEntryIndication(false);
+            return;
+        }
+        if (mRotateTextViewController == null) {
+            return;
+        }
+        if (!TextUtils.isEmpty(mNowPlayingText)) {
+            mRotateTextViewController.updateIndication(
+                    INDICATION_TYPE_NOW_PLAYING,
+                    new KeyguardIndication.Builder()
+                            .setMessage(withNowPlayingIcon(mNowPlayingText,
+                                    getInitialTextColorState().getDefaultColor()))
+                            .setTextColor(getInitialTextColorState())
+                            .setMinVisibilityMillis(IMPORTANT_MSG_MIN_DURATION)
+                            .build(),
+                    true);
+        } else {
+            mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
+        }
     }
 
     public String getPowerChargingString() {
