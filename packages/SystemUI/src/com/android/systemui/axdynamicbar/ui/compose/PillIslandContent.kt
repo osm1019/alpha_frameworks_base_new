@@ -106,7 +106,7 @@ internal fun PillEventIcon(
         is IslandEvent.Media -> MediaPillIcon(event)
         is IslandEvent.PromotedOngoing -> PromotedOngoingPillIcon(event, tint)
         is IslandEvent.Sports -> SportsPillIcon(event)
-        is IslandEvent.NowPlaying -> AnimatedNowPlayingIcon(tint ?: MintAccent)
+        is IslandEvent.NowPlaying -> NowPlayingPillIcon(event, tint ?: MintAccent)
         is IslandEvent.Bluetooth -> AnimatedBluetoothIcon(tint ?: BlueAccent)
         is IslandEvent.Hotspot -> AnimatedHotspotIcon(tint ?: TealAccent)
         is IslandEvent.Charging -> ChargingPillIcon(tint ?: GreenAccent)
@@ -131,6 +131,7 @@ internal fun PillEventIcon(
 private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
     when (event) {
         is IslandEvent.Media -> MediaPillIcon(event, animated = false)
+        is IslandEvent.NowPlaying -> NowPlayingPillIcon(event, tint ?: MintAccent)
         is IslandEvent.Notification -> NotificationPillIcon(event)
         is IslandEvent.AppSwitch -> AppSwitchPillIcon(event)
         is IslandEvent.AospChip -> AospChipPillIcon(event, tint, animated = false)
@@ -450,6 +451,18 @@ private fun AnimatedCastIcon(color: Color) {
         }
         drawCircle(color, radius = w * 0.06f, center = Offset(bx, by))
     }
+}
+
+@Composable
+private fun NowPlayingPillIcon(event: IslandEvent.NowPlaying, color: Color) {
+    event.albumArt?.let { art ->
+        Image(
+            bitmap = art.toScaledBitmap(16.dp),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)),
+            contentScale = ContentScale.Crop,
+        )
+    } ?: AnimatedNowPlayingIcon(color)
 }
 
 @Composable
