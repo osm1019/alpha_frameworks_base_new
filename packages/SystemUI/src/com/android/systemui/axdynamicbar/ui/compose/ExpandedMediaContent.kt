@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -65,6 +66,9 @@ import com.android.systemui.media.ax.ui.compose.MediaChrome
 
 // Compact stack card — keep controls usable but shave vertical bulk vs full-sheet media.
 private val AlbumArtSize = 56.dp
+// Not ShapeLg: 24dp on a 52-56dp thumbnail is nearly a squircle. Held at roughly the same
+// fraction of the side as the QS card's art (16dp on 72dp) so the two read as the same object.
+private val AlbumArtShape = RoundedCornerShape(12.dp)
 private val PlayPauseSize = 44.dp
 private val ControlButtonSize = 36.dp
 private val ControlIconSize = 20.dp
@@ -153,13 +157,13 @@ private fun MediaArtThumbnail(event: IslandEvent.Media, size: Dp) {
         Image(
             bitmap = art.toScaledBitmap(size),
             contentDescription = null,
-            modifier = Modifier.size(size).clip(ShapeLg),
+            modifier = Modifier.size(size).clip(AlbumArtShape),
             contentScale = ContentScale.Crop,
         )
         return
     }
     Box(
-        modifier = Modifier.size(size).clip(ShapeLg).background(AlphaColors.DbStackCard.artPlate),
+        modifier = Modifier.size(size).clip(AlbumArtShape).background(AlphaColors.DbStackCard.artPlate),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
