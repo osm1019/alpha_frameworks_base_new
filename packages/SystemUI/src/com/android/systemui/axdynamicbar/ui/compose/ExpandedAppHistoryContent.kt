@@ -26,22 +26,31 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.shared.IslandActions
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
 
+private val AppTileIconSize = 44.dp
+
 @Composable
 internal fun AppHistoryExpanded(event: IslandEvent.AppSwitch, interactor: IslandActions) {
     if (event.recentApps.isEmpty()) return
 
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SpaceXxl)) {
+    // One tinted pane for the whole card, not a tinted banner over separately tinted tiles: the
+    // header and the grid are the same section, so stacking three plates only drew boxes around
+    // parts of one thing.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ShapeLg)
+            .background(AlphaColors.DbStackCard.sectionSurface(BlueAccent))
+            .padding(SpaceXxl),
+        verticalArrangement = Arrangement.spacedBy(SpaceLg),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(ShapeLg)
-                .background(BlueAccent.copy(alpha = AlphaFaint))
-                .padding(SpaceXxl),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -83,21 +92,22 @@ private fun AppGridItem(
             modifier
                 .clip(ShapeLg)
                 .clickable(onClick = onClick)
-                .background(BlueAccent.copy(alpha = AlphaFaint), ShapeLg),
+                // No plate of its own — the card's pane is the tile's ground. Padding stays so the
+                // ripple still has a target the size of the icon and its label.
+                .padding(vertical = SpaceMd),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(SpaceMd),
+        verticalArrangement = Arrangement.spacedBy(SpaceSm),
     ) {
-        Spacer(Modifier.size(SpaceMd))
         app.appIcon?.let { icon ->
             Image(
-                bitmap = icon.toScaledBitmap(48.dp),
+                bitmap = icon.toScaledBitmap(AppTileIconSize),
                 contentDescription = app.appName,
-                modifier = Modifier.size(48.dp).clip(ShapeIconLarge),
+                modifier = Modifier.size(AppTileIconSize).clip(ShapeIconLarge),
                 contentScale = ContentScale.Crop,
             )
         }
             ?: Box(
-                modifier = Modifier.size(48.dp).clip(ShapeIconLarge).background(CardBg),
+                modifier = Modifier.size(AppTileIconSize).clip(ShapeIconLarge).background(CardBg),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Apps, null, tint = SubtleGray, modifier = Modifier.size(24.dp))
@@ -110,7 +120,6 @@ private fun AppGridItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.size(SpaceSm))
     }
 }
 
@@ -137,4 +146,3 @@ internal fun RowScope.CompactAppSwitchRow(event: IslandEvent.AppSwitch) {
         Text(stringResource(R.string.ax_dynamic_bar_count_running, event.recentApps.size), color = SubtleGray, style = MaterialTheme.typography.labelSmall)
     }
 }
-

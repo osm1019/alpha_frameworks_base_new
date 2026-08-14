@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -202,10 +203,22 @@ object AlphaColors {
      */
     object DbStatusBarChip {
 
-        /** Base the event accent is mixed into. The result, not this, is what you see. */
+        /**
+         * Base the event accent is mixed into. The result, not this, is what you see.
+         *
+         * One step up the dark container ladder from `…_high_dark`: night-locked over an arbitrary
+         * wallpaper, the chip was reading as a hole punched in the status bar rather than a surface
+         * sitting on it.
+         */
         val body: Color
             @Composable @ReadOnlyComposable
-            get() = nightRole(R.color.system_surface_container_high_dark)
+            get() = nightRole(R.color.system_surface_container_highest_dark)
+
+        /**
+         * This chip sits over wallpaper rather than a controlled pane. Keep a little of that
+         * backdrop visible, while leaving its night-locked seed and content contrast unchanged.
+         */
+        const val bodyAlpha = 0.90f
 
         /** How far [body] travels toward the event accent. 0 = untinted, 1 = solid accent. */
         val tintAmount = 0.45f
@@ -295,7 +308,7 @@ object AlphaColors {
 
         val textSecondary: Color
             @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.70f)
         val textHint: Color
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
@@ -347,7 +360,9 @@ object AlphaColors {
      */
     object DbKeyguardCard {
 
-        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+        /** Matches the stack card: the pill this expands from is translucent, so the sheet is too. */
+        val body: Color
+            @Composable @ReadOnlyComposable get() = surfaceContainerHigh.copy(alpha = 0.90f)
 
         /** A box nested inside the card steps a role rather than going translucent. */
         val nestedBody: Color
@@ -361,7 +376,7 @@ object AlphaColors {
         val text: Color @Composable @ReadOnlyComposable get() = onSurface
         val textSecondary: Color
             @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.70f)
         val textHint: Color
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
@@ -404,13 +419,19 @@ object AlphaColors {
      */
     object LockscreenMediaCard {
 
+        /**
+         * A little more open than the keyguard card's 0.90, not the 0.30 it used to be in dark.
+         * That number leant the whole card on the blur pass, so the pane read as a hole in the
+         * wallpaper rather than a sheet over it — and it left day and night nowhere near each other.
+         * Light stays the denser of the two: a light tint separates less over a bright wallpaper.
+         */
         val frostBody: Color
             @Composable @ReadOnlyComposable
-            get() = surfaceContainerHigh.copy(alpha = if (isDarkTheme) 0x4D / 255f else 0.72f)
+            get() = surfaceContainerHigh.copy(alpha = if (isDarkTheme) 0.80f else 0.85f)
 
         /** When the compositor refuses blur, an open pane leaves content on bare wallpaper. */
         val frostBodyNoBlur: Color
-            @Composable @ReadOnlyComposable get() = surfaceContainerHigh.copy(alpha = 0xD9 / 255f)
+            @Composable @ReadOnlyComposable get() = surfaceContainerHigh.copy(alpha = 0.94f)
 
         val rim: Color
             @Composable @ReadOnlyComposable
@@ -420,7 +441,7 @@ object AlphaColors {
         val text: Color @Composable @ReadOnlyComposable get() = onSurface
         val textSecondary: Color
             @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.70f)
         val textHint: Color
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
@@ -503,9 +524,51 @@ object AlphaColors {
      */
     object DbStackCard {
 
-        val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
+        /**
+         * The stack is its own material above the wallpaper. In day mode a high container is too
+         * close to the tinted sections it holds, so the whole card turns into one pale slab.
+         * Keep the dense night glass, but let the day shell be the clean, near-white layer.
+         */
+        val body: Color
+            @Composable @ReadOnlyComposable
+            get() =
+                (if (isDarkTheme) surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLowest)
+                    .copy(alpha = 0.90f)
         val nestedBody: Color
             @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+
+        /**
+         * Event-tinted panel within a stack card. Resolve the tint over the card's opaque seed
+         * before drawing it: the outer card may be translucent over wallpaper, but text and event
+         * panels need a controlled material in day mode rather than another washed-out overlay.
+         */
+        @Composable
+        @ReadOnlyComposable
+        fun sectionSurface(accent: Color): Color =
+            accent.copy(alpha = if (isDarkTheme) 0.10f else 0.16f).compositeOver(body.copy(alpha = 1f))
+
+        /**
+         * Lightness the event colour is normalised to for the header's **icon plate**.
+         *
+         * The plate used to be the same hue at [AlphaOpacity.subtlePlateAlpha], with the glyph on
+         * top in that hue too — accent on a wash of itself, which on a light card left the circle
+         * and its icon within a shade of each other. A filled plate carries the colour code at full
+         * strength instead, and the number is a *fill* lightness for the same reason
+         * [AlphaMetrics.mediaAccentFillLightnessDark] is: [iconGlyph] has to read on every event
+         * hue, and the palette's own yellow does not clear 2:1 against near-white.
+         */
+        const val iconPlateLightness = 0.46f
+
+        val iconGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
+
+        /**
+         * Floor for a header glyph that pulses to say something is *running*.
+         *
+         * Not [AlphaOpacity.disabledAlpha], which is where these call sites landed by taking
+         * `PulsingDot`'s default: a live indicator that spends half its cycle at a disabled weight
+         * reads as switched off rather than as alive.
+         */
+        const val pulseMinAlpha = 0.55f
 
         /** An expand card can land on a notification card, which resolves to a neighbouring role. */
         val rim: Color
@@ -517,7 +580,7 @@ object AlphaColors {
         val text: Color @Composable @ReadOnlyComposable get() = onSurface
         val textSecondary: Color
             @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.62f)
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.7f else 0.70f)
         val textHint: Color
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)

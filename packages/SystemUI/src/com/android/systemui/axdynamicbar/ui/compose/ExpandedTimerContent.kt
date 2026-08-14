@@ -84,11 +84,13 @@ internal fun TimerExpanded(event: IslandEvent.Timer, interactor: IslandActions) 
 
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = {
+        icon = { glyph ->
+            // Ring and glyph both ride the plate, so they take its content colour: the accent that
+            // used to draw them is now the fill underneath and would be invisible against itself.
             Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                 Canvas(Modifier.size(44.dp)) {
                     drawArc(
-                        color = style.accent.copy(alpha = AlphaSubtle),
+                        color = glyph.copy(alpha = AlphaTrack),
                         startAngle = -90f,
                         sweepAngle = 360f,
                         useCenter = false,
@@ -97,7 +99,7 @@ internal fun TimerExpanded(event: IslandEvent.Timer, interactor: IslandActions) 
                         size = Size(size.width, size.height),
                     )
                     drawArc(
-                        color = style.accent,
+                        color = glyph,
                         startAngle = -90f,
                         sweepAngle = 360f * progress.coerceIn(0f, 1f),
                         useCenter = false,
@@ -106,7 +108,7 @@ internal fun TimerExpanded(event: IslandEvent.Timer, interactor: IslandActions) 
                         size = Size(size.width, size.height),
                     )
                 }
-                style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(22.dp)) }
+                style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(22.dp)) }
             }
         },
         title = {
@@ -177,9 +179,16 @@ internal fun StopwatchExpanded(event: IslandEvent.Stopwatch, interactor: IslandA
 
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = {
-            if (event.isRunning) PulsingDot(color = style.accent, size = 22.dp)
-            else style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(22.dp)) }
+        icon = { glyph ->
+            if (event.isRunning) {
+                PulsingDot(
+                    color = glyph,
+                    size = 28.dp,
+                    minAlpha = AlphaColors.DbStackCard.pulseMinAlpha,
+                )
+            } else {
+                style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(22.dp)) }
+            }
         },
         title = {
             Text(event.label.ifEmpty { stringResource(style.labelRes) }, color = SubtleGray, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

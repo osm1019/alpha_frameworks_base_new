@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -84,7 +85,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
-private const val EXIT_ANIM_DURATION = 300L
+private const val EXIT_ANIM_DURATION = 300
 
 // Pill-only cutout overlay — extra space beyond token body so stack badge / offsets are not WM-clipped.
 private const val CUTOUT_WM_HORIZONTAL_GUARD_DP = 72f
@@ -527,8 +528,12 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
                 initialScale = 0.4f,
                 transformOrigin = origin,
             ),
-            exit = fadeOut(tween(200)) + scaleOut(
-                animationSpec = tween(250),
+            // Both channels run the same length so the panel is still on screen for the whole
+            // shrink. Fading out in 200ms while the scale ran 250 meant the last fifth of the
+            // motion happened at zero opacity, and the standard curve spends most of its distance
+            // up front — so the panel lurched inward and then blinked, rather than leaving.
+            exit = fadeOut(tween(EXIT_ANIM_DURATION, easing = FastOutLinearInEasing)) + scaleOut(
+                animationSpec = tween(EXIT_ANIM_DURATION, easing = FastOutLinearInEasing),
                 targetScale = 0.4f,
                 transformOrigin = origin,
             ),

@@ -265,10 +265,6 @@ private fun KeyguardMediaCard(
     val colors = rememberMediaColors(event)
     val accent = colors.accent
     val onAccent = colors.onAccent
-    // The pill's own derivation, so an accented control reads the same on both surfaces. The two
-    // schemes treat `mediaColor` differently — light-theme contrast, and the fallback when the
-    // session carries no colour — so borrowing the value is not enough.
-    val chipAccent = chipAccentColorFor(event)
     val motionScheme = MaterialTheme.motionScheme
     val artShape = RoundedCornerShape(KeyguardArtCorner)
     val leadingExtra = event.customActions.firstOrNull()
@@ -477,7 +473,6 @@ private fun KeyguardMediaCard(
                     KeyguardPlayButton(
                         style = style,
                         accent = accent,
-                        chipAccent = chipAccent,
                         isPlaying = event.isPlaying,
                         onClick = { interactor.togglePlayPause() },
                     )
@@ -549,7 +544,6 @@ private fun KeyguardBareControl(
 private fun KeyguardPlayButton(
     style: AxLockscreenMediaStyle,
     accent: Color,
-    chipAccent: Color,
     isPlaying: Boolean,
     onClick: () -> Unit,
 ) {
@@ -576,8 +570,7 @@ private fun KeyguardPlayButton(
                         // Bare glyphs sit on the sheet, so they take the sheet's content colour.
                         AxLockscreenMediaStyle.MINIMAL -> AlphaColors.DbKeyguardCard.skipGlyph
                         AxLockscreenMediaStyle.WAVEFORM -> AlphaColors.DbKeyguardCard.skipGlyph
-                        // Glass fills the button with chipAccent, so the glyph follows the
-                        // filled-accent rule rather than a colour derived from a different accent.
+                        // Glass fills the button, so the glyph follows the filled-accent rule.
                         AxLockscreenMediaStyle.GLASS -> AlphaColors.DbKeyguardCard.playGlyph
                     },
                 modifier = Modifier.size(26.dp),
@@ -622,11 +615,14 @@ private fun KeyguardPlayButton(
         }
         AxLockscreenMediaStyle.GLASS -> {
             // Filled accent circle + glass hairline — the one accented control on the sheet.
+            // Normalised rather than borrowed from the pill: the pill's colour is a *tint* for a
+            // body it gets measured against afterwards, and darkening a pastel to make one turns
+            // it to slate. A fill has to hold its hue against the sheet on its own.
             Surface(
                 onClick = onClick,
                 modifier = Modifier.size(KeyguardPlaySize),
                 shape = CircleShape,
-                color = chipAccent,
+                color = MediaChrome.accentFill(accent),
                 border =
                     BorderStroke(
                         AlphaColors.DbKeyguardCard.artRimWidth,

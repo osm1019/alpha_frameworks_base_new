@@ -267,7 +267,7 @@ internal fun ExpandedEventContent(
 internal fun BiometricUnlockExpanded(event: IslandEvent.BiometricUnlock) {
     ExpandedCardLayout(
         accentColor = GreenAccent,
-        icon = { Icon(Icons.Filled.Check, null, tint = GreenAccent, modifier = Modifier.size(26.dp)) },
+        icon = { glyph -> Icon(Icons.Filled.Check, null, tint = glyph, modifier = Modifier.size(26.dp)) },
         title = {
             Text(stringResource(R.string.ax_dynamic_bar_device_unlocked), color = OnCardText, style = MaterialTheme.typography.titleMedium)
             Text(event.sourceName, color = SubtleGray, style = MaterialTheme.typography.labelMedium)

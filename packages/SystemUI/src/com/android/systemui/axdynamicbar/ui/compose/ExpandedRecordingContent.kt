@@ -69,10 +69,10 @@ internal fun AudioRecordingExpanded(
 
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = {
+        icon = { glyph ->
             when (event.state) {
-                RecordingState.RECORDING -> PulsingDot(color = style.accent, size = 14.dp, durationMs = 550, minAlpha = AlphaTrack)
-                else -> style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(22.dp)) }
+                RecordingState.RECORDING -> PulsingDot(color = glyph, size = 14.dp, durationMs = 550, minAlpha = AlphaTrack)
+                else -> style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(22.dp)) }
             }
         },
         title = {

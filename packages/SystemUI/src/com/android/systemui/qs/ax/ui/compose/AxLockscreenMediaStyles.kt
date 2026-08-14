@@ -304,11 +304,12 @@ private fun GlassLockscreenMedia(
                             viewModel = viewModel,
                             width = PlayButtonSize,
                             iconSize = 26.dp,
-                            // The one accented control on an otherwise neutral card: fill and glyph
-                            // both come from the artwork scheme, and it carries the same hairline as
-                            // the card and the art thumbnail.
-                            tint = colors.onPrimary,
-                            background = colors.primary,
+                            // The one accented control on an otherwise neutral card, normalised
+                            // like every other filled accent: remedia hands out `primaryFixed`, a
+                            // tone-90 pastel by construction, which on a near-white day card was
+                            // barely a tint of the pane it sits on.
+                            tint = AlphaColors.LockscreenMediaCard.playGlyph,
+                            background = MediaChrome.accentFill(colors.primary),
                             shape = CircleShape,
                             border =
                                 BorderStroke(

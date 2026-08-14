@@ -66,7 +66,7 @@ internal fun TorchExpanded(
     val style = eventStyleFor(event)
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = { style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(28.dp)) } },
+        icon = { glyph -> style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(28.dp)) } },
         title = {
             Text(stringResource(style.labelRes), color = OnCardText, style = MaterialTheme.typography.titleMedium)
             if (event.supportsLevel) {

@@ -260,7 +260,9 @@ internal fun dbStatusBarChipChrome(accent: Color): IslandGlassChrome {
     val chip = AlphaColors.DbStatusBarChip
     val mixed = lerp(chip.body, accent.copy(alpha = 1f), chip.tintAmount)
     return IslandGlassChrome(
-        body = mixed,
+        // Contrast is evaluated against the opaque mixed colour above. Alpha is only the final
+        // wallpaper-facing material treatment, shared by the status-bar and cutout mounts.
+        body = mixed.copy(alpha = chip.bodyAlpha),
         border = chip.rim,
         content = contentColorOn(mixed, chip.text, chip.textInverse),
     )
@@ -503,7 +505,12 @@ internal fun CircleButton(
 @Composable
 internal fun ExpandedCardLayout(
     accentColor: Color,
-    icon: @Composable () -> Unit,
+    /**
+     * Receives the colour its glyph should take: [AlphaColors.DbStackCard.iconGlyph] when the
+     * layout draws a filled plate behind it, [accentColor] when it does not. Callers that ignore it
+     * keep whatever tint they hardcode.
+     */
+    icon: @Composable (Color) -> Unit,
     iconSize: Dp = 44.dp,
     iconBackground: Boolean = true,
     title: @Composable ColumnScope.() -> Unit,
@@ -515,7 +522,7 @@ internal fun ExpandedCardLayout(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ShapeLg)
-                .background(accentColor.copy(alpha = AlphaFaint))
+                .background(AlphaColors.DbStackCard.sectionSurface(accentColor))
                 .padding(SpaceLg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceLg),
@@ -525,14 +532,19 @@ internal fun ExpandedCardLayout(
                     modifier = Modifier
                         .size(iconSize)
                         .clip(CircleShape)
-                        .background(accentColor.copy(alpha = AlphaSubtle)),
+                        .background(
+                            MediaChrome.accentTint(
+                                accentColor,
+                                AlphaColors.DbStackCard.iconPlateLightness,
+                            )
+                        ),
                     contentAlignment = Alignment.Center,
-                ) { icon() }
+                ) { icon(AlphaColors.DbStackCard.iconGlyph) }
             } else {
                 Box(
                     modifier = Modifier.size(iconSize),
                     contentAlignment = Alignment.Center,
-                ) { icon() }
+                ) { icon(accentColor) }
             }
             Column(
                 modifier = Modifier.weight(1f),

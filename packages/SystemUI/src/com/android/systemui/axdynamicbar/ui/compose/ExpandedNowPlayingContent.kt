@@ -48,8 +48,8 @@ internal fun NowPlayingExpanded(event: IslandEvent.NowPlaying, interactor: Islan
     val context = LocalContext.current
     ExpandedCardLayout(
         accentColor = MintAccent,
-        icon = {
-            Icon(Icons.Filled.MusicNote, null, tint = MintAccent, modifier = Modifier.size(30.dp))
+        icon = { glyph ->
+            Icon(Icons.Filled.MusicNote, null, tint = glyph, modifier = Modifier.size(30.dp))
         },
         title = {
             Text(

@@ -38,9 +38,16 @@ internal fun AlarmExpanded(event: IslandEvent.Alarm, interactor: IslandActions) 
     ExpandedCardLayout(
         accentColor = OrangeAccent,
         iconSize = SizeAlbumSm,
-        icon = {
-            if (event.isRinging) PulsingDot(color = OrangeAccent, size = 30.dp)
-            else Icon(Icons.Filled.Alarm, null, tint = OrangeAccent, modifier = Modifier.size(26.dp))
+        icon = { glyph ->
+            if (event.isRinging) {
+                PulsingDot(
+                    color = glyph,
+                    size = 30.dp,
+                    minAlpha = AlphaColors.DbStackCard.pulseMinAlpha,
+                )
+            } else {
+                Icon(Icons.Filled.Alarm, null, tint = glyph, modifier = Modifier.size(26.dp))
+            }
         },
         title = {
             if (event.isRinging) StatusChip(stringResource(R.string.ax_dynamic_bar_ringing), OrangeAccent)

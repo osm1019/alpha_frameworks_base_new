@@ -331,7 +331,12 @@ fun CutoutChip(
                 } else 1f
                 // Pulse the event tint, not the body alpha: the chip sits over status bar content,
                 // so fading it out would show icons through. Breathes between tinted and neutral.
-                val pulsedBody = lerp(AlphaColors.DbStatusBarChip.body, bodyColor, pulseAnim)
+                val pulsedBody =
+                    lerp(
+                        AlphaColors.DbStatusBarChip.body,
+                        bodyColor.copy(alpha = 1f),
+                        pulseAnim,
+                    ).copy(alpha = bodyColor.alpha)
                 val pulsedAccent = accent.copy(alpha = accent.alpha * pulseAnim)
 
                 when (placementHint) {
@@ -985,4 +990,3 @@ private fun Modifier.progressOverlay(progress: Float?, accent: Color, contentCol
 
 
 private data class ChipDisplayCutout(val event: IslandEvent, val isAlert: Boolean)
-

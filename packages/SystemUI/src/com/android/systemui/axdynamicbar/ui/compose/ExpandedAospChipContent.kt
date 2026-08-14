@@ -108,16 +108,16 @@ private fun ScreenRecordChipExpanded(
 
     ExpandedCardLayout(
         accentColor = accent,
-        icon = {
+        icon = { glyph ->
             if (isCountdown) {
                 val seconds = (content as OngoingActivityChipModel.Content.Countdown).secondsUntilStarted
                 Text(
                     "$seconds",
-                    color = accent,
+                    color = glyph,
                     style = MaterialTheme.typography.headlineMedium,
                 )
             } else {
-                PulsingDot(color = accent, size = 14.dp, durationMs = 550, minAlpha = AlphaTrack)
+                PulsingDot(color = glyph, size = 14.dp, durationMs = 550, minAlpha = AlphaTrack)
             }
         },
         title = {
@@ -180,7 +180,7 @@ private fun CastChipExpanded(
 
     ExpandedCardLayout(
         accentColor = accent,
-        icon = { Icon(Icons.Filled.Cast, null, tint = accent, modifier = Modifier.size(26.dp)) },
+        icon = { glyph -> Icon(Icons.Filled.Cast, null, tint = glyph, modifier = Modifier.size(26.dp)) },
         title = {
             Text(
                 stringResource(R.string.quick_settings_cast_title),
@@ -233,7 +233,7 @@ private fun ShareToAppChipExpanded(
 
     ExpandedCardLayout(
         accentColor = accent,
-        icon = { Icon(Icons.Filled.ScreenShare, null, tint = accent, modifier = Modifier.size(26.dp)) },
+        icon = { glyph -> Icon(Icons.Filled.ScreenShare, null, tint = glyph, modifier = Modifier.size(26.dp)) },
         title = {
             Text(
                 stringResource(R.string.quick_settings_cast_title),
@@ -305,11 +305,11 @@ private fun CallChipExpanded(
 
     ExpandedCardLayout(
         accentColor = accent,
-        icon = {
+        icon = { glyph ->
             Icon(
                 imageVector = Icons.Filled.Cast, // phone icon handled by PillIslandContent
                 contentDescription = null,
-                tint = accent,
+                tint = glyph,
                 modifier = Modifier.size(26.dp),
             )
         },

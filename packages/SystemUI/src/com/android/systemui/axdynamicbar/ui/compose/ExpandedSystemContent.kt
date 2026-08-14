@@ -51,7 +51,7 @@ import com.android.systemui.alpha.theme.AlphaColors
 internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandActions) {
     ExpandedCardLayout(
         accentColor = BlueAccent,
-        icon = {
+        icon = { glyph ->
             event.deviceIcon?.let {
                 Image(
                     bitmap = it.toScaledBitmap(30.dp),
@@ -60,7 +60,7 @@ internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandA
                     },
                     modifier = Modifier.size(30.dp),
                 )
-            } ?: Icon(Icons.Filled.Bluetooth, null, tint = BlueAccent, modifier = Modifier.size(28.dp))
+            } ?: Icon(Icons.Filled.Bluetooth, null, tint = glyph, modifier = Modifier.size(28.dp))
         },
         title = {
             Text(event.deviceName, color = OnCardText, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -96,7 +96,7 @@ internal fun BluetoothExpanded(event: IslandEvent.Bluetooth, interactor: IslandA
 internal fun HotspotExpanded(event: IslandEvent.Hotspot) {
     ExpandedCardLayout(
         accentColor = OrangeAccent,
-        icon = { Icon(Icons.Filled.Wifi, null, tint = OrangeAccent, modifier = Modifier.size(SizeIconMd)) },
+        icon = { glyph -> Icon(Icons.Filled.Wifi, null, tint = glyph, modifier = Modifier.size(SizeIconMd)) },
         title = {
             Text(stringResource(R.string.ax_dynamic_bar_hotspot_active), color = OnCardText, style = MaterialTheme.typography.titleMedium)
             StatusChip(
@@ -117,7 +117,7 @@ internal fun RingerModeExpanded(event: IslandEvent.RingerMode, interactor: Islan
     val style = eventStyleFor(event)
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = { style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(22.dp)) } },
+        icon = { glyph -> style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(22.dp)) } },
         title = {
             Text(stringResource(R.string.ax_dynamic_bar_sound_mode), color = OnCardText, style = MaterialTheme.typography.titleMedium)
             StatusChip(stringResource(style.labelRes), style.accent)
@@ -201,7 +201,7 @@ internal fun VpnExpanded(event: IslandEvent.Vpn) {
     val style = eventStyleFor(event)
     ExpandedCardLayout(
         accentColor = style.accent,
-        icon = { style.icon?.let { Icon(it, null, tint = style.accent, modifier = Modifier.size(28.dp)) } },
+        icon = { glyph -> style.icon?.let { Icon(it, null, tint = glyph, modifier = Modifier.size(28.dp)) } },
         title = {
             Text(
                 stringResource(style.labelRes),
