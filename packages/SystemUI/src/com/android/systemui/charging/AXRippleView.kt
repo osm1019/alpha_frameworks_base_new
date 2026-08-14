@@ -85,6 +85,8 @@ class AXRippleView @JvmOverloads constructor(
     private var showBranding = false
     private var dimEnabled = true
     private var frameScale = 1f
+    private var holdMs = 0L
+    private var holdEndRunnable: Runnable? = null
     private var activeFrameResIds: IntArray = IntArray(0)
     private var executorService: ExecutorService? = null
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -119,8 +121,19 @@ class AXRippleView @JvmOverloads constructor(
         frameArray.recycle()
 
         animator.setIntValues(0, (frameCount - 1).coerceAtLeast(0))
-        // Keep the Nothing 800ms cadence; SuperVOOC's shorter sheet needs more time per frame.
-        animator.duration = if (useSvoocFrames) {
+        val frameDurationMs = try {
+            resources.getInteger(R.integer.config_chargingAnimFrameDurationMs)
+        } catch (_: Exception) {
+            0
+        }
+        holdMs = try {
+            resources.getInteger(R.integer.config_chargingAnimHoldMs).toLong()
+        } catch (_: Exception) {
+            0L
+        }
+        animator.duration = if (frameDurationMs > 0 && frameCount > 0) {
+            (frameCount * frameDurationMs.toLong()).coerceAtLeast(800L)
+        } else if (useSvoocFrames) {
             (frameCount * FRAME_DURATION_MS).coerceAtLeast(800L)
         } else {
             800L
@@ -201,8 +214,17 @@ class AXRippleView @JvmOverloads constructor(
                     return
                 }
                 callbackInvoked = true
-                onAnimationEnd?.run()
-                releaseRes()
+                val finish = Runnable {
+                    holdEndRunnable = null
+                    onAnimationEnd?.run()
+                    releaseRes()
+                }
+                if (holdMs > 0L) {
+                    holdEndRunnable = finish
+                    postDelayed(finish, holdMs)
+                } else {
+                    finish.run()
+                }
             }
 
             override fun onAnimationEnd(animation: Animator) {
@@ -210,7 +232,14 @@ class AXRippleView @JvmOverloads constructor(
             }
 
             override fun onAnimationCancel(animation: Animator) {
-                runOnAnimationFinished()
+                holdEndRunnable?.let { removeCallbacks(it) }
+                holdEndRunnable = null
+                if (callbackInvoked) {
+                    return
+                }
+                callbackInvoked = true
+                onAnimationEnd?.run()
+                releaseRes()
             }
         }
         animator.addListener(endListener)
