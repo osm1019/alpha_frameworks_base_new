@@ -96,6 +96,7 @@ import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import com.android.systemui.media.ax.ui.compose.MediaChrome
+import com.android.systemui.media.ax.ui.compose.rememberAudioWaveformSource
 import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import kotlinx.coroutines.delay
 
@@ -784,6 +785,7 @@ private fun KeyguardMediaWaveformProgress(
             barWidth = 1.5.dp,
             barGap = 1.5.dp,
             seed = seed,
+            source = rememberAudioWaveformSource(playing && !scrubbing),
             modifier = Modifier.fillMaxWidth().height(KeyguardWaveformHeight),
         )
     }

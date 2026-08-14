@@ -39,10 +39,9 @@ import kotlin.math.sin
 /**
  * Bar heights, 0f..1f, for a waveform of [barCount] bars at animation position [phase].
  *
- * Alpha ships a synthetic source: the media pipeline carries no amplitude data, and the one real
- * source on the device — Pulse's `Visualizer(0)` FFT — is single-listener, tied to Pulse's
- * lifecycle, and returns silence while playback is DSP-offloaded. This interface is the seam a real
- * source drops into later.
+ * Two implementations ship: [SyntheticWaveformSource], which invents a plausible row from the
+ * playback state alone, and [rememberAudioWaveformSource], which follows the output mix and hands
+ * back to the synthetic one whenever the tap is unavailable or silent.
  */
 fun interface AxWaveformSource {
     fun amplitudes(barCount: Int, phase: Float, seed: Int): FloatArray
@@ -74,7 +73,9 @@ val SyntheticWaveformSource = AxWaveformSource { barCount, phase, seed ->
 }
 
 /**
- * Animated bar waveform. Decorative: it reacts to playback state, not to the audio itself.
+ * Animated bar waveform. What the bars *do* comes from [source]; everything about how the row looks
+ * — the count, the widths, the pill caps, the rest height and the settle — is decided here, so a
+ * live source and the synthetic one draw the same object.
  *
  * Bars settle to [RestFraction] while paused, and stay there when the user has animations off, so
  * the badge never spins a frame loop for nothing.

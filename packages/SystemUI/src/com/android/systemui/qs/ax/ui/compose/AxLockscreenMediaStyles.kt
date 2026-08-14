@@ -80,6 +80,7 @@ import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.alpha.theme.AlphaMetrics
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import com.android.systemui.media.ax.ui.compose.MediaChrome
+import com.android.systemui.media.ax.ui.compose.rememberAudioWaveformSource
 import com.android.systemui.media.remedia.domain.model.MediaSessionModel
 import com.android.systemui.media.remedia.shared.model.MediaCardActionButtonLayout
 import com.android.systemui.media.remedia.shared.model.MediaSessionState
@@ -553,6 +554,7 @@ private fun WaveformLockscreenMedia(
                     barWidth = 2.dp,
                     barGap = 2.dp,
                     seed = seed,
+                    source = rememberAudioWaveformSource(playing),
                     modifier = Modifier.fillMaxWidth().height(WaveformBandHeight),
                 )
             }
