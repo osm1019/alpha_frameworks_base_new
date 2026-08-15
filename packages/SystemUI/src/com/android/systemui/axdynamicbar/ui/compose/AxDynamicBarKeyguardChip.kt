@@ -225,7 +225,7 @@ private fun KeyguardChipLane(
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val laneWidth = maxWidth
         val capacity = laneCapacity(laneWidth, height)
-        val content = resolveKeyguardLane(inputs, capacity)
+        val content = resolveKeyguardLane(inputs, capacity, laneWidth, height)
         AnimatedContent(
             targetState = content,
             transitionSpec = {
@@ -261,6 +261,8 @@ private fun KeyguardChipLane(
                             height = height,
                             blurred = blurred,
                             viewModel = viewModel,
+                            batteryString = batteryString,
+                            laneWidth = laneWidth,
                         )
                     }
             }
@@ -331,8 +333,13 @@ private fun KeyguardChipRow(
     height: Dp,
     blurred: Boolean,
     viewModel: AxDynamicBarChipViewModel,
+    batteryString: String,
+    laneWidth: Dp,
 ) {
     val motionScheme = MaterialTheme.motionScheme
+    val extraCircles = items.count { it !is KeyguardLaneOccupant.Battery || !it.info.isCharging }
+    val chargingPillMax =
+        (laneWidth - (height + SpaceMd) * extraCircles).coerceAtLeast(height)
     Row(
         modifier = Modifier.animateContentSize(motionScheme.defaultSpatialSpec()),
         horizontalArrangement = Arrangement.spacedBy(SpaceMd),
@@ -341,7 +348,17 @@ private fun KeyguardChipRow(
         items.forEach { item ->
             when (item) {
                 is KeyguardLaneOccupant.Battery ->
-                    KeyguardBatteryCircle(item.info, height, blurred)
+                    if (item.info.isCharging) {
+                        KeyguardBatteryChip(
+                            item.info,
+                            batteryString,
+                            height,
+                            blurred,
+                            maxWidth = chargingPillMax,
+                        )
+                    } else {
+                        KeyguardBatteryCircle(item.info, height, blurred)
+                    }
                 is KeyguardLaneOccupant.Event ->
                     KeyguardEventChip(
                         event = item.event,
@@ -805,6 +822,7 @@ private fun KeyguardBatteryChip(
     batteryString: String,
     height: Dp,
     blurred: Boolean,
+    maxWidth: Dp = 260.dp,
 ) {
     val accent = when {
         info.isCharging -> BatteryChargingColor
@@ -816,7 +834,9 @@ private fun KeyguardBatteryChip(
 
     val parts = rememberChargingParts(batteryString)
     val isMultiLine = info.isCharging && parts.size >= 2
-    val iconSize = height - SpaceXxl
+    // Not derived from the lane height like the circle's: this glyph shares its row with the
+    // charging string, and at 32dp it ate the twelve points the tail of that string needs.
+    val iconSize = SizeIconSm
 
     Box(contentAlignment = Alignment.Center) {
         if (blurred) {
@@ -828,7 +848,7 @@ private fun KeyguardBatteryChip(
                 .clip(ChipShape)
                 .background(chrome.body)
                 .border(1.dp, chrome.border, ChipShape)
-                .widthIn(min = height, max = 260.dp)
+                .widthIn(min = height, max = maxWidth)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
             verticalAlignment = Alignment.CenterVertically,
@@ -867,8 +887,10 @@ private fun KeyguardBatteryChip(
                         style = PillPrimary,
                         color = contentColor.copy(alpha = AlphaSecondary),
                         maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier.basicMarquee(),
+                        // Ellipsis, not Clip+marquee: the marquee stops after its iterations and
+                        // parks on a hard cut, which reads as a rendering bug rather than "more".
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                 }
                 return
