@@ -150,6 +150,36 @@ constructor(
             KeyguardBatteryInfo(0, false, false, false, null),
         )
 
+    /**
+     * Lockscreen lane inputs. Occupancy (temporary indication / row / persistent indication)
+     * is resolved in composition once the usable width is known.
+     */
+    internal val keyguardLaneInputs: StateFlow<KeyguardLaneInputs> =
+        combine(
+            interactor.keyguardIndications,
+            keyguardBatteryChipMode,
+            keyguardBatteryInfo,
+            interactor.uiState,
+            interactor.isOnKeyguard,
+        ) { indications, mode, battery, ui, onKg ->
+            if (!onKg) {
+                KeyguardLaneInputs(null, null, null, emptyList())
+            } else {
+                val values = indications.values
+                KeyguardLaneInputs(
+                    temporaryIndication = pickTemporaryIndication(values),
+                    persistentIndication = pickPersistentIndication(values),
+                    battery = batteryForLane(mode, battery),
+                    events = ui.events,
+                )
+            }
+        }
+            .stateIn(
+                applicationScope,
+                SharingStarted.Lazily,
+                KeyguardLaneInputs(null, null, null, emptyList()),
+            )
+
     init {
         applicationScope.launch {
             interactor.uiState

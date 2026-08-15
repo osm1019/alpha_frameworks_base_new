@@ -258,6 +258,7 @@ internal fun ExpandedEventContent(
         is IslandEvent.AppSwitch -> AppHistoryExpanded(event, interactor)
         is IslandEvent.Torch -> TorchExpanded(event, interactor, hapticsViewModelFactory)
         is IslandEvent.BiometricUnlock -> BiometricUnlockExpanded(event)
+        // Indications are lane state, not stack events. Kept for sealed exhaustiveness.
         is IslandEvent.KeyguardIndication -> {}
         is IslandEvent.AospChip -> AospChipExpanded(event, interactor)
     }

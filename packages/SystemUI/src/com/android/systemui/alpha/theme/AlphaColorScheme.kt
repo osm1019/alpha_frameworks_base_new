@@ -301,6 +301,15 @@ object AlphaColors {
 
         val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
 
+        /**
+         * Same pairing as [DbStatusBarChip]: open when frost is behind the pill, denser when the
+         * compositor refuses a blur region. Unlike that chip this body stays theme-following —
+         * the lane sits between the shortcut buttons (and near UDFPS), which follow the theme.
+         */
+        const val bodyAlpha = 0.75f
+        const val bodyAlphaNoBlur = 0.90f
+        val blurRadius = 12.dp
+
         /** Hairline. Media uses the neutral rim, tinted events the brighter one. */
         val mediaRim: Color
             @Composable @ReadOnlyComposable
@@ -367,13 +376,17 @@ object AlphaColors {
      * was showing (media, timer, stopwatch, audio recording), which is why the transport elements
      * below sit beside plain text and action buttons.
      *
-     * Opaque: it lands on top of notification cards.
+     * The sheet is the same glass as the lane: frost when the window can host it, denser
+     * fallback when it cannot. Nested surfaces stay opaque so they do not double-blend.
      */
     object DbKeyguardCard {
 
-        /** Matches the stack card: the pill this expands from is translucent, so the sheet is too. */
+        const val bodyAlpha = 0.75f
+        const val bodyAlphaNoBlur = 0.90f
+
+        /** Base the mount applies [bodyAlpha] / [bodyAlphaNoBlur] to. */
         val body: Color
-            @Composable @ReadOnlyComposable get() = surfaceContainerHigh.copy(alpha = 0.90f)
+            @Composable @ReadOnlyComposable get() = surfaceContainerHigh
 
         /** A box nested inside the card steps a role rather than going translucent. */
         val nestedBody: Color

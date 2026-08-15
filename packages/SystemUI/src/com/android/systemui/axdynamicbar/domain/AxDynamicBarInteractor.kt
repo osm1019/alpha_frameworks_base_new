@@ -82,6 +82,10 @@ constructor(
     private val _uiState = MutableStateFlow(IslandUiState())
     val uiState: StateFlow<IslandUiState> = _uiState.asStateFlow()
 
+    /** Keyguard indications as lane state. Not in [uiState] events. */
+    val keyguardIndications: StateFlow<Map<String, IslandEvent.KeyguardIndication>>
+        get() = repository.indicationEvents
+
     private val autoDismissJobs = ConcurrentHashMap<String, Job>()
     @Volatile private var notifAlertJob: Job? = null
     @Volatile private var transientPinJob: Job? = null
@@ -451,7 +455,7 @@ constructor(
 
                         !(onKeyguard && e is IslandEvent.AospChip && e.active.key == "ScreenRecord") &&
 
-                        !(!onKeyguard && e is IslandEvent.KeyguardIndication)
+                        e !is IslandEvent.KeyguardIndication
                 }
 
                 val current = _uiState.value
@@ -563,6 +567,10 @@ constructor(
     }
 
     fun pinEventAt(index: Int) {
+        // A user pin must not be stolen by scheduleTransientPinReset mid-tap.
+        transientPinJob?.cancel()
+        transientPinJob = null
+        transientPinnedEventId = null
         val current = _uiState.value
         if (index < 0 || index >= current.events.size) return
         _uiState.value = current.copy(pinnedEventIndex = index)

@@ -67,7 +67,7 @@ data class EventBehavior(
  * | 25 | `Clipboard` |
  * | 75 / 15 | `Notification` fresh vs stale (`NOTIFICATION_FRESH*` + `NOTIFICATION_DECAY_MS`) |
  * | 10 | `AppSwitch` |
- * | 5 | `KeyguardIndication` (per-type `EventBehavior` may add `autoDismissMs`) |
+ * | 5 | `KeyguardIndication` — **lane state**, not a stack member (per-type `EventBehavior` may add `autoDismissMs`) |
  *
  * Ties on the same integer are **not** otherwise broken; prefer keeping a stable sort if both exist.
  *

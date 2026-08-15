@@ -129,7 +129,7 @@ internal fun KeyguardExpandedContent(
     hapticsViewModelFactory: SliderHapticsViewModel.Factory,
     lockscreenMediaStyle: AxLockscreenMediaStyle = AxLockscreenMediaStyle.DEFAULT,
 ) {
-    if (event is IslandEvent.KeyguardIndication || event is IslandEvent.AppSwitch) {
+    if (event is IslandEvent.AppSwitch) {
         LaunchedEffect(Unit) { onCollapse() }
         return
     }
@@ -334,11 +334,22 @@ private fun KeyguardMediaCard(
         Spacer(Modifier.height(SpaceXxl))
 
         // Frosted sheet — no click eater. Only controls below consume taps; empty chrome collapses.
+        val sheetBlurred = rememberChipBlurEnabled()
+        val sheetBody =
+            AlphaColors.DbKeyguardCard.body.copy(
+                alpha =
+                    if (sheetBlurred) AlphaColors.DbKeyguardCard.bodyAlpha
+                    else AlphaColors.DbKeyguardCard.bodyAlphaNoBlur,
+            )
+        Box {
+            if (sheetBlurred) {
+                ChipGlassBackdrop(corner = 28.dp, modifier = Modifier.matchParentSize())
+            }
         Column(
             modifier =
                 Modifier.fillMaxWidth()
                     .clip(sheetShape)
-                    .background(AlphaColors.DbKeyguardCard.body)
+                    .background(sheetBody)
                     .border(AlphaColors.DbKeyguardCard.artRimWidth, rimBrush, sheetShape)
                     .padding(
                         horizontal = SpaceXxl + KeyguardSheetIconInset,
@@ -514,6 +525,7 @@ private fun KeyguardMediaCard(
                     }
                 }
             }
+        }
         }
     }
 }

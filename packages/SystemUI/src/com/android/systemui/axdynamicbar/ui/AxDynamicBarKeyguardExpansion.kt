@@ -80,14 +80,43 @@ constructor(
     private val _collapseSettled = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val collapseSettled: SharedFlow<Unit> = _collapseSettled.asSharedFlow()
 
+    /** Set while a lane tap owns the pin, so the card closing can hand it back. */
+    private var pinnedByLane = false
+
     fun notifyCollapseSettled() {
+        releaseLanePin()
         _collapseSettled.tryEmit(Unit)
     }
 
     init {
         interactor.isOnKeyguard
-            .onEach { if (!it) collapse() }
+            .onEach {
+                if (!it) {
+                    collapse()
+                    releaseLanePin()
+                }
+            }
             .launchIn(applicationScope)
+    }
+
+    /**
+     * Open the card for the lane occupant at [index].
+     *
+     * The panel renders `topEvent`, so choosing one means moving the pin — which is shared with
+     * the status bar chip, the cutout and NowBar. The lane has no dismiss affordance, so the tap
+     * that opened the card is the only thing that can put the pin back; [releaseLanePin] does it
+     * once the card has finished closing, rather than mid-exit where the swap would be visible.
+     */
+    fun expandPinned(index: Int) {
+        interactor.pinEventAt(index)
+        pinnedByLane = true
+        expand()
+    }
+
+    private fun releaseLanePin() {
+        if (!pinnedByLane) return
+        pinnedByLane = false
+        interactor.pinEventAt(0)
     }
 
     fun expand() {

@@ -274,20 +274,30 @@ internal fun dbStatusBarChipChrome(accent: Color, blurred: Boolean = false): Isl
  *
  * @param isMedia media alone keeps the body untinted: the pill sits between the two keyguard
  *   shortcut buttons and the bottom row has to read as one band.
+ * @param blurred `null` keeps the body opaque (NowBar and other non-glass callers). Non-null
+ *   applies the same alpha pair as [dbStatusBarChipChrome]: [AlphaColors.DbLockscreenPill.bodyAlpha]
+ *   when frost is mounted, [AlphaColors.DbLockscreenPill.bodyAlphaNoBlur] when it is not.
  */
 @Composable
-internal fun dbLockscreenPillChrome(accent: Color, isMedia: Boolean): IslandGlassChrome {
+internal fun dbLockscreenPillChrome(
+    accent: Color,
+    isMedia: Boolean,
+    blurred: Boolean? = null,
+): IslandGlassChrome {
     val pill = AlphaColors.DbLockscreenPill
+    fun glass(color: Color): Color =
+        if (blurred == null) color
+        else color.copy(alpha = if (blurred) pill.bodyAlpha else pill.bodyAlphaNoBlur)
     if (isMedia) {
         return IslandGlassChrome(
-            body = pill.mediaBody,
+            body = glass(pill.mediaBody),
             border = pill.mediaRim,
             content = pill.text,
         )
     }
     val mixed = lerp(pill.body, accent.copy(alpha = 1f), pill.tintAmount)
     return IslandGlassChrome(
-        body = mixed,
+        body = glass(mixed),
         border = pill.rim,
         content = contentColorOn(mixed, pill.text, pill.textInverse),
     )

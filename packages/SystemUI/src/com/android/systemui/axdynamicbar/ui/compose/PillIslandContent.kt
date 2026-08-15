@@ -128,6 +128,33 @@ internal fun PillEventIcon(
     }
 }
 
+/**
+ * The drawable [PillEventIcon] would raster for this event, or null when it draws a vector.
+ *
+ * A surface bigger than the pill needs the distinction: a vector survives being scaled up,
+ * a bitmap baked at 16dp does not. `AospChip` is deliberately absent — screen share and cast
+ * ship a `SingleColorIcon`, and [AospChipPillIcon] substitutes a vector phone glyph for call
+ * chips, so nothing it can draw off the keyguard is a raster.
+ */
+internal fun pillIconDrawable(event: IslandEvent): Drawable? =
+    when (event) {
+        is IslandEvent.Media -> event.albumArt
+        is IslandEvent.Sports -> event.team1Icon ?: event.team2Icon ?: event.appIcon
+        is IslandEvent.PromotedOngoing -> if (event.isDownloadLike()) null else event.appIcon
+        is IslandEvent.Call -> event.appIcon
+        is IslandEvent.Notification -> event.senderIcon ?: event.appIcon
+        else -> null
+    }
+
+/** Whether [pillIconDrawable] is masked to a circle rather than the rounded-square plate. */
+internal fun pillIconIsRound(event: IslandEvent): Boolean =
+    when (event) {
+        is IslandEvent.Media,
+        is IslandEvent.Sports -> true
+        is IslandEvent.Notification -> event.isConversation && event.senderIcon != null
+        else -> false
+    }
+
 @Composable
 private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
     when (event) {
@@ -340,33 +367,43 @@ private fun AnimatedTrophyIcon(color: Color) {
     }
 }
 
+/**
+ * Album art, rolling while the track plays.
+ *
+ * Takes its own [size] so a surface larger than the pill rasterises the art at the size it
+ * draws it: a bitmap baked at 16dp and then magnified is soft, and the art is the media
+ * chip's whole identity.
+ */
+@Composable
+internal fun PillAlbumArt(art: Drawable, size: Dp, spinning: Boolean) {
+    val rotation: Float
+    if (spinning) {
+        val transition = rememberInfiniteTransition(label = "media_art_roll")
+        val animatedRotation by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(8000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "media_art_rotation"
+        )
+        rotation = animatedRotation
+    } else {
+        rotation = 0f
+    }
+
+    Image(
+        bitmap = art.toScaledBitmap(size),
+        contentDescription = null,
+        modifier = Modifier.size(size).clip(CircleShape).graphicsLayer { rotationZ = rotation },
+        contentScale = ContentScale.Crop,
+    )
+}
+
 @Composable
 private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
-    event.albumArt?.let { art ->
-        val rotation: Float
-        if (animated && event.isPlaying) {
-            val transition = rememberInfiniteTransition(label = "media_art_roll")
-            val animatedRotation by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(8000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "media_art_rotation"
-            )
-            rotation = animatedRotation
-        } else {
-            rotation = 0f
-        }
-
-        Image(
-            bitmap = art.toScaledBitmap(16.dp),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp).clip(CircleShape).graphicsLayer { rotationZ = rotation },
-            contentScale = ContentScale.Crop,
-        )
-    }
+    event.albumArt?.let { art -> PillAlbumArt(art, 16.dp, spinning = animated && event.isPlaying) }
         ?: Box(
             modifier =
                 Modifier.size(16.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = AlphaSubtle + 0.05f)),
@@ -892,18 +929,19 @@ private val DOWNLOAD_KEYWORDS = Regex(
     RegexOption.IGNORE_CASE,
 )
 
+private fun IslandEvent.PromotedOngoing.isDownloadLike(): Boolean =
+    (progress >= 0f || isIndeterminate) && (
+        DOWNLOAD_KEYWORDS.containsMatchIn(title) ||
+            DOWNLOAD_KEYWORDS.containsMatchIn(text) ||
+            DOWNLOAD_KEYWORDS.containsMatchIn(shortText)
+    )
+
 @Composable
 private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Color? = null) {
     val hasProgress = event.progress >= 0f || event.isIndeterminate
     val color = tint ?: BlueAccent
 
-    val isDownloadLike = hasProgress && (
-        DOWNLOAD_KEYWORDS.containsMatchIn(event.title) ||
-            DOWNLOAD_KEYWORDS.containsMatchIn(event.text) ||
-            DOWNLOAD_KEYWORDS.containsMatchIn(event.shortText)
-    )
-
-    if (isDownloadLike) {
+    if (event.isDownloadLike()) {
         AnimatedDownloadIcon(color)
     } else if (event.appIcon != null) {
         Image(

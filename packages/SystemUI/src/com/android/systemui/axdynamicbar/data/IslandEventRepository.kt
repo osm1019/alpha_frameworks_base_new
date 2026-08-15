@@ -16,6 +16,8 @@ import com.android.systemui.dagger.SysUISingleton
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,6 +46,10 @@ constructor(
 
     private val _indicationEvents =
         MutableStateFlow<Map<String, IslandEvent.KeyguardIndication>>(emptyMap())
+
+    /** Live keyguard indications. Lane state — not members of [events]. */
+    val indicationEvents: StateFlow<Map<String, IslandEvent.KeyguardIndication>> =
+        _indicationEvents.asStateFlow()
 
     fun updateIndicationEvent(event: IslandEvent.KeyguardIndication) {
         _indicationEvents.update { it + (event.indicationType.name to event) }
@@ -210,16 +216,13 @@ constructor(
             }
         val transientGroup = combine(midGroup, lowGroup) { mid, low -> mid + low }
 
-        val indicationGroup = _indicationEvents.map { it.values.toList() }
-
         val allEvents = combine(
             highGroup,
             transientGroup,
             promotedGroup,
-            indicationGroup,
             aospChip.aospChipEvents,
-        ) { high, transient, promoted, indication, aosp ->
-            high + transient + promoted + indication + aosp
+        ) { high, transient, promoted, aosp ->
+            high + transient + promoted + aosp
         }
 
         return allEvents.map { events ->

@@ -37,9 +37,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
@@ -81,15 +80,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -102,32 +97,37 @@ import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.axdynamicbar.ui.AxDynamicBarChipViewModel
 import com.android.systemui.axdynamicbar.ui.KeyguardBatteryInfo
-import com.android.systemui.media.ax.ui.compose.MediaChrome
+import com.android.systemui.axdynamicbar.ui.KeyguardLaneContent
+import com.android.systemui.axdynamicbar.ui.KeyguardLaneInputs
+import com.android.systemui.axdynamicbar.ui.KeyguardLaneOccupant
+import com.android.systemui.axdynamicbar.ui.laneCapacity
+import com.android.systemui.axdynamicbar.ui.laneContentKey
+import com.android.systemui.axdynamicbar.ui.resolveKeyguardLane
 import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.res.R
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 import android.content.Context
 import android.graphics.drawable.Drawable
 import java.util.Calendar
 
-/** Default keyguard island height for non-media events. */
-private val ChipHeight = 36.dp
+/** Fallback when a default is needed outside composition; the lane reads the affordance dimen. */
 private val ChipShape = ShapeChip
-private val ChipIconSize = ChipHeight - SpaceLg
-/** Album art inside the taller media chip (matches ~48dp affordance row). */
+/** Album art inside the 48dp media chip. */
 private val MediaChipIconSize = 32.dp
 private val ActionSize = SpacePanel
 private val ActionIconSize = SizeBadge
 /** Transport hit targets scaled for media's affordance-matched height. */
 private val MediaActionSize = 28.dp
 private val MediaActionIconSize = 16.dp
-private val BatteryIconSize = ChipHeight - SpaceXxl
-private val CountBadgeHeight = ChipHeight / 2
+private val BatteryIconSize = 32.dp
+
+@Composable
+private fun rememberLaneHeight(): Dp =
+    dimensionResource(R.dimen.keyguard_affordance_fixed_height)
 
 /**
- * Cap on the track/artist lane while expanded so art + text + transport + badge fit the
- * chip's max width (260dp). Text ellipsizes inside this; collapse hides the lane entirely.
+ * Cap on the track/artist lane while expanded so art + text + transport fit the chip's max
+ * width (260dp). Text ellipsizes inside this; collapse hides the lane entirely.
  * Timing reuses [CutoutCenterCollapsePolicy.CUTOUT_CENTER_RIGHT_IDLE_COLLAPSE_DELAY_MS] (5s).
  */
 private val MediaTextExpandedMaxWidth = 90.dp
@@ -145,17 +145,16 @@ fun AxDynamicBarKeyguardChip(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.chipState.collectAsStateWithLifecycle()
+    val laneInputs by viewModel.keyguardLaneInputs.collectAsStateWithLifecycle()
     val isOnKeyguard by viewModel.isOnKeyguard.collectAsStateWithLifecycle()
     val isEnabled by viewModel.isEnabled.collectAsStateWithLifecycle()
     val isKeyguardEnabled by viewModel.isKeyguardEnabled.collectAsStateWithLifecycle()
-    val keyguardBatteryChipMode by viewModel.keyguardBatteryChipMode.collectAsStateWithLifecycle()
-    val batteryInfo by viewModel.keyguardBatteryInfo.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
     val lockscreenMediaStyle by viewModel.lockscreenMediaStyle.collectAsStateWithLifecycle()
-    val touchSlop = LocalViewConfiguration.current.touchSlop
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
 
     val motionScheme = MaterialTheme.motionScheme
+    val blurred = rememberChipBlurEnabled()
 
     Box(modifier = modifier) {
 
@@ -186,117 +185,238 @@ fun AxDynamicBarKeyguardChip(
             }
         }
 
+        val laneVisible =
+            isOnKeyguard && isEnabled && isKeyguardEnabled && !isKeyguardExpanded &&
+                laneInputs.hasContent
         AnimatedVisibility(
-            visible = isOnKeyguard && isEnabled && isKeyguardEnabled && !isKeyguardExpanded,
+            visible = laneVisible,
             enter = fadeIn(tween(durationMillis = 200, delayMillis = 300)) +
                 scaleIn(
                     initialScale = 0.9f,
                     animationSpec = tween(durationMillis = 200, delayMillis = 300),
                 ),
-            exit = fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.9f, animationSpec = motionScheme.fastSpatialSpec()),
+            exit = fadeOut(motionScheme.fastEffectsSpec()) +
+                scaleOut(targetScale = 0.9f, animationSpec = motionScheme.fastSpatialSpec()),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .pointerInput(viewModel) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                        val startX = down.position.x
-                        var dragging = false
-                        var totalDx = 0f
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull() ?: break
-                            if (!change.pressed) {
-                                if (dragging) {
-                                    change.consume()
-                                    if (totalDx > 0) viewModel.cyclePrev()
-                                    else viewModel.cycleNext()
-                                }
-                                break
-                            }
-                            val dx = change.position.x - startX
-                            if (!dragging && abs(dx) > touchSlop) {
-                                dragging = true
-                            }
-                            if (dragging) {
-                                totalDx = dx
-                                change.consume()
-                            }
-                        }
-                    }
-                },
+                .fillMaxWidth(),
         ) {
-            val chipState = state
-            if (chipState != null) {
-                val displayEvent = chipState.notificationAlert ?: chipState.event
+            KeyguardChipLane(
+                inputs = laneInputs,
+                viewModel = viewModel,
+                batteryString = batteryString,
+                mediaStyle = lockscreenMediaStyle,
+                blurred = blurred,
+            )
+        }
+    }
+}
 
-                AnimatedContent(
-                    targetState = displayEvent,
-                    transitionSpec = {
-                        (fadeIn(motionScheme.defaultEffectsSpec()) + scaleIn(
-                            initialScale = 0.95f,
-                            animationSpec = motionScheme.defaultSpatialSpec(),
-                        )) togetherWith (fadeOut(motionScheme.fastEffectsSpec()) + scaleOut(
-                            targetScale = 0.95f,
-                            animationSpec = motionScheme.fastSpatialSpec(),
-                        )) using SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() })
-                    },
-                    contentKey = { it::class.simpleName },
-                    label = "keyguard_chip_event",
-                ) { event ->
-                    val rawAccent = chipAccentColorFor(event)
-                    val accent by animateColorAsState(
-                        rawAccent,
-                        MaterialTheme.motionScheme.fastEffectsSpec(),
-                        label = "kg_accent",
+@Composable
+private fun KeyguardChipLane(
+    inputs: KeyguardLaneInputs,
+    viewModel: AxDynamicBarChipViewModel,
+    batteryString: String,
+    mediaStyle: AxLockscreenMediaStyle,
+    blurred: Boolean,
+) {
+    val height = rememberLaneHeight()
+    val motionScheme = MaterialTheme.motionScheme
+    BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val laneWidth = maxWidth
+        val capacity = laneCapacity(laneWidth, height)
+        val content = resolveKeyguardLane(inputs, capacity)
+        AnimatedContent(
+            targetState = content,
+            transitionSpec = {
+                (fadeIn(motionScheme.defaultEffectsSpec()) +
+                    scaleIn(initialScale = 0.95f, animationSpec = motionScheme.defaultSpatialSpec())) togetherWith
+                    (fadeOut(motionScheme.fastEffectsSpec()) +
+                        scaleOut(targetScale = 0.95f, animationSpec = motionScheme.fastSpatialSpec())) using
+                    SizeTransform(
+                        clip = false,
+                        sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() },
                     )
-                    // Glyphs stay OnGlass; accent is body tint + progress only.
-                    val contentColor by animateColorAsState(
-                        AlphaColors.DbLockscreenPill.text,
-                        MaterialTheme.motionScheme.fastEffectsSpec(),
-                        label = "kg_content",
-                    )
-                    val rawProgress = chipProgressFor(event)
-                    val progressTarget = rawProgress ?: 0f
-                    val progressAnim = remember { Animatable(progressTarget) }
-                    LaunchedEffect(progressTarget) {
-                        if (abs(progressTarget - progressAnim.value) > 0.05f) {
-                            progressAnim.animateTo(progressTarget, tween(300, easing = FastOutSlowInEasing))
-                        } else {
-                            progressAnim.snapTo(progressTarget)
-                        }
+            },
+            contentKey = { laneContentKey(it) },
+            label = "keyguard_lane",
+        ) { lane ->
+            when (lane) {
+                KeyguardLaneContent.Empty -> Spacer(Modifier.size(0.dp))
+                is KeyguardLaneContent.Indication ->
+                    KeyguardIndicationPill(lane.indication, height, blurred, laneWidth)
+                is KeyguardLaneContent.Occupants ->
+                    if (lane.items.size == 1) {
+                        KeyguardSoloOccupant(
+                            occupant = lane.items[0],
+                            height = height,
+                            blurred = blurred,
+                            viewModel = viewModel,
+                            batteryString = batteryString,
+                            mediaStyle = mediaStyle,
+                        )
+                    } else {
+                        KeyguardChipRow(
+                            items = lane.items,
+                            height = height,
+                            blurred = blurred,
+                            viewModel = viewModel,
+                        )
                     }
-                    val progress = if (rawProgress != null) progressAnim.value else null
-
-                    KeyguardChipBody(
-                        event = event,
-                        accent = accent,
-                        contentColor = contentColor,
-                        progress = progress,
-                        eventCount = chipState.eventCount,
-                        viewModel = viewModel,
-                        batteryString = batteryString,
-                        mediaStyle = lockscreenMediaStyle,
-                    )
-                }
-            } else {
-                KeyguardBatteryChip(
-                    batteryInfo,
-                    keyguardBatteryChipMode,
-                    batteryString,
-                    modifier,
-                )
             }
         }
     }
 }
 
 @Composable
+private fun KeyguardSoloOccupant(
+    occupant: KeyguardLaneOccupant,
+    height: Dp,
+    blurred: Boolean,
+    viewModel: AxDynamicBarChipViewModel,
+    batteryString: String,
+    mediaStyle: AxLockscreenMediaStyle,
+) {
+    when (occupant) {
+        is KeyguardLaneOccupant.Battery ->
+            KeyguardBatteryChip(occupant.info, batteryString, height, blurred)
+        is KeyguardLaneOccupant.Event -> {
+            val event = occupant.event
+            val rawAccent = chipAccentColorFor(event)
+            val accent by animateColorAsState(
+                rawAccent,
+                MaterialTheme.motionScheme.fastEffectsSpec(),
+                label = "kg_accent",
+            )
+            val contentColor by animateColorAsState(
+                AlphaColors.DbLockscreenPill.text,
+                MaterialTheme.motionScheme.fastEffectsSpec(),
+                label = "kg_content",
+            )
+            val rawProgress = chipProgressFor(event)
+            val progressTarget = rawProgress ?: 0f
+            val progressAnim = remember { Animatable(progressTarget) }
+            LaunchedEffect(progressTarget) {
+                if (abs(progressTarget - progressAnim.value) > 0.05f) {
+                    progressAnim.animateTo(progressTarget, tween(300, easing = FastOutSlowInEasing))
+                } else {
+                    progressAnim.snapTo(progressTarget)
+                }
+            }
+            val progress = if (rawProgress != null) progressAnim.value else null
+            KeyguardChipBody(
+                event = event,
+                eventIndex = occupant.eventIndex,
+                accent = accent,
+                contentColor = contentColor,
+                progress = progress,
+                height = height,
+                blurred = blurred,
+                viewModel = viewModel,
+                batteryString = batteryString,
+                mediaStyle = mediaStyle,
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeyguardChipRow(
+    items: List<KeyguardLaneOccupant>,
+    height: Dp,
+    blurred: Boolean,
+    viewModel: AxDynamicBarChipViewModel,
+) {
+    val motionScheme = MaterialTheme.motionScheme
+    Row(
+        modifier = Modifier.animateContentSize(motionScheme.defaultSpatialSpec()),
+        horizontalArrangement = Arrangement.spacedBy(SpaceMd),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { item ->
+            when (item) {
+                is KeyguardLaneOccupant.Battery ->
+                    KeyguardBatteryCircle(item.info, height, blurred)
+                is KeyguardLaneOccupant.Event ->
+                    KeyguardEventChip(
+                        event = item.event,
+                        size = height,
+                        blurred = blurred,
+                        onClick = { onLaneEventClick(viewModel, item.event, item.eventIndex) },
+                    )
+            }
+        }
+    }
+}
+
+/**
+ * The lane as a line of text.
+ *
+ * This is the only place these messages appear — the chip suppresses AOSP's indication area
+ * — and some of them are not ours to abbreviate: the enterprise disclosure and the owner's
+ * lock screen message are whole sentences. So it takes the full lane rather than a chip's
+ * width, and marquees what still will not fit.
+ */
+@Composable
+private fun KeyguardIndicationPill(
+    indication: IslandEvent.KeyguardIndication,
+    height: Dp,
+    blurred: Boolean,
+    laneWidth: Dp,
+) {
+    val accent = chipAccentColorFor(indication)
+    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
+    Box(contentAlignment = Alignment.Center) {
+        if (blurred) {
+            ChipGlassBackdrop(corner = height / 2, modifier = Modifier.matchParentSize())
+        }
+        Row(
+            modifier = Modifier
+                .height(height)
+                .widthIn(min = height, max = laneWidth)
+                .clip(ChipShape)
+                .background(chrome.body)
+                .border(1.dp, chrome.border, ChipShape)
+                .padding(horizontal = SpaceMd)
+                .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                indication.text,
+                style = PillPrimary,
+                color = chrome.content,
+                maxLines = 1,
+                // Clip, not ellipsis: marquee measures unbounded and an ellipsis would win.
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee(),
+            )
+        }
+    }
+}
+
+private fun onLaneEventClick(
+    viewModel: AxDynamicBarChipViewModel,
+    event: IslandEvent,
+    eventIndex: Int,
+) {
+    when (event) {
+        is IslandEvent.Notification -> viewModel.launchNotificationFromKeyguard(event)
+        is IslandEvent.AppSwitch,
+        is IslandEvent.KeyguardIndication -> { }
+        else -> viewModel.keyguardExpansion.expandPinned(eventIndex)
+    }
+}
+
+@Composable
 private fun KeyguardChipBody(
     event: IslandEvent,
+    eventIndex: Int,
     accent: Color,
     contentColor: Color,
     progress: Float?,
-    eventCount: Int,
+    height: Dp,
+    blurred: Boolean,
     viewModel: AxDynamicBarChipViewModel,
     batteryString: String = "",
     mediaStyle: AxLockscreenMediaStyle = AxLockscreenMediaStyle.DEFAULT,
@@ -304,23 +424,14 @@ private fun KeyguardChipBody(
     val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
 
-    val parts = rememberChargingParts(batteryString)
-    val isMultiLineCharging = event is IslandEvent.Charging && parts.size >= 2
     val isMedia = event is IslandEvent.Media
-    // Match keyguard shortcut diameter for media so the bottom row reads as one band.
-    val mediaChipHeight = dimensionResource(R.dimen.keyguard_affordance_fixed_height)
-    val dynamicHeight = when {
-        isMedia -> mediaChipHeight
-        isMultiLineCharging -> 48.dp
-        else -> ChipHeight
-    }
+    val dynamicHeight = height
 
     // Glass shell for every event: media = neutral glass; others keep event hue as a tint
     // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
     // media buttons + progress.
-    val chrome = dbLockscreenPillChrome(accent, isMedia = isMedia)
+    val chrome = dbLockscreenPillChrome(accent, isMedia = isMedia, blurred = blurred)
     val bodyColor = chrome.body
-    val onBody = chrome.content
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
     val progressTrack =
         when {
@@ -336,14 +447,17 @@ private fun KeyguardChipBody(
         }
     val progressBarH = if (isMedia) AlphaColors.DbLockscreenPill.progressHeight else SizeStrokeWidth
 
-    // Media needs room for art + text + 3 transport buttons + optional stack badge.
+    // Media needs room for art + text + 3 transport buttons.
     val chipMaxWidth = if (isMedia) 280.dp else 260.dp
 
     Box(contentAlignment = Alignment.Center) {
+        if (blurred) {
+            ChipGlassBackdrop(corner = dynamicHeight / 2, modifier = Modifier.matchParentSize())
+        }
         Row(
             modifier = Modifier
                 .height(dynamicHeight)
-                .widthIn(min = 48.dp, max = chipMaxWidth)
+                .widthIn(min = dynamicHeight, max = chipMaxWidth)
                 .clip(ChipShape)
                 .background(bodyColor)
                 .border(1.dp, chrome.border, ChipShape)
@@ -363,16 +477,7 @@ private fun KeyguardChipBody(
                         }
                     } else Modifier
                 )
-                .clickable {
-                    when (event) {
-                        is IslandEvent.Notification ->
-                            viewModel.launchNotificationFromKeyguard(event)
-
-                        is IslandEvent.KeyguardIndication,
-                        is IslandEvent.AppSwitch -> { }
-                        else -> viewModel.keyguardExpansion.toggle()
-                    }
-                }
+                .clickable { onLaneEventClick(viewModel, event, eventIndex) }
                 .padding(start = SpaceSm, end = SpaceMd),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -384,7 +489,7 @@ private fun KeyguardChipBody(
                     mediaStyle = mediaStyle,
                 )
             } else if (event is IslandEvent.Sports && event.team2Name.isNotEmpty()) {
-                SportsChipTeamBadge(event.team1Name, event.team1Icon, contentColor)
+                SportsChipTeamBadge(event.team1Name, event.team1Icon, contentColor, height - SpaceLg)
                 Spacer(Modifier.width(SpaceXs))
                 Text(
                     if (event.score1.isNotEmpty()) "${event.score1} - ${event.score2}"
@@ -394,7 +499,7 @@ private fun KeyguardChipBody(
                     maxLines = 1,
                 )
                 Spacer(Modifier.width(SpaceXs))
-                SportsChipTeamBadge(event.team2Name, event.team2Icon, contentColor)
+                SportsChipTeamBadge(event.team2Name, event.team2Icon, contentColor, height - SpaceLg)
             } else {
                 AnimatedContent(
                     targetState = event,
@@ -462,29 +567,6 @@ private fun KeyguardChipBody(
                             iconSize = ActionIconSize,
                         )
                     }
-                }
-            }
-
-            if (eventCount > 1) {
-                Spacer(Modifier.width(SpaceXs))
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .height(CountBadgeHeight)
-                        .widthIn(min = CountBadgeHeight)
-                        .background(
-                            if (isMedia) AlphaColors.DbLockscreenPill.buttonPlate
-                            else lerp(accent, contentColor, AlphaDisabled),
-                            ShapeChip,
-                        )
-                        .padding(horizontal = SpaceXxs),
-                ) {
-                    Text(
-                        "$eventCount",
-                        style = TsBadge,
-                        color = onBody,
-                        maxLines = 1,
-                    )
                 }
             }
         }
@@ -590,7 +672,7 @@ private fun RowScope.KeyguardMediaChipContent(
         }
     }
 
-    // Expanded text: hard-capped width + ellipsis (never pushes transport/badge off-chip).
+    // Expanded text: hard-capped width + ellipsis (never pushes transport off-chip).
     // No weight here — a weighted empty AnimatedVisibility would keep the chip at max width
     // when collapsed. Parent Row already has animateContentSize for the width change.
     AnimatedVisibility(
@@ -715,43 +797,42 @@ private fun RowScope.KeyguardMediaChipContent(
 @Composable
 private fun KeyguardBatteryChip(
     info: KeyguardBatteryInfo,
-    keyguardBatteryChipMode: Int,
     batteryString: String,
-    modifier: Modifier,
+    height: Dp,
+    blurred: Boolean,
 ) {
-    if (keyguardBatteryChipMode <= 0) return
-
-    if (keyguardBatteryChipMode == 1 && !info.isCharging) return
-
     val accent = when {
         info.isCharging -> BatteryChargingColor
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }
-    val chrome = dbLockscreenPillChrome(accent, isMedia = false)
+    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
     val contentColor = chrome.content
 
     val parts = rememberChargingParts(batteryString)
     val isMultiLine = info.isCharging && parts.size >= 2
-    val dynamicHeight = if (isMultiLine) 48.dp else ChipHeight
+    val iconSize = height - SpaceXxl
 
     Box(contentAlignment = Alignment.Center) {
+        if (blurred) {
+            ChipGlassBackdrop(corner = height / 2, modifier = Modifier.matchParentSize())
+        }
         Row(
-            modifier = modifier
-                .height(dynamicHeight)
+            modifier = Modifier
+                .height(height)
                 .clip(ChipShape)
                 .background(chrome.body)
                 .border(1.dp, chrome.border, ChipShape)
-                .widthIn(min = 48.dp, max = 260.dp)
+                .widthIn(min = height, max = 260.dp)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             
             if (info.isCharging) {
-                AnimatedChargingBoltIcon(info.level, contentColor, BatteryIconSize)
+                AnimatedChargingBoltIcon(info.level, contentColor, iconSize)
             } else {
-                AnimatedBatteryFillIcon(info.level, contentColor, BatteryIconSize)
+                AnimatedBatteryFillIcon(info.level, contentColor, iconSize)
             }
             Spacer(Modifier.width(SpaceXs))
             if (info.isCharging) {
@@ -828,6 +909,41 @@ private fun KeyguardBatteryChip(
                     maxLines = 1,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun KeyguardBatteryCircle(
+    info: KeyguardBatteryInfo,
+    size: Dp,
+    blurred: Boolean,
+) {
+    val accent = when {
+        info.isCharging -> BatteryChargingColor
+        info.isPowerSave -> BatteryPowerSaveColor
+        else -> BatteryNeutralColor
+    }
+    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
+    val iconSize = size - SpaceLg
+    Box(
+        modifier = Modifier.size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (blurred) {
+            ChipGlassBackdrop(corner = size / 2, modifier = Modifier.matchParentSize())
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .background(chrome.body)
+                .border(1.dp, chrome.border, CircleShape)
+        )
+        if (info.isCharging) {
+            AnimatedChargingBoltIcon(info.level, chrome.content, iconSize)
+        } else {
+            AnimatedBatteryFillIcon(info.level, chrome.content, iconSize)
         }
     }
 }
@@ -1073,17 +1189,17 @@ private fun CallTimerText(event: IslandEvent.Call, modifier: Modifier, overrideC
 }
 
 @Composable
-private fun SportsChipTeamBadge(name: String, icon: Drawable?, contentColor: Color) {
+private fun SportsChipTeamBadge(name: String, icon: Drawable?, contentColor: Color, iconSize: Dp) {
     if (icon != null) {
         Image(
-            bitmap = icon.toScaledBitmap(ChipIconSize),
+            bitmap = icon.toScaledBitmap(iconSize),
             contentDescription = name,
-            modifier = Modifier.size(ChipIconSize).clip(CircleShape),
+            modifier = Modifier.size(iconSize).clip(CircleShape),
             contentScale = ContentScale.Crop,
         )
     } else {
         Box(
-            modifier = Modifier.size(ChipIconSize).clip(CircleShape)
+            modifier = Modifier.size(iconSize).clip(CircleShape)
                 .background(contentColor.copy(alpha = AlphaIconBg)),
             contentAlignment = Alignment.Center,
         ) {
