@@ -158,8 +158,9 @@ internal fun ScaledPillEventIcon(event: IslandEvent, tint: Color, size: Dp) {
     }
 }
 
+/** 0–360° sweep from 12 o'clock. Determinate progress only — no pulse, no split-from-bottom. */
 @Composable
-private fun KeyguardChipProgressRing(
+internal fun KeyguardChipProgressRing(
     progress: Float,
     track: Color,
     fill: Color,

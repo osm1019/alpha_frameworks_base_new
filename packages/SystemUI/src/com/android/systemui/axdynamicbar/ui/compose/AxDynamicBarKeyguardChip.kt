@@ -288,8 +288,13 @@ private fun KeyguardSoloOccupant(
                 MaterialTheme.motionScheme.fastEffectsSpec(),
                 label = "kg_accent",
             )
+            val chrome = dbLockscreenPillChrome(
+                rawAccent,
+                isMedia = event is IslandEvent.Media,
+                blurred = blurred,
+            )
             val contentColor by animateColorAsState(
-                AlphaColors.DbLockscreenPill.text,
+                chrome.content,
                 MaterialTheme.motionScheme.fastEffectsSpec(),
                 label = "kg_content",
             )
@@ -830,7 +835,7 @@ private fun KeyguardBatteryChip(
         ) {
             
             if (info.isCharging) {
-                AnimatedChargingBoltIcon(info.level, contentColor, iconSize)
+                ChargingBoltIcon(info.level, contentColor, iconSize)
             } else {
                 AnimatedBatteryFillIcon(info.level, contentColor, iconSize)
             }
@@ -926,6 +931,15 @@ private fun KeyguardBatteryCircle(
     }
     val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
     val iconSize = size - SpaceLg
+    val levelTarget = (info.level / 100f).coerceIn(0f, 1f)
+    val levelAnim = remember { Animatable(levelTarget) }
+    LaunchedEffect(levelTarget) {
+        if (abs(levelTarget - levelAnim.value) > 0.05f) {
+            levelAnim.animateTo(levelTarget, tween(300, easing = FastOutSlowInEasing))
+        } else {
+            levelAnim.snapTo(levelTarget)
+        }
+    }
     Box(
         modifier = Modifier.size(size),
         contentAlignment = Alignment.Center,
@@ -941,32 +955,17 @@ private fun KeyguardBatteryCircle(
                 .border(1.dp, chrome.border, CircleShape)
         )
         if (info.isCharging) {
-            AnimatedChargingBoltIcon(info.level, chrome.content, iconSize)
+            ChargingBoltIcon(info.level, chrome.content, iconSize)
         } else {
             AnimatedBatteryFillIcon(info.level, chrome.content, iconSize)
         }
+        KeyguardChipProgressRing(
+            progress = levelAnim.value,
+            track = lerp(accent, chrome.content, 0.2f),
+            fill = lerp(accent, chrome.content, 0.6f),
+            modifier = Modifier.size(size),
+        )
     }
-}
-
-@Composable
-private fun AnimatedChargingBoltIcon(level: Int, color: Color, iconSize: Dp = BatteryIconSize) {
-    if (level == 100) {
-        ChargingBoltIcon(level, color, iconSize)
-        return
-    }
-    val transition = rememberInfiniteTransition(label = "kg_bolt")
-    val glow by transition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            tween(800, easing = FastOutSlowInEasing),
-            RepeatMode.Reverse,
-        ),
-        label = "kg_bolt_glow",
-    )
-    ChargingBoltIcon(level, color, iconSize, Modifier.graphicsLayer {
-        this.alpha = glow
-    })
 }
 
 @Composable

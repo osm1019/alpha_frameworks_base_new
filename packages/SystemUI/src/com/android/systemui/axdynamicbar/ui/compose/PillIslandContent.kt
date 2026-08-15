@@ -201,7 +201,6 @@ private fun AospChipPillIcon(
     val color = tint ?: aospChipAccent(event.active)
     val context = LocalContext.current
     val isCountdown = event.active.content is OngoingActivityChipModel.Content.Countdown
-    val isIconOnly = event.active.content is OngoingActivityChipModel.Content.IconOnly
     val isCall = event.active.key.startsWith("callChip-")
     val useScreenRecFallback = isCountdown && event.active.key == "ScreenRecord"
 
@@ -253,45 +252,22 @@ private fun AospChipPillIcon(
     }
 
     val isScreenRec = event.active.key == "ScreenRecord"
-    when {
-        !animated -> iconContent()
-        isCall -> {
-            val transition = rememberInfiniteTransition(label = "aosp_call_shake")
-            val shake by transition.animateFloat(
-                initialValue = -0.8f,
-                targetValue = 0.8f,
-                animationSpec = infiniteRepeatable(tween(90), RepeatMode.Reverse),
-                label = "aosp_call_shake_anim",
-            )
-            Box(modifier = Modifier.size(SizeBadge).offset(x = shake.dp)) {
-                iconContent()
-            }
+    if (animated && isScreenRec) {
+        val transition = rememberInfiniteTransition(label = "aosp_screenrec")
+        val pulseAlpha by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = AlphaSubtle,
+            animationSpec = infiniteRepeatable(
+                tween(600, easing = FastOutSlowInEasing),
+                RepeatMode.Reverse,
+            ),
+            label = "aosp_screenrec_alpha",
+        )
+        Box(modifier = Modifier.size(SizeBadge).graphicsLayer { this.alpha = pulseAlpha }) {
+            iconContent()
         }
-        isIconOnly -> {
-            val transition = rememberInfiniteTransition(label = "aosp_icononly")
-            val pulseAlpha by transition.animateFloat(
-                initialValue = 1f,
-                targetValue = AlphaDisabled,
-                animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "aosp_icononly_alpha",
-            )
-            Box(modifier = Modifier.size(SizeBadge).graphicsLayer { this.alpha = pulseAlpha }) {
-                iconContent()
-            }
-        }
-        isScreenRec -> {
-            val transition = rememberInfiniteTransition(label = "aosp_screenrec")
-            val pulseAlpha by transition.animateFloat(
-                initialValue = 1f,
-                targetValue = AlphaSubtle,
-                animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "aosp_screenrec_alpha",
-            )
-            Box(modifier = Modifier.size(SizeBadge).graphicsLayer { this.alpha = pulseAlpha }) {
-                iconContent()
-            }
-        }
-        else -> iconContent()
+    } else {
+        iconContent()
     }
 }
 
@@ -420,21 +396,12 @@ private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
 
 @Composable
 private fun AnimatedHotspotIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "hotspot")
-    val sweep by
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 3f,
-            animationSpec =
-                infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Restart),
-            label = "hotspot_sweep",
-        )
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val cx = size.width / 2
         val cy = size.height / 2
         for (i in 0 until 3) {
             val r = size.minDimension * (0.18f + i * 0.18f)
-            val a = if (sweep > i) ((sweep - i).coerceIn(0f, 1f) * 0.8f) else AlphaFaint
+            val a = 0.35f + i * 0.2f
             drawArc(
                 color = color.copy(alpha = a),
                 startAngle = 200f,
@@ -451,15 +418,6 @@ private fun AnimatedHotspotIcon(color: Color) {
 
 @Composable
 private fun AnimatedCastIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "cast")
-    val sweep by
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 3f,
-            animationSpec =
-                infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Restart),
-            label = "cast_sweep",
-        )
     Canvas(modifier = Modifier.size(16.dp)) {
         val sw = SizeStrokeThin.dp.toPx()
         val w = size.width
@@ -475,7 +433,7 @@ private fun AnimatedCastIcon(color: Color) {
         val by = h * 0.85f
         for (i in 0 until 3) {
             val r = w * (0.1f + i * 0.12f)
-            val a = if (sweep > i) ((sweep - i).coerceIn(0f, 1f) * 0.7f) else AlphaFaint
+            val a = 0.35f + i * 0.2f
             drawArc(
                 color = color.copy(alpha = a),
                 startAngle = 180f,
@@ -492,22 +450,13 @@ private fun AnimatedCastIcon(color: Color) {
 
 @Composable
 private fun AnimatedNowPlayingIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "np")
-    val bounce by
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "np_bounce",
-        )
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val w = size.width
         val h = size.height
         val sw = SizeStrokeThin.dp.toPx()
         val noteX = w * 0.55f
-        val noteTop = h * 0.15f + bounce * h * 0.08f
-        val noteBottom = h * 0.72f + bounce * h * 0.04f
+        val noteTop = h * 0.15f
+        val noteBottom = h * 0.72f
         drawLine(color, Offset(noteX, noteTop), Offset(noteX, noteBottom), sw, StrokeCap.Round)
         drawCircle(color, radius = w * 0.14f, center = Offset(noteX - w * 0.1f, noteBottom))
         drawLine(
@@ -522,21 +471,12 @@ private fun AnimatedNowPlayingIcon(color: Color) {
 
 @Composable
 private fun AnimatedBluetoothIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "bt")
-    val alpha by
-        transition.animateFloat(
-            initialValue = 0.5f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "bt_alpha",
-        )
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val cx = size.width / 2
         val w = size.width
         val h = size.height
         val sw = SizeStrokeThin.dp.toPx()
-        val drawColor = color.copy(alpha = alpha)
+        val drawColor = color
         drawLine(drawColor, Offset(cx, h * 0.1f), Offset(cx, h * 0.9f), sw, StrokeCap.Round)
         drawLine(drawColor, Offset(cx, h * 0.1f), Offset(cx + w * 0.22f, h * 0.3f), sw, StrokeCap.Round)
         drawLine(drawColor, Offset(cx + w * 0.22f, h * 0.3f), Offset(cx - w * 0.22f, h * 0.7f), sw, StrokeCap.Round)
@@ -547,15 +487,6 @@ private fun AnimatedBluetoothIcon(color: Color) {
 
 @Composable
 private fun AnimatedShieldIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "shield")
-    val glow by
-        transition.animateFloat(
-            initialValue = 0.5f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "shield_glow",
-        )
     val shieldPath = remember { Path() }
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val w = size.width
@@ -569,8 +500,8 @@ private fun AnimatedShieldIcon(color: Color) {
         shieldPath.quadraticTo(w * 0.85f, h * 0.85f, w * 0.85f, h * 0.55f)
         shieldPath.lineTo(w * 0.85f, h * 0.28f)
         shieldPath.close()
-        drawPath(shieldPath, color.copy(alpha = glow * 0.3f))
-        drawPath(shieldPath, color.copy(alpha = glow), style = Stroke(SizeStrokeThin.dp.toPx()))
+        drawPath(shieldPath, color.copy(alpha = 0.3f))
+        drawPath(shieldPath, color, style = Stroke(SizeStrokeThin.dp.toPx()))
         val sw = SizeStrokeThin.dp.toPx()
         drawLine(color, Offset(cx - w * 0.12f, h * 0.52f), Offset(cx, h * 0.65f), sw, StrokeCap.Round)
         drawLine(color, Offset(cx, h * 0.65f), Offset(cx + w * 0.18f, h * 0.38f), sw, StrokeCap.Round)
@@ -579,18 +510,6 @@ private fun AnimatedShieldIcon(color: Color) {
 
 @Composable
 private fun AnimatedClipboardIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "clip")
-    val slideIn by
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    tween(1500, easing = FastOutSlowInEasing),
-                    RepeatMode.Reverse,
-                ),
-            label = "clip_slide",
-        )
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val w = size.width
         val h = size.height
@@ -608,7 +527,7 @@ private fun AnimatedClipboardIcon(color: Color) {
             size = Size(w * 0.4f, h * 0.15f),
             cornerRadius = CornerRadius(w * 0.06f),
         )
-        val lineAlpha = slideIn.coerceIn(0.3f, 1f)
+        val lineAlpha = 1f
         val lineY1 = h * 0.48f
         val lineY2 = h * 0.62f
         val lineY3 = h * 0.76f
@@ -622,15 +541,6 @@ private fun AnimatedClipboardIcon(color: Color) {
 
 @Composable
 private fun AnimatedBoltIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "bolt")
-    val glow by
-        transition.animateFloat(
-            initialValue = 0.5f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "bolt_glow",
-        )
     val boltPath = remember { Path() }
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val w = size.width
@@ -643,23 +553,16 @@ private fun AnimatedBoltIcon(color: Color) {
         boltPath.lineTo(w * 0.75f, h * 0.42f)
         boltPath.lineTo(w * 0.55f, h * 0.42f)
         boltPath.close()
-        drawPath(boltPath, color.copy(alpha = glow))
+        drawPath(boltPath, color)
     }
 }
 
 @Composable
 private fun ChargingPillIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "charging_battery")
-    val pulse by transition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "charging_pulse",
-    )
     Icon(
         Icons.Filled.BatteryChargingFull,
         contentDescription = null,
-        tint = color.copy(alpha = pulse),
+        tint = color,
         modifier = Modifier.size(SizeBadge),
     )
 }
@@ -791,65 +694,11 @@ private fun RingerIcon(event: IslandEvent.RingerMode, tint: Color? = null) {
     val style = eventStyleFor(event)
     val color = tint ?: style.accent
     val vector = style.icon ?: return
-    when (event.mode) {
-        AudioManager.RINGER_MODE_VIBRATE -> {
-            val transition = rememberInfiniteTransition(label = "ringer_shake")
-            val anim by transition.animateFloat(
-                initialValue = -0.8f,
-                targetValue = 0.8f,
-                animationSpec = infiniteRepeatable(tween(90), RepeatMode.Reverse),
-                label = "ringer_shake_anim",
-            )
-            Icon(vector, null, tint = color, modifier = Modifier.size(SizeBadge).offset(x = anim.dp))
-        }
-        AudioManager.RINGER_MODE_NORMAL -> {
-            val transition = rememberInfiniteTransition(label = "ringer_normal")
-            val scale by transition.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.12f,
-                animationSpec = infiniteRepeatable(tween(750, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "ringer_normal_scale",
-            )
-            Icon(
-                vector,
-                null,
-                tint = color,
-                modifier = Modifier.size(SizeBadge).graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                },
-            )
-        }
-        AudioManager.RINGER_MODE_SILENT -> {
-            val transition = rememberInfiniteTransition(label = "ringer_silent")
-            val alpha by transition.animateFloat(
-                initialValue = 1f,
-                targetValue = AlphaDisabled,
-                animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "ringer_silent_alpha",
-            )
-            Icon(
-                vector,
-                null,
-                tint = color,
-                modifier = Modifier.size(SizeBadge).graphicsLayer { this.alpha = alpha },
-            )
-        }
-        else -> Icon(vector, null, tint = color, modifier = Modifier.size(SizeBadge))
-    }
+    Icon(vector, null, tint = color, modifier = Modifier.size(SizeBadge))
 }
 
 @Composable
 private fun AnimatedOngoingIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "ongoing")
-    val rotate by
-        transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec =
-                infiniteRepeatable(tween(2500, easing = LinearEasing), RepeatMode.Restart),
-            label = "ongoing_rot",
-        )
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val cx = size.width / 2
         val cy = size.height / 2
@@ -858,7 +707,7 @@ private fun AnimatedOngoingIcon(color: Color) {
         drawCircle(color.copy(alpha = AlphaFaint), radius = r, style = Stroke(sw))
         drawArc(
             color = color,
-            startAngle = rotate,
+            startAngle = -90f,
             sweepAngle = 90f,
             useCenter = false,
             topLeft = Offset(cx - r, cy - r),
@@ -959,22 +808,11 @@ private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Co
 
 @Composable
 private fun AnimatedDownloadIcon(color: Color) {
-    val transition = rememberInfiniteTransition(label = "download")
-    val bounce by transition.animateFloat(
-        initialValue = -1.5f,
-        targetValue = 1.5f,
-        animationSpec = infiniteRepeatable(
-            tween(800, easing = FastOutSlowInEasing),
-            RepeatMode.Reverse,
-        ),
-        label = "arrow_bounce",
-    )
-
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val cx = size.width / 2f
         val cy = size.height / 2f
         val sw = 1.6f.dp.toPx()
-        val arrowOffset = bounce.dp.toPx()
+        val arrowOffset = 0f
 
         val trayY = size.height * 0.82f
         val trayHalf = size.width * 0.32f
