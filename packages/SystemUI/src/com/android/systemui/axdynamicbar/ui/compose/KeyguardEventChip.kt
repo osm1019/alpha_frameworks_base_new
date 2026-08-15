@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.ShapeXs
 import com.android.systemui.axdynamicbar.shared.SizeBadge
@@ -104,7 +105,7 @@ internal fun KeyguardEventChip(
                 Modifier.matchParentSize()
                     .clip(CircleShape)
                     .background(chrome.body)
-                    .border(1.dp, chrome.border, CircleShape)
+                    .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, CircleShape)
         )
         LaneEventIcon(event, contentColor, size - SpaceLg)
         if (progress != null) {

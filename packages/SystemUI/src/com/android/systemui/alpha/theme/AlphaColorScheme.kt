@@ -248,9 +248,6 @@ object AlphaColors {
         val textInverse: Color
             @Composable @ReadOnlyComposable get() = nightRole(R.color.system_inverse_on_surface_dark)
 
-        val textSecondaryAlpha = 0.7f
-        val textHintAlpha = 0.5f
-
         /** Progress hairline along the bottom edge: both ends blend accent toward [text]. */
         val progressTrackBlend = 0.2f
         val progressFillBlend = 0.6f
@@ -333,10 +330,7 @@ object AlphaColors {
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.4f else 0.42f)
 
-        /** Album thumbnail: plate behind it while it loads, and the hairline around it. */
-        val artPlate: Color
-            @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        /** Hairline around the album thumbnail. */
         val artRim: Color
             @Composable @ReadOnlyComposable
             get() = onSurface.copy(alpha = if (isDarkTheme) 0.38f else 0.18f)
@@ -344,9 +338,6 @@ object AlphaColors {
         /** Transport. Play is the only filled control; skips are bare. */
         val playGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
         val skipGlyph: Color @Composable @ReadOnlyComposable get() = onSurface
-        val buttonPlate: Color
-            @Composable @ReadOnlyComposable
-            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
 
         /** Timeline along the bottom edge. */
         val progressTrack: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.22f)
@@ -356,9 +347,6 @@ object AlphaColors {
         /** Waveform is the one style that lets the album colour into the timeline. */
         val waveformProgressTrack: Color
             @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.18f)
-
-        val badgeBodyBlend = 0.3f
-        val badgeText: Color @Composable @ReadOnlyComposable get() = onSurface
 
         /** Battery pill — the variant shown when no event is on the pill. */
         val batteryCharging: Color @Composable @ReadOnlyComposable get() = AlphaColors.green

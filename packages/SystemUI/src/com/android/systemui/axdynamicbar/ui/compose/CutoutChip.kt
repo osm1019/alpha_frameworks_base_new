@@ -512,7 +512,7 @@ private fun CutoutPillLeft(
                         }
                         .clip(pillShape)
                         .background(bodyColor)
-                        .border(1.dp, borderColor, pillShape)
+                        .border(AlphaColors.DbStatusBarChip.rimWidth, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor)
                         .padding(start = cutoutZone, end = ContentPad),
                     verticalAlignment = Alignment.CenterVertically,
@@ -662,7 +662,7 @@ private fun CutoutPillRight(
                         }
                         .clip(pillShape)
                         .background(bodyColor)
-                        .border(1.dp, borderColor, pillShape)
+                        .border(AlphaColors.DbStatusBarChip.rimWidth, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor)
                         .padding(start = ContentPad, end = cutoutZone),
                     verticalAlignment = Alignment.CenterVertically,
@@ -830,7 +830,7 @@ private fun CutoutPillCenter(
                         }
                         .clip(pillShape)
                         .background(bodyColor)
-                        .border(1.dp, borderColor, pillShape)
+                        .border(AlphaColors.DbStatusBarChip.rimWidth, borderColor, pillShape)
                         .progressOverlay(progress = progress, accent = accent, contentColor = contentColor),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

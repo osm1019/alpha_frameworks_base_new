@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.android.systemui.alpha.theme.AlphaColors
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.res.stringResource
@@ -187,14 +188,18 @@ fun AxDynamicBarChip(
                                 )
                                 .clip(ChipShape)
                                 .background(bodyColor)
-                                .border(1.dp, borderColor, ChipShape)
+                                .border(AlphaColors.DbStatusBarChip.rimWidth, borderColor, ChipShape)
                                 .then(
                                     if (progress != null) {
-                                        val trackColor = lerp(accent, contentColor, 0.2f)
-                                        val fillColor = lerp(accent, contentColor, 0.6f)
+                                        val chip = AlphaColors.DbStatusBarChip
+                                        val trackColor =
+                                            lerp(accent, contentColor, chip.progressTrackBlend)
+                                        val fillColor =
+                                            lerp(accent, contentColor, chip.progressFillBlend)
+                                        val barHeight = chip.progressHeight
                                         Modifier.drawWithContent {
                                             drawContent()
-                                            val barH = 2.dp.toPx()
+                                            val barH = barHeight.toPx()
                                             val y = size.height - barH
                                             drawRect(
                                                 trackColor,
@@ -319,7 +324,11 @@ fun AxDynamicBarChip(
                                         .height(SizeBadge)
                                         .widthIn(min = SizeBadge)
                                         .background(
-                                            lerp(accent, contentColor, 0.3f),
+                                            lerp(
+                                                accent,
+                                                contentColor,
+                                                AlphaColors.DbStatusBarChip.badgeBodyBlend,
+                                            ),
                                             RoundedCornerShape(SizeBadge / 2),
                                         )
                                         .padding(horizontal = 3.dp),

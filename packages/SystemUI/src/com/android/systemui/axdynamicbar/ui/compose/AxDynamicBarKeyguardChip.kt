@@ -119,7 +119,6 @@ private val ActionIconSize = SizeBadge
 /** Transport hit targets scaled for media's affordance-matched height. */
 private val MediaActionSize = 28.dp
 private val MediaActionIconSize = 16.dp
-private val BatteryIconSize = 32.dp
 
 @Composable
 private fun rememberLaneHeight(): Dp =
@@ -398,7 +397,7 @@ private fun KeyguardIndicationPill(
                 .widthIn(min = height, max = laneWidth)
                 .clip(ChipShape)
                 .background(chrome.body)
-                .border(1.dp, chrome.border, ChipShape)
+                .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, ChipShape)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
             verticalAlignment = Alignment.CenterVertically,
@@ -482,7 +481,7 @@ private fun KeyguardChipBody(
                 .widthIn(min = dynamicHeight, max = chipMaxWidth)
                 .clip(ChipShape)
                 .background(bodyColor)
-                .border(1.dp, chrome.border, ChipShape)
+                .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, ChipShape)
                 .animateContentSize(motionScheme.defaultSpatialSpec())
                 .then(
                     if (progress != null) {
@@ -847,7 +846,7 @@ private fun KeyguardBatteryChip(
                 .height(height)
                 .clip(ChipShape)
                 .background(chrome.body)
-                .border(1.dp, chrome.border, ChipShape)
+                .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, ChipShape)
                 .widthIn(min = height, max = maxWidth)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
@@ -974,7 +973,7 @@ private fun KeyguardBatteryCircle(
                 .matchParentSize()
                 .clip(CircleShape)
                 .background(chrome.body)
-                .border(1.dp, chrome.border, CircleShape)
+                .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, CircleShape)
         )
         if (info.isCharging) {
             ChargingBoltIcon(info.level, chrome.content, iconSize)
@@ -991,7 +990,7 @@ private fun KeyguardBatteryCircle(
 }
 
 @Composable
-private fun ChargingBoltIcon(level: Int, color: Color, iconSize: Dp = BatteryIconSize, modifier: Modifier = Modifier) {
+private fun ChargingBoltIcon(level: Int, color: Color, iconSize: Dp, modifier: Modifier = Modifier) {
     val boltPath = remember { Path() }
     Canvas(modifier = modifier.size(iconSize)) {
         val w = size.width
@@ -1018,7 +1017,7 @@ private fun ChargingBoltIcon(level: Int, color: Color, iconSize: Dp = BatteryIco
 }
 
 @Composable
-private fun AnimatedBatteryFillIcon(level: Int, color: Color, iconSize: Dp = BatteryIconSize) {
+private fun AnimatedBatteryFillIcon(level: Int, color: Color, iconSize: Dp) {
     val fillFraction by animateFloatAsState(
         targetValue = (level / 100f).coerceIn(0f, 1f),
         animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
