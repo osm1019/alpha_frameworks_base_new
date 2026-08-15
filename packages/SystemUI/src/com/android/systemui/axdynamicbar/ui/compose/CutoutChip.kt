@@ -295,7 +295,8 @@ fun CutoutChip(
                 val rawAccent = chipTintAccentFor(display.event)
                 val motionScheme = MaterialTheme.motionScheme
                 val accent by animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "accent")
-                val rawChrome = dbStatusBarChipChrome(rawAccent)
+                val blurred = rememberChipBlurEnabled()
+                val rawChrome = dbStatusBarChipChrome(rawAccent, blurred)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, motionScheme.fastEffectsSpec(), label = "glass_body",
                 )
@@ -342,7 +343,7 @@ fun CutoutChip(
                 when (placementHint) {
                     CutoutPlacementHint.LEFT -> CutoutPillLeft(
                         accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
-                        contentColor = contentColor, progress = progress,
+                        contentColor = contentColor, blurred = blurred, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp,
                         pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
@@ -356,7 +357,7 @@ fun CutoutChip(
                     )
                     CutoutPlacementHint.RIGHT -> CutoutPillRight(
                         accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
-                        contentColor = contentColor, progress = progress,
+                        contentColor = contentColor, blurred = blurred, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp,
                         pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
@@ -370,7 +371,7 @@ fun CutoutChip(
                     )
                     CutoutPlacementHint.CENTER -> CutoutPillCenter(
                         accent = pulsedAccent, bodyColor = pulsedBody, borderColor = borderColor,
-                        contentColor = contentColor, progress = progress,
+                        contentColor = contentColor, blurred = blurred, progress = progress,
                         pillShape = pillShape, pillHeightDp = pillHeightDp, pillTopDp = pillTopDp,
                         cutoutLeftDp = effectiveCutoutLeftDp, cutoutRightDp = effectiveCutoutRightDp,
                         cutoutWidthDp = cutoutWidthDp, padSideDp = padSideDp,
@@ -398,6 +399,7 @@ private fun CutoutPillLeft(
     bodyColor: Color,
     borderColor: Color,
     contentColor: Color,
+    blurred: Boolean,
     progress: Float?,
     pillShape: RoundedCornerShape,
     pillHeightDp: Dp,
@@ -485,6 +487,14 @@ private fun CutoutPillLeft(
                 }
         } else {
             Box(modifier = Modifier.wrapContentSize()) {
+                // matchParentSize, not a fixed width: the pill grows and shrinks with its content,
+                // and the frost has to track it without taking part in the measurement.
+                if (blurred) {
+                    ChipGlassBackdrop(
+                        corner = pillHeightDp / 2,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .height(pillHeightDp)
@@ -540,6 +550,7 @@ private fun CutoutPillRight(
     bodyColor: Color,
     borderColor: Color,
     contentColor: Color,
+    blurred: Boolean,
     progress: Float?,
     pillShape: RoundedCornerShape,
     pillHeightDp: Dp,
@@ -626,6 +637,14 @@ private fun CutoutPillRight(
                 }
         } else {
             Box(modifier = Modifier.wrapContentSize()) {
+                // matchParentSize, not a fixed width: the pill grows and shrinks with its content,
+                // and the frost has to track it without taking part in the measurement.
+                if (blurred) {
+                    ChipGlassBackdrop(
+                        corner = pillHeightDp / 2,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .height(pillHeightDp)
@@ -681,6 +700,7 @@ private fun CutoutPillCenter(
     bodyColor: Color,
     borderColor: Color,
     contentColor: Color,
+    blurred: Boolean,
     progress: Float?,
     pillShape: RoundedCornerShape,
     pillHeightDp: Dp,
@@ -783,6 +803,14 @@ private fun CutoutPillCenter(
             val lanePad = if (animatedRightLaneWidth > 6.dp) 4.dp else 0.dp
 
             Box(modifier = Modifier.wrapContentSize()) {
+                // matchParentSize, not a fixed width: the pill grows and shrinks with its content,
+                // and the frost has to track it without taking part in the measurement.
+                if (blurred) {
+                    ChipGlassBackdrop(
+                        corner = pillHeightDp / 2,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .height(pillHeightDp)

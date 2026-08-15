@@ -256,13 +256,14 @@ private fun contentColorOn(body: Color, first: Color, second: Color): Color {
  * neighbours to match, so opting anything out of the colour code would just make it look broken.
  */
 @Composable
-internal fun dbStatusBarChipChrome(accent: Color): IslandGlassChrome {
+internal fun dbStatusBarChipChrome(accent: Color, blurred: Boolean = false): IslandGlassChrome {
     val chip = AlphaColors.DbStatusBarChip
     val mixed = lerp(chip.body, accent.copy(alpha = 1f), chip.tintAmount)
     return IslandGlassChrome(
         // Contrast is evaluated against the opaque mixed colour above. Alpha is only the final
-        // wallpaper-facing material treatment, shared by the status-bar and cutout mounts.
-        body = mixed.copy(alpha = chip.bodyAlpha),
+        // material treatment, and it depends on whether the mount put frost behind the chip: with
+        // frost the body can open up, without it the tint is all the text has to sit on.
+        body = mixed.copy(alpha = if (blurred) chip.bodyAlpha else chip.bodyAlphaNoBlur),
         border = chip.rim,
         content = contentColorOn(mixed, chip.text, chip.textInverse),
     )
@@ -442,7 +443,7 @@ internal fun chipTintAccentFor(event: IslandEvent): Color =
     if (event is IslandEvent.Media && event.mediaColor != 0) {
         MediaChrome.accentTint(
             Color(event.mediaColor),
-            AlphaColors.DbStatusBarChip.accentTintLightness,
+            AlphaColors.DbStatusBarChip.accentTintLuminance,
         )
     } else {
         chipAccentColorFor(event)
@@ -535,7 +536,7 @@ internal fun ExpandedCardLayout(
                         .background(
                             MediaChrome.accentTint(
                                 accentColor,
-                                AlphaColors.DbStackCard.iconPlateLightness,
+                                AlphaColors.DbStackCard.iconPlateLuminance,
                             )
                         ),
                     contentAlignment = Alignment.Center,

@@ -85,6 +85,8 @@ import com.android.systemui.res.R
 
 private val ChipShape = ShapeXl
 private val ChipHeight = 24.dp
+/** ShapeXl's 32dp, capped at half the height — the blur drawable takes a radius, not a shape. */
+private val ChipCornerRadius = ChipHeight / 2
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -135,7 +137,8 @@ fun AxDynamicBarChip(
             ) { display ->
                 val rawAccent = chipTintAccentFor(display.event)
                 val accent by animateColorAsState(rawAccent, MaterialTheme.motionScheme.fastEffectsSpec(), label = "accent")
-                val rawChrome = dbStatusBarChipChrome(rawAccent)
+                val blurred = rememberChipBlurEnabled()
+                val rawChrome = dbStatusBarChipChrome(rawAccent, blurred)
                 val bodyColor by animateColorAsState(
                     rawChrome.body, MaterialTheme.motionScheme.fastEffectsSpec(), label = "glass_body",
                 )
@@ -157,20 +160,25 @@ fun AxDynamicBarChip(
                 }
                 val progress = if (rawProgress != null) progressAnim.value else null
 
+                val chipWidth =
+                    if (chipState.eventCount > 1) StatusBarPillWidthWithBadge else StatusBarPillWidth
+
                 Box(
                     modifier = Modifier.fillMaxHeight(),
                     contentAlignment = Alignment.Center,
                 ) {
+                    // Behind the body, matched to it: the tint above is what carries the colour,
+                    // this only destroys the detail underneath so the tint has something to sit on.
+                    if (blurred) {
+                        ChipGlassBackdrop(
+                            corner = ChipCornerRadius,
+                            modifier = Modifier.height(ChipHeight).width(chipWidth),
+                        )
+                    }
                     Row(
                         modifier =
                             Modifier.height(ChipHeight)
-                                .width(
-                                    if (chipState.eventCount > 1) {
-                                        StatusBarPillWidthWithBadge
-                                    } else {
-                                        StatusBarPillWidth
-                                    }
-                                )
+                                .width(chipWidth)
                                 .islandGestures(
                                     chipState = chipState,
                                     viewModel = viewModel,

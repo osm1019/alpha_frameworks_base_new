@@ -215,10 +215,21 @@ object AlphaColors {
             get() = nightRole(R.color.system_surface_container_highest_dark)
 
         /**
-         * This chip sits over wallpaper rather than a controlled pane. Keep a little of that
-         * backdrop visible, while leaving its night-locked seed and content contrast unchanged.
+         * Open enough that the frost behind it reads, which is the only thing that makes this a
+         * material rather than a plate. Alpha on its own does not: with nothing behind the chip,
+         * a translucent body is the accent averaged with whatever it happens to sit on, and a red
+         * pill averaged with a photograph is brown.
          */
-        const val bodyAlpha = 0.90f
+        const val bodyAlpha = 0.75f
+
+        /** No frost behind it, so the tint has to carry the contrast on its own. */
+        const val bodyAlphaNoBlur = 0.90f
+
+        /**
+         * Small: the chip is 24dp tall and the frost only has to destroy detail, not erase the
+         * backdrop. The lockscreen card's 56dp over a pill this size would sample far outside it.
+         */
+        val blurRadius = 12.dp
 
         /** How far [body] travels toward the event accent. 0 = untinted, 1 = solid accent. */
         val tintAmount = 0.45f
@@ -258,14 +269,14 @@ object AlphaColors {
         val ringHighlight = Color.White
 
         /**
-         * Lightness the album colour is normalised to before it tints [body]. Media used to opt out of
-         * the colour code here; it does not any more.
+         * Relative luminance the album colour is normalised to before it tints [body]. Media used to
+         * opt out of the colour code here; it does not any more.
          *
-         * Not the same number as a *fill* takes ([AlphaMetrics.mediaAccentFillLightnessDark]) — a fill has a hard
+         * Not the same number as a *fill* takes ([AlphaMetrics.mediaAccentFillLuminance]) — a fill has a hard
          * ceiling because [AlphaColors.onAccentColor] must read on it, a tint has none because the text is
          * measured against the mixed result afterwards. Set to where the event palette sits.
          */
-        const val accentTintLightness = 0.55f
+        const val accentTintLuminance = 0.38f
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -548,16 +559,16 @@ object AlphaColors {
             accent.copy(alpha = if (isDarkTheme) 0.10f else 0.16f).compositeOver(body.copy(alpha = 1f))
 
         /**
-         * Lightness the event colour is normalised to for the header's **icon plate**.
+         * Relative luminance the event colour is normalised to for the header's **icon plate**.
          *
          * The plate used to be the same hue at [AlphaOpacity.subtlePlateAlpha], with the glyph on
          * top in that hue too — accent on a wash of itself, which on a light card left the circle
          * and its icon within a shade of each other. A filled plate carries the colour code at full
          * strength instead, and the number is a *fill* lightness for the same reason
-         * [AlphaMetrics.mediaAccentFillLightnessDark] is: [iconGlyph] has to read on every event
+         * [AlphaMetrics.mediaAccentFillLuminance] is: [iconGlyph] has to read on every event
          * hue, and the palette's own yellow does not clear 2:1 against near-white.
          */
-        const val iconPlateLightness = 0.46f
+        const val iconPlateLuminance = AlphaMetrics.mediaAccentFillLuminance
 
         val iconGlyph: Color @Composable @ReadOnlyComposable get() = AlphaColors.onAccentColor
 
@@ -735,8 +746,14 @@ object AlphaMetrics {
      * Split per theme, identical today — same rule as the event palette: the light value may only
      * ever move toward *more* vivid.
      */
-    const val mediaAccentFillLightnessDark = 0.46f
-    const val mediaAccentFillLightnessLight = 0.46f
+    /**
+     * Relative luminance every filled accent is solved to.
+     *
+     * Set by the glyph, not by taste: 4.5:1 against [AlphaColors.onAccentColor] (`#FAFAFA`,
+     * luminance 0.956) allows a body of at most 0.174. One value covers every hue and both themes
+     * because the glyph is the same in both.
+     */
+    const val mediaAccentFillLuminance = 0.17f
 
 
     /** Chroma floor, so a grey cover still yields a coloured accent rather than a slab of concrete. */
