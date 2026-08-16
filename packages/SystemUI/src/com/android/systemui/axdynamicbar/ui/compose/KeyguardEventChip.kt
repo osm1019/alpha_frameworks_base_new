@@ -16,6 +16,7 @@
 
 package com.android.systemui.axdynamicbar.ui.compose
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -26,9 +27,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,7 +67,7 @@ import com.android.systemui.media.ax.ui.compose.AxWaveform
 import kotlin.math.abs
 
 /**
- * 48dp circular lane occupant: glass body, [LaneMediaWaveform] (media) or [PillEventIcon],
+ * 48dp circular lane occupant: glass body, [LaneMediaGlyph] (media) or [PillEventIcon],
  * optional progress ring. Badge / overflow chrome is intentionally absent.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -114,7 +119,7 @@ internal fun KeyguardEventChip(
                     .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, CircleShape)
         )
         if (event is IslandEvent.Media) {
-            LaneMediaWaveform(event.isPlaying, contentColor, size - 8.dp)
+            LaneMediaGlyph(event.isPlaying, contentColor, size - 8.dp)
         } else {
             LaneEventIcon(event, contentColor, size - SpaceLg)
         }
@@ -130,22 +135,47 @@ internal fun KeyguardEventChip(
 }
 
 /**
- * Equaliser bars in the media circle — same [AxWaveform] the lockscreen media style uses,
- * the Compose cousin of the volume panel's `ic_sound_bars_anim`.
+ * The media circle's glyph: equaliser bars while playing, a play triangle while paused.
  *
- * Plate is the chip body (theme-following: dark night, light day). Bars are [tint]
- * (`onSurface`: light on dark, dark on light). Settles when paused. Size is the caller's.
+ * [AxWaveform] settles to four flat bars when it stops, which names nothing — the chip has to
+ * stay readable as *media*, and as resumable, while it is not moving. Bars are the same
+ * [AxWaveform] the lockscreen media style uses, the Compose cousin of the volume panel's
+ * `ic_sound_bars_anim`; plate is the chip body (theme-following), glyph is [tint].
+ *
+ * Fixed [size] box with both states centred inside it, so the swap is opacity only and the
+ * circle's contents never resize.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun LaneMediaWaveform(playing: Boolean, tint: Color, size: Dp) {
-    AxWaveform(
-        playing = playing,
-        color = SolidColor(tint),
-        modifier = Modifier.size(size * 0.55f, size * 0.5f),
-        barCount = 4,
-        barWidth = 2.5.dp,
-        barGap = 2.dp,
-    )
+private fun LaneMediaGlyph(playing: Boolean, tint: Color, size: Dp) {
+    Crossfade(
+        targetState = playing,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+        label = "kg_media_glyph",
+        modifier = Modifier.size(size),
+    ) { isPlaying ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (isPlaying) {
+                AxWaveform(
+                    playing = true,
+                    color = SolidColor(tint),
+                    modifier = Modifier.size(size * 0.55f, size * 0.5f),
+                    barCount = 4,
+                    barWidth = 2.5.dp,
+                    barGap = 2.dp,
+                )
+            } else {
+                // Larger than the bar block it replaces: a Material icon carries padding inside
+                // its viewport, so matching the drawn glyph means overshooting the box.
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(size * 0.65f),
+                )
+            }
+        }
+    }
 }
 
 /**
