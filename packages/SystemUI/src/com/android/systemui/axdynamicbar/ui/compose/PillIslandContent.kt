@@ -379,15 +379,15 @@ internal fun PillAlbumArt(art: Drawable, size: Dp, spinning: Boolean) {
 
 @Composable
 private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
-    event.albumArt?.let { art -> PillAlbumArt(art, 16.dp, spinning = animated && event.isPlaying) }
+    event.albumArt?.let { art -> PillAlbumArt(art, 20.dp, spinning = animated && event.isPlaying) }
         ?: Box(
             modifier =
-                Modifier.size(16.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = AlphaSubtle + 0.05f)),
+                Modifier.size(20.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = AlphaSubtle + 0.05f)),
             contentAlignment = Alignment.Center,
         ) {
             WaveformAnimation(
                 OrangeAccent,
-                Modifier.size(10.dp),
+                Modifier.size(12.dp),
                 isAnimating = animated && event.isPlaying,
                 barCount = 3,
             )
