@@ -131,6 +131,9 @@ private fun rememberLaneHeight(): Dp =
  */
 private val MediaTextExpandedMaxWidth = 90.dp
 
+/** Matches the media chip's cap, so a solo lane is the same width whatever is holding it. */
+private val BatteryPillMaxWidth = 260.dp
+
 @Composable
 private fun rememberChargingParts(batteryString: String): List<String> {
     return remember(batteryString) {
@@ -224,7 +227,7 @@ private fun KeyguardChipLane(
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val laneWidth = maxWidth
         val capacity = laneCapacity(laneWidth, height)
-        val content = resolveKeyguardLane(inputs, capacity, laneWidth, height)
+        val content = resolveKeyguardLane(inputs, capacity)
         AnimatedContent(
             targetState = content,
             transitionSpec = {
@@ -260,8 +263,6 @@ private fun KeyguardChipLane(
                             height = height,
                             blurred = blurred,
                             viewModel = viewModel,
-                            batteryString = batteryString,
-                            laneWidth = laneWidth,
                         )
                     }
             }
@@ -332,13 +333,8 @@ private fun KeyguardChipRow(
     height: Dp,
     blurred: Boolean,
     viewModel: AxDynamicBarChipViewModel,
-    batteryString: String,
-    laneWidth: Dp,
 ) {
     val motionScheme = MaterialTheme.motionScheme
-    val extraCircles = items.count { it !is KeyguardLaneOccupant.Battery || !it.info.isCharging }
-    val chargingPillMax =
-        (laneWidth - (height + SpaceMd) * extraCircles).coerceAtLeast(height)
     Row(
         modifier = Modifier.animateContentSize(motionScheme.defaultSpatialSpec()),
         horizontalArrangement = Arrangement.spacedBy(SpaceMd),
@@ -347,17 +343,7 @@ private fun KeyguardChipRow(
         items.forEach { item ->
             when (item) {
                 is KeyguardLaneOccupant.Battery ->
-                    if (item.info.isCharging) {
-                        KeyguardBatteryChip(
-                            item.info,
-                            batteryString,
-                            height,
-                            blurred,
-                            maxWidth = chargingPillMax,
-                        )
-                    } else {
-                        KeyguardBatteryCircle(item.info, height, blurred)
-                    }
+                    KeyguardBatteryCircle(item.info, height, blurred)
                 is KeyguardLaneOccupant.Event ->
                     KeyguardEventChip(
                         event = item.event,
@@ -821,7 +807,6 @@ private fun KeyguardBatteryChip(
     batteryString: String,
     height: Dp,
     blurred: Boolean,
-    maxWidth: Dp = 260.dp,
 ) {
     val accent = when {
         info.isCharging -> BatteryChargingColor
@@ -847,7 +832,7 @@ private fun KeyguardBatteryChip(
                 .clip(ChipShape)
                 .background(chrome.body)
                 .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, ChipShape)
-                .widthIn(min = height, max = maxWidth)
+                .widthIn(min = height, max = BatteryPillMaxWidth)
                 .padding(horizontal = SpaceMd)
                 .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
             verticalAlignment = Alignment.CenterVertically,

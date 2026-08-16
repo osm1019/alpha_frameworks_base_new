@@ -17,7 +17,6 @@
 package com.android.systemui.axdynamicbar.ui
 
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.SpaceMd
 
@@ -93,41 +92,23 @@ internal fun batteryForLane(mode: Int, info: KeyguardBatteryInfo): KeyguardBatte
 }
 
 /**
- * Event circles that still fit beside a charging text pill. The SuperVOOC / time-remaining
- * string is the lockscreen charging display; it must not collapse to a 48dp icon.
- */
-internal fun chargingRowEventSlots(
-    laneWidth: Dp,
-    chip: Dp,
-    minPill: Dp = 168.dp,
-    gap: Dp = SpaceMd,
-): Int {
-    val leftover = laneWidth - minPill
-    if (leftover.value <= 0f) return 0
-    return ((leftover + gap) / (chip + gap)).toInt().coerceIn(0, 3)
-}
-
-/**
  * First rule that produces content wins:
  * 1. temporary indication (autoDismissMs != null)
- * 2. battery + events, up to [capacity] (charging keeps a text pill)
+ * 2. battery + events, up to [capacity]
  * 3. persistent indication
+ *
+ * Nothing here decides how an occupant is drawn. Text belongs to a lane holding exactly one
+ * thing; the moment a second arrives, everything is a circle.
  */
 internal fun resolveKeyguardLane(
     inputs: KeyguardLaneInputs,
     capacity: Int,
-    laneWidth: Dp,
-    chip: Dp,
 ): KeyguardLaneContent {
     inputs.temporaryIndication?.let {
         return KeyguardLaneContent.Indication(it)
     }
     val eventSlots =
-        when {
-            inputs.battery == null -> capacity
-            inputs.battery.isCharging -> chargingRowEventSlots(laneWidth, chip)
-            else -> (capacity - 1).coerceAtLeast(0)
-        }
+        if (inputs.battery == null) capacity else (capacity - 1).coerceAtLeast(0)
     val items = buildList {
         inputs.battery?.let { add(KeyguardLaneOccupant.Battery(it)) }
         inputs.events.take(eventSlots).forEachIndexed { index, event ->
