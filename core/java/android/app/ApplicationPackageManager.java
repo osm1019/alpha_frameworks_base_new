@@ -799,12 +799,14 @@ public class ApplicationPackageManager extends PackageManager {
             }
             final List<FeatureInfo> list = new ArrayList<>(parceledList.getList());
 
-            // Inject Tensor features when toggle is enabled
+            // Inject Tensor features when toggle is enabled.
+            // Never inject into Play Integrity stack (GMS/Store/Wallet) — breaks PI.
             final String callingPkg = ActivityThread.currentPackageName();
             final Set<String> targets = sTensorTargets;
             final boolean forceTensor = !IS_TENSOR_DEVICE
                     && sTensorGlobalEnabled
                     && callingPkg != null
+                    && !isTensorIntegrityExempt(callingPkg)
                     && targets != null
                     && targets.contains(callingPkg);
 
@@ -874,6 +876,12 @@ public class ApplicationPackageManager extends PackageManager {
     private static final ArraySet<String> FEATURES_TENSOR = new ArraySet<>();
     private static final ArraySet<String> FEATURES_NEXUS = new ArraySet<>();
     private static final ArraySet<String> TENSOR_CODENAMES = new ArraySet<>();
+    /**
+     * Packages that must never receive Tensor experience feature spoof.
+     * Alpha-only safety on top of Evo 1:1 feature lists — GMS/DG/vending/Wallet
+     * must not claim PIXEL_202x_EXPERIENCE via tensor targets or they fail PI.
+     */
+    private static final ArraySet<String> TENSOR_INTEGRITY_EXEMPT = new ArraySet<>();
     private static final boolean IS_TENSOR_DEVICE;
 
     static {
@@ -947,15 +955,33 @@ public class ApplicationPackageManager extends PackageManager {
                 "com.google.android.apps.pixel.creativeassistant"
         );
 
+        Collections.addAll(TENSOR_INTEGRITY_EXEMPT,
+                "android",
+                "com.android.vending",
+                "com.google.android.gsf",
+                "com.google.android.gms",
+                "com.google.android.apps.walletnfcrel",
+                "com.google.android.contactkeys",
+                "com.google.android.safetycore",
+                "com.google.android.ims"
+        );
+
         final String device = SystemProperties.get("ro.alpha.device");
         IS_TENSOR_DEVICE = TENSOR_CODENAMES.contains(device);
+    }
+
+    /** True for Play Integrity / Wallet stack — never spoof Tensor features. */
+    private static boolean isTensorIntegrityExempt(@Nullable String pkg) {
+        return pkg != null && TENSOR_INTEGRITY_EXEMPT.contains(pkg);
     }
 
     @Override
     public boolean hasSystemFeature(String name, int version) {
         final String pkg = ActivityThread.currentPackageName();
 
-        if (name != null && pkg != null && PRIV_PKGS.contains(pkg)) {
+        // PRIV_PKGS (Assistant, Photos, Pixel AI) — same as Evo; never includes GMS.
+        if (name != null && pkg != null && PRIV_PKGS.contains(pkg)
+                && !isTensorIntegrityExempt(pkg)) {
             final boolean photosSpoof = !Process.isIsolated()
                 && "com.google.android.apps.photos".equals(pkg)
                 && sPhotosSpoofEnabled;
@@ -975,6 +1001,12 @@ public class ApplicationPackageManager extends PackageManager {
         if (name != null && FEATURES_TENSOR.contains(name)) {
             // Do not interfere with real Tensor devices
             if (IS_TENSOR_DEVICE) {
+                return mHasSystemFeatureCache.query(
+                        new HasSystemFeatureQuery(name, version));
+            }
+
+            // GMS / Play Store / Wallet: real features only (never force PIXEL_202x)
+            if (isTensorIntegrityExempt(pkg)) {
                 return mHasSystemFeatureCache.query(
                         new HasSystemFeatureQuery(name, version));
             }
@@ -2456,9 +2488,16 @@ public class ApplicationPackageManager extends PackageManager {
                 sTensorGlobalEnabled = Settings.Secure.getInt(
                         cr, Settings.Secure.PI_TENSOR_SPOOF, 0) == 1;
                 final String raw = Settings.Secure.getString(cr, "tensor_targets");
-                sTensorTargets = (raw == null || raw.isEmpty())
-                        ? Collections.emptySet()
-                        : new ArraySet<>(Arrays.asList(raw.split(",")));
+                if (raw == null || raw.isEmpty()) {
+                    sTensorTargets = Collections.emptySet();
+                } else {
+                    final ArraySet<String> cleaned = new ArraySet<>();
+                    for (String p : raw.split(",")) {
+                        if (p == null || p.isEmpty() || isTensorIntegrityExempt(p)) continue;
+                        cleaned.add(p);
+                    }
+                    sTensorTargets = cleaned;
+                }
                 sPhotosSpoofEnabled = Settings.Secure.getInt(
                         cr, Settings.Secure.PI_PHOTOS_SPOOF, 1) == 1;
             } catch (Throwable t) {
