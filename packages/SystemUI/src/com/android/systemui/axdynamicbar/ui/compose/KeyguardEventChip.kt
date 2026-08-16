@@ -16,10 +16,17 @@
 
 package com.android.systemui.axdynamicbar.ui.compose
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,12 +35,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,13 +119,100 @@ internal fun KeyguardEventChip(
                     .background(chrome.body)
                     .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, CircleShape)
         )
-        LaneEventIcon(event, contentColor, size - SpaceLg)
+        if (event is IslandEvent.Media) {
+            LaneMediaCover(event, contentColor, size)
+        } else {
+            LaneEventIcon(event, contentColor, size - SpaceLg)
+        }
         if (progress != null) {
             KeyguardChipProgressRing(
                 progress = progress,
                 track = lerp(accent, contentColor, 0.2f),
                 fill = lerp(accent, contentColor, 0.6f),
                 modifier = Modifier.size(size),
+            )
+        }
+    }
+}
+
+/**
+ * Full-bleed album art on the media circle. No idle spin.
+ *
+ * Playing = cover + the chip's position ring. Paused = cover + a quiet play mark (visual
+ * only — the chip's tap still opens the card). Track change = crossfade + one-shot 360°
+ * turn (a 180° Z rotation would invert the cover).
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun LaneMediaCover(event: IslandEvent.Media, tint: Color, size: Dp) {
+    val motionScheme = MaterialTheme.motionScheme
+    val trackKey = "${event.track}|${event.artist}"
+    val turn = remember { Animatable(0f) }
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(trackKey) {
+        if (!armed) {
+            armed = true
+            return@LaunchedEffect
+        }
+        turn.snapTo(0f)
+        // Full turn, not 180°: a half-turn around Z leaves the cover inverted.
+        turn.animateTo(360f, tween(450, easing = FastOutSlowInEasing))
+    }
+    Box(
+        modifier =
+            Modifier.size(size)
+                .graphicsLayer { rotationZ = turn.value }
+                .clip(CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(
+            targetState = event.albumArt,
+            transitionSpec = {
+                (fadeIn(motionScheme.defaultEffectsSpec()) +
+                    scaleIn(
+                        initialScale = 0.88f,
+                        animationSpec = motionScheme.defaultSpatialSpec(),
+                    )) togetherWith
+                    (fadeOut(motionScheme.fastEffectsSpec()) +
+                        scaleOut(
+                            targetScale = 0.88f,
+                            animationSpec = motionScheme.fastSpatialSpec(),
+                        )) using
+                    SizeTransform(
+                        clip = false,
+                        sizeAnimationSpec = { _, _ -> motionScheme.defaultSpatialSpec() },
+                    )
+            },
+            contentKey = { it?.hashCode() ?: 0 },
+            label = "kg_lane_media_art",
+        ) { art ->
+            if (art != null) {
+                Image(
+                    bitmap = art.toScaledBitmap(size),
+                    contentDescription = null,
+                    modifier = Modifier.size(size).clip(CircleShape),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(size),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ScaledPillEventIcon(event, tint, size - SpaceLg, animated = false)
+                }
+            }
+        }
+        if (!event.isPlaying) {
+            Box(
+                modifier =
+                    Modifier.size(size)
+                        .background(Color.Black.copy(alpha = 0.38f)),
+            )
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.92f),
+                modifier = Modifier.size(size * 0.42f),
             )
         }
     }
@@ -129,22 +228,26 @@ internal fun KeyguardEventChip(
 @Composable
 private fun LaneEventIcon(event: IslandEvent, tint: Color, size: Dp) {
     val drawable = pillIconDrawable(event)
-    when {
-        drawable == null -> ScaledPillEventIcon(event, tint, size)
-        event is IslandEvent.Media -> PillAlbumArt(drawable, size, spinning = event.isPlaying)
-        else ->
-            Image(
-                bitmap = drawable.toScaledBitmap(size),
-                contentDescription = null,
-                modifier =
-                    Modifier.size(size).clip(if (pillIconIsRound(event)) CircleShape else ShapeXs),
-                contentScale = ContentScale.Crop,
-            )
+    if (drawable == null) {
+        ScaledPillEventIcon(event, tint, size)
+    } else {
+        Image(
+            bitmap = drawable.toScaledBitmap(size),
+            contentDescription = null,
+            modifier =
+                Modifier.size(size).clip(if (pillIconIsRound(event)) CircleShape else ShapeXs),
+            contentScale = ContentScale.Crop,
+        )
     }
 }
 
 @Composable
-internal fun ScaledPillEventIcon(event: IslandEvent, tint: Color, size: Dp) {
+internal fun ScaledPillEventIcon(
+    event: IslandEvent,
+    tint: Color,
+    size: Dp,
+    animated: Boolean = true,
+) {
     val native = SizeBadge
     val factor = size / native
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
@@ -154,7 +257,7 @@ internal fun ScaledPillEventIcon(event: IslandEvent, tint: Color, size: Dp) {
                 scaleY = factor
             }
         ) {
-            PillEventIcon(event, tint = tint)
+            PillEventIcon(event, tint = tint, animated = animated)
         }
     }
 }
