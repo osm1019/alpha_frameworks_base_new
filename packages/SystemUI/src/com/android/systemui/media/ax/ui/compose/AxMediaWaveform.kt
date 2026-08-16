@@ -53,12 +53,16 @@ fun interface AxWaveformSource {
  *
  * A phase offset proportional to the bar index (the obvious formulation) produces a wave that
  * travels sideways, which is not what the reference badge does.
+ *
+ * [AxWaveform] drives phase 0→1 and restarts. `sin((phase * rate + start) * 2π)` only meets
+ * itself at that wrap when rate is an integer; the extra harmonic must be an integer too,
+ * or the loop hitch is visible. Rates stay 1 or 2 so neighbouring bars still desync.
  */
 val SyntheticWaveformSource = AxWaveformSource { barCount, phase, seed ->
     FloatArray(barCount) { index ->
         val hash = (index * 2654435761u.toInt() + seed * 40503).let { it xor (it ushr 13) }
         val startPhase = (hash and 0xFF) / 255f
-        val rate = 0.75f + ((hash ushr 8) and 0xFF) / 255f * 1.1f
+        val rate = 1f + ((hash ushr 8) and 1)
         val wobble = 0.35f + ((hash ushr 16) and 0xFF) / 255f * 0.5f
         val turn = (phase * rate + startPhase) * 2f * PI.toFloat()
         val envelope =
@@ -67,7 +71,7 @@ val SyntheticWaveformSource = AxWaveformSource { barCount, phase, seed ->
                 val centred = abs(index - (barCount - 1) / 2f) / ((barCount - 1) / 2f)
                 0.6f + 0.4f * (1f - centred * centred)
             }
-        val level = 0.55f + 0.45f * sin(turn) * wobble + 0.12f * sin(turn * 2.7f)
+        val level = 0.55f + 0.45f * sin(turn) * wobble + 0.12f * sin(turn * 3f)
         level.coerceIn(0f, 1f) * envelope
     }
 }
