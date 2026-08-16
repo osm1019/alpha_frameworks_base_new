@@ -85,11 +85,18 @@ internal fun pickPersistentIndication(
     }
 }
 
-internal fun batteryForLane(mode: Int, info: KeyguardBatteryInfo): KeyguardBatteryInfo? {
-    if (mode <= 0) return null
-    if (mode == 1 && !info.isCharging) return null
-    return info
-}
+/**
+ * Charging only. An idle battery circle repeats the status bar — which cannot be hidden, since
+ * the styled battery pipeline never reads the icon hide list — while permanently costing the
+ * lane one of its four slots. Charging is the state nothing else on the keyguard shows: AOSP's
+ * own indication is suppressed here and was never forwarded to the Dynamic Bar.
+ *
+ * [dismissed] is the battery card's dismiss. It has to be passed in because the occupant is not an
+ * event: there is no id for `dismissedEventIds` to hold, so the caller owns the flag and clears it
+ * when the charging session ends — the same lifetime a dismissed event gets.
+ */
+internal fun batteryForLane(info: KeyguardBatteryInfo, dismissed: Boolean): KeyguardBatteryInfo? =
+    info.takeIf { it.isCharging && !dismissed }
 
 /**
  * First rule that produces content wins:

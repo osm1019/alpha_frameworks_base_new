@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -1150,6 +1152,68 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
         }
     }
 }
+}
+
+/**
+ * The battery card, opened from the lane's battery occupant.
+ *
+ * Its own entry point rather than a panel of [KeyguardExpandedContent]: `IslandEvent.Charging` is
+ * filtered on the keyguard so there is never a second charging display, which leaves the occupant
+ * with no stack event to pin. The [event] is read straight off `ChargingEventSource`.
+ *
+ * The body is [ChargingExpanded] unchanged — that layout already states charge type, level, time
+ * remaining and the power / current / voltage / temperature block, and [KeyguardPanelSurface] is
+ * the same `DbStackCard` surface its `OnCard*` colours were measured against. Only the actions are
+ * new; the stack card has none. No battery saver among them: the card only ever opens on a charging
+ * battery, so the toggle would have no context to act in.
+ *
+ * [onDismiss] drops the lane occupant, not the card — the card closing is a side effect, the same
+ * way it is for every other dismiss on this surface. [onCollapse] is the scrim.
+ */
+@Composable
+internal fun KeyguardBatteryPanel(
+    event: IslandEvent.Charging,
+    interactor: IslandActions,
+    onCollapse: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onCollapse() },
+        contentAlignment = Alignment.Center,
+    ) {
+        KeyguardPanelSurface {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(SpaceSection),
+                verticalArrangement = Arrangement.spacedBy(SpaceXxl),
+            ) {
+                ChargingExpanded(event, interactor)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(SpaceMd)) {
+                    ExpressivePillButton(
+                        label = stringResource(R.string.ax_dynamic_bar_battery_usage),
+                        icon = Icons.Filled.BarChart,
+                        contentColor = BlueAccent,
+                        backgroundColor = BlueAccent.copy(alpha = AlphaFaint),
+                        modifier = Modifier.weight(1f),
+                        onClick = { interactor.openBatteryStats() },
+                    )
+                    ExpressivePillButton(
+                        label = stringResource(R.string.ax_dynamic_bar_dismiss),
+                        icon = Icons.Filled.Close,
+                        contentColor = RedAccent,
+                        backgroundColor = RedAccent.copy(alpha = AlphaFaint),
+                        modifier = Modifier.weight(1f),
+                        onClick = onDismiss,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

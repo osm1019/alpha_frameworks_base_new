@@ -239,6 +239,7 @@
     <string name="ax_dynamic_bar_hotspot_devices"><xliff:g id="count" example="3">%d</xliff:g> devices</string>
     <string name="ax_dynamic_bar_until_full">until full</string>
     <string name="ax_dynamic_bar_battery_saver">Battery Saver</string>
+    <string name="ax_dynamic_bar_battery_usage">Battery usage</string>
     <string name="ax_dynamic_bar_call">Call</string>
     <string name="ax_dynamic_bar_incoming_call">Incoming Call</string>
     <string name="ax_dynamic_bar_connected">Connected</string>

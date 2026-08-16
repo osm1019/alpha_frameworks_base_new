@@ -86,7 +86,7 @@ constructor(
                 val scope = this
                 scope.launch {
                     viewModel.keyguardExpansion.collapseSettled.collect {
-                        if (!viewModel.keyguardExpansion.isExpanded.value) {
+                        if (!viewModel.keyguardExpansion.isAnyExpanded.value) {
                             applyCollapsedLp(composeView, viewModel.isLowUdfps.value)
                             setHiddenViewsVisibility(constraintLayout, View.VISIBLE)
                         }

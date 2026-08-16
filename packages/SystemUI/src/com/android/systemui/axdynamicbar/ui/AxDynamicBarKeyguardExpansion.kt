@@ -48,7 +48,12 @@ constructor(
             .map { it.shouldShow && it.topEvent != null }
             .distinctUntilChanged()
 
-    val canShow: StateFlow<Boolean> = run {
+    /**
+     * Context gate shared by both cards: on the keyguard, awake, with nothing else expanded over
+     * it. Deliberately excludes [hasChip] — the battery card's occupant is a lane member, not a
+     * stack event, so it can legitimately be the only thing on the lockscreen.
+     */
+    private val canShowCard: StateFlow<Boolean> = run {
         val contextAndDoze =
             combine(
                 interactor.isOnKeyguard,
@@ -63,17 +68,45 @@ constructor(
             combine(
                 interactor.isBouncerShowing,
                 interactor.legacyShadeExpansion.map { it >= 0.95f }.distinctUntilChanged(),
-                hasChip,
-            ) { bouncer, shadeFull, chip ->
-                !bouncer && shadeFull && chip
+            ) { bouncer, shadeFull ->
+                !bouncer && shadeFull
             }
         combine(contextAndDoze, shadeAndBouncer) { a, b -> a && b }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, false)
     }
 
+    val canShow: StateFlow<Boolean> =
+        combine(canShowCard, hasChip) { context, chip -> context && chip }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
+
     val isExpanded: StateFlow<Boolean> =
         combine(_intent, canShow) { intent, show -> intent && show }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Lazily, false)
+
+    private val _batteryIntent = MutableStateFlow(false)
+
+    /**
+     * The battery card. `IslandEvent.Charging` is filtered on the keyguard so there are never two
+     * charging displays, which leaves the lane's battery occupant with no event to pin — hence a
+     * path of its own rather than [expandPinned].
+     */
+    val isBatteryExpanded: StateFlow<Boolean> =
+        combine(_batteryIntent, canShowCard) { intent, show -> intent && show }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Lazily, false)
+
+    /**
+     * Either card is up.
+     *
+     * What the keyguard section acts on: swapping the host view to expanded layout params and
+     * hiding the notification stack / masking the clock are properties of *a card being open*,
+     * not of which one. Keep [isExpanded] for anything that renders the event card itself.
+     */
+    val isAnyExpanded: StateFlow<Boolean> =
+        combine(isExpanded, isBatteryExpanded) { event, battery -> event || battery }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Lazily, false)
 
@@ -121,11 +154,19 @@ constructor(
 
     fun expand() {
         if (interactor.uiState.value.topEvent == null) return
+        _batteryIntent.value = false
         _intent.value = true
+    }
+
+    /** Only one card at a time; the battery tap closes an event card that is already open. */
+    fun expandBattery() {
+        _intent.value = false
+        _batteryIntent.value = true
     }
 
     fun collapse() {
         _intent.value = false
+        _batteryIntent.value = false
     }
 
     fun toggle() {

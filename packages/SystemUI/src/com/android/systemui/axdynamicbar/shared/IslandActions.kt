@@ -54,4 +54,5 @@ interface IslandActions {
     fun onNotificationAlertInteractionStart()
     fun onNotificationAlertInteractionEnd()
     fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification)
+    fun openBatteryStats()
 }

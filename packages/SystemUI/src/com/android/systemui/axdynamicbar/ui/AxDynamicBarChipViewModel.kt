@@ -103,7 +103,6 @@ constructor(
 
     val isEnabled: StateFlow<Boolean> = interactor.settings.isEnabled
     val isKeyguardEnabled: StateFlow<Boolean> = interactor.settings.isKeyguardEnabled
-    val keyguardBatteryChipMode: StateFlow<Int> = interactor.settings.keyguardBatteryChipMode
     val collapseToRing: StateFlow<Boolean> = interactor.settings.collapseToRing
     val ringGap: StateFlow<Float> = interactor.settings.ringGap
     val ringScaleX: StateFlow<Float> = interactor.settings.ringScaleX
@@ -126,6 +125,15 @@ constructor(
     val cutoutRectPx: StateFlow<android.graphics.Rect?> =
         interactor.cutoutRectPx
             .stateIn(applicationScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The charging event the source already builds, read directly rather than through the stack.
+     *
+     * `IslandEvent.Charging` is filtered on the keyguard so the lane's battery occupant is the
+     * only charging display; borrowing it here gives the card watts / amps / volts / temperature
+     * without putting the event back into the stack to compete for a lane slot.
+     */
+    val chargingEvent: StateFlow<IslandEvent.Charging?> = chargingEventSource.chargingEvent
 
     // isActuallyCharging, not batteryInteractor.isCharging: the latter is "plugged in", which
     // stays true under bypass charging and would leave this chip showing a charging session
@@ -151,17 +159,31 @@ constructor(
         )
 
     /**
+     * The battery card's dismiss, held here because the occupant has no event to suppress.
+     *
+     * Cleared when the charging session ends (see [init]), which is the lifetime
+     * `dismissedEventIds` gives a dismissed event: gone until the thing it describes is.
+     */
+    private val _batteryDismissed = MutableStateFlow(false)
+
+    /** Drops the battery occupant for the rest of this charging session, and closes its card. */
+    fun dismissBattery() {
+        _batteryDismissed.value = true
+        keyguardExpansion.collapse()
+    }
+
+    /**
      * Lockscreen lane inputs. Occupancy (temporary indication / row / persistent indication)
      * is resolved in composition once the usable width is known.
      */
     internal val keyguardLaneInputs: StateFlow<KeyguardLaneInputs> =
         combine(
             interactor.keyguardIndications,
-            keyguardBatteryChipMode,
             keyguardBatteryInfo,
             interactor.uiState,
             interactor.isOnKeyguard,
-        ) { indications, mode, battery, ui, onKg ->
+            _batteryDismissed,
+        ) { indications, battery, ui, onKg, batteryDismissed ->
             if (!onKg) {
                 KeyguardLaneInputs(null, null, null, emptyList())
             } else {
@@ -169,7 +191,7 @@ constructor(
                 KeyguardLaneInputs(
                     temporaryIndication = pickTemporaryIndication(values),
                     persistentIndication = pickPersistentIndication(values),
-                    battery = batteryForLane(mode, battery),
+                    battery = batteryForLane(battery, batteryDismissed),
                     events = ui.events,
                 )
             }
@@ -181,6 +203,13 @@ constructor(
             )
 
     init {
+        applicationScope.launch {
+            keyguardBatteryInfo
+                .map { it.isCharging }
+                .distinctUntilChanged()
+                .collect { if (!it) _batteryDismissed.value = false }
+        }
+
         applicationScope.launch {
             interactor.uiState
                 .map { state ->
@@ -259,7 +288,11 @@ constructor(
     private val _showAllEvents = MutableStateFlow(false)
     val showAllEvents: StateFlow<Boolean> = _showAllEvents.asStateFlow()
 
-    val isKeyguardExpanded: StateFlow<Boolean> = keyguardExpansion.isExpanded
+    /** Either card — drives the host view's layout swap and the hidden keyguard views. */
+    val isKeyguardExpanded: StateFlow<Boolean> = keyguardExpansion.isAnyExpanded
+
+    /** The event card specifically, for the composable that renders it. */
+    val isEventExpanded: StateFlow<Boolean> = keyguardExpansion.isExpanded
 
     @Volatile private var collapseOnNullJob: Job? = null
 

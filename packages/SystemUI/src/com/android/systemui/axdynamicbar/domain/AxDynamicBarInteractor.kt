@@ -741,6 +741,22 @@ constructor(
 
     override fun toggleTorch() = repository.torch.toggleTorch()
 
+    /**
+     * Battery usage, not the battery page: `ACTION_POWER_USAGE_SUMMARY` lands on Settings' battery
+     * screen, one level above the stats this card's button names. Dismisses the keyguard first —
+     * this is a real Settings activity, not an in-place toggle, so it cannot render behind the lock.
+     */
+    override fun openBatteryStats() {
+        val intent = Intent().apply {
+            component = ComponentName(
+                "com.android.settings",
+                "com.android.settings.Settings\$PowerUsageAdvancedActivity",
+            )
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        activityStarter.startActivity(intent, true /* dismissShade */)
+    }
+
     override fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification) {
         val intent = event.sbn.notification?.contentIntent ?: return
         activityStarter.startPendingIntentDismissingKeyguard(intent)

@@ -152,8 +152,13 @@ fun AxDynamicBarKeyguardChip(
     val isEnabled by viewModel.isEnabled.collectAsStateWithLifecycle()
     val isKeyguardEnabled by viewModel.isKeyguardEnabled.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
+    val isEventExpanded by viewModel.isEventExpanded.collectAsStateWithLifecycle()
     val lockscreenMediaStyle by viewModel.lockscreenMediaStyle.collectAsStateWithLifecycle()
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
+    val isBatteryExpanded by
+        viewModel.keyguardExpansion.isBatteryExpanded.collectAsStateWithLifecycle()
+    val chargingEvent by viewModel.chargingEvent.collectAsStateWithLifecycle()
+    val batteryInfo by viewModel.keyguardBatteryInfo.collectAsStateWithLifecycle()
 
     val motionScheme = MaterialTheme.motionScheme
     val blurred = rememberChipBlurEnabled()
@@ -161,7 +166,7 @@ fun AxDynamicBarKeyguardChip(
     Box(modifier = modifier) {
 
         val expandedVisibleState = remember { MutableTransitionState(false) }
-        expandedVisibleState.targetState = isKeyguardExpanded && state != null
+        expandedVisibleState.targetState = isEventExpanded && state != null
         LaunchedEffect(expandedVisibleState.isIdle, expandedVisibleState.currentState) {
             if (expandedVisibleState.isIdle && !expandedVisibleState.currentState) {
                 viewModel.keyguardExpansion.notifyCollapseSettled()
@@ -183,6 +188,31 @@ fun AxDynamicBarKeyguardChip(
                     onCollapse = { viewModel.keyguardExpansion.collapse() },
                     hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,
                     lockscreenMediaStyle = lockscreenMediaStyle,
+                )
+            }
+        }
+
+        val batteryVisibleState = remember { MutableTransitionState(false) }
+        batteryVisibleState.targetState = isBatteryExpanded && chargingEvent != null
+        LaunchedEffect(batteryVisibleState.isIdle, batteryVisibleState.currentState) {
+            if (batteryVisibleState.isIdle && !batteryVisibleState.currentState) {
+                viewModel.keyguardExpansion.notifyCollapseSettled()
+            }
+        }
+        AnimatedVisibility(
+            visibleState = batteryVisibleState,
+            enter = fadeIn(motionScheme.defaultEffectsSpec()),
+            exit = fadeOut(tween(durationMillis = 250)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center),
+        ) {
+            chargingEvent?.let {
+                KeyguardBatteryPanel(
+                    event = it,
+                    interactor = viewModel.interactor,
+                    onCollapse = { viewModel.keyguardExpansion.collapse() },
+                    onDismiss = { viewModel.dismissBattery() },
                 )
             }
         }
@@ -281,7 +311,13 @@ private fun KeyguardSoloOccupant(
 ) {
     when (occupant) {
         is KeyguardLaneOccupant.Battery ->
-            KeyguardBatteryChip(occupant.info, batteryString, height, blurred)
+            KeyguardBatteryChip(
+                occupant.info,
+                batteryString,
+                height,
+                blurred,
+                onClick = { viewModel.keyguardExpansion.expandBattery() },
+            )
         is KeyguardLaneOccupant.Event -> {
             val event = occupant.event
             val rawAccent = chipAccentColorFor(event)
@@ -343,7 +379,12 @@ private fun KeyguardChipRow(
         items.forEach { item ->
             when (item) {
                 is KeyguardLaneOccupant.Battery ->
-                    KeyguardBatteryCircle(item.info, height, blurred)
+                    KeyguardBatteryCircle(
+                        item.info,
+                        height,
+                        blurred,
+                        onClick = { viewModel.keyguardExpansion.expandBattery() },
+                    )
                 is KeyguardLaneOccupant.Event ->
                     KeyguardEventChip(
                         event = item.event,
@@ -807,6 +848,7 @@ private fun KeyguardBatteryChip(
     batteryString: String,
     height: Dp,
     blurred: Boolean,
+    onClick: () -> Unit,
 ) {
     val accent = when {
         info.isCharging -> BatteryChargingColor
@@ -822,7 +864,10 @@ private fun KeyguardBatteryChip(
     // charging string, and at 32dp it ate the twelve points the tail of that string needs.
     val iconSize = SizeIconSm
 
-    Box(contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier.clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
         if (blurred) {
             ChipGlassBackdrop(corner = height / 2, modifier = Modifier.matchParentSize())
         }
@@ -929,6 +974,7 @@ private fun KeyguardBatteryCircle(
     info: KeyguardBatteryInfo,
     size: Dp,
     blurred: Boolean,
+    onClick: () -> Unit,
 ) {
     // Neutral plate, unlike the text pill: the ring is the level and it has to keep its band
     // colour, which a body lerped 62% toward the same accent would swallow.
@@ -945,7 +991,7 @@ private fun KeyguardBatteryCircle(
         }
     }
     Box(
-        modifier = Modifier.size(size),
+        modifier = Modifier.size(size).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         if (blurred) {
