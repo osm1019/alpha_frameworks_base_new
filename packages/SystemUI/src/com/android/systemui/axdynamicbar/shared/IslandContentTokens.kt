@@ -223,6 +223,22 @@ internal data class IslandGlassChrome(
 private const val MinContentContrast = AlphaMetrics.minContentContrast
 
 /**
+ * Floor for a 2dp progress stroke on a known plate. Above the 3:1 component
+ * minimum: that ratio assumes a shape you can find, and a hairline arc on a
+ * tinted circle is not one — 3:1 was invisible in light mode on device.
+ */
+private const val MinProgressContrast = 4.5
+
+private const val ProgressLightnessStep = 0.04f
+private const val ProgressLightnessSteps = 25
+
+/** Track is the chip's own content colour, already proven against this plate. */
+internal const val ProgressTrackAlpha = 0.3f
+
+private const val BatteryLowLevel = 15
+private const val BatteryMidLevel = 30
+
+/**
  * Content that stays legible on [body], picked from [first] and [second].
  *
  * Candidates come from the caller's own surface object, so a chip and a pill are free to disagree
@@ -272,8 +288,9 @@ internal fun dbStatusBarChipChrome(accent: Color, blurred: Boolean = false): Isl
 /**
  * Chrome for the lockscreen pill. [accent] is from [chipAccentColorFor].
  *
- * @param isMedia media alone keeps the body untinted: the pill sits between the two keyguard
- *   shortcut buttons and the bottom row has to read as one band.
+ * @param untinted keep the body neutral. Media takes this because the pill sits between the two
+ *   keyguard shortcut buttons and the bottom row has to read as one band; battery takes it so a
+ *   level-coded ring is not drawn on a plate lerped toward the same hue.
  * @param blurred `null` keeps the body opaque (NowBar and other non-glass callers). Non-null
  *   applies the same alpha pair as [dbStatusBarChipChrome]: [AlphaColors.DbLockscreenPill.bodyAlpha]
  *   when frost is mounted, [AlphaColors.DbLockscreenPill.bodyAlphaNoBlur] when it is not.
@@ -281,14 +298,14 @@ internal fun dbStatusBarChipChrome(accent: Color, blurred: Boolean = false): Isl
 @Composable
 internal fun dbLockscreenPillChrome(
     accent: Color,
-    isMedia: Boolean,
+    untinted: Boolean,
     blurred: Boolean? = null,
 ): IslandGlassChrome {
     val pill = AlphaColors.DbLockscreenPill
     fun glass(color: Color): Color =
         if (blurred == null) color
         else color.copy(alpha = if (blurred) pill.bodyAlpha else pill.bodyAlphaNoBlur)
-    if (isMedia) {
+    if (untinted) {
         return IslandGlassChrome(
             body = glass(pill.mediaBody),
             border = pill.mediaRim,
@@ -447,17 +464,84 @@ internal fun chipAccentColorFor(event: IslandEvent): Color {
  *
  * Normalising instead keeps the artwork's hue and chroma at the vividness the event palette sits
  * at, so a media chip carries the same weight of colour as a charging or timer one.
+ *
+ * @param luminance the drawing surface's target. Defaults to the status-bar chip because that is
+ *   where this started; a theme-following surface must pass its own, or the accent is normalised
+ *   for a body it is not being drawn on.
  */
 @Composable
-internal fun chipTintAccentFor(event: IslandEvent): Color =
+internal fun chipTintAccentFor(
+    event: IslandEvent,
+    luminance: Float = AlphaColors.DbStatusBarChip.accentTintLuminance,
+): Color =
     if (event is IslandEvent.Media && event.mediaColor != 0) {
-        MediaChrome.accentTint(
-            Color(event.mediaColor),
-            AlphaColors.DbStatusBarChip.accentTintLuminance,
-        )
+        MediaChrome.accentTint(Color(event.mediaColor), luminance)
     } else {
         chipAccentColorFor(event)
     }
+
+/**
+ * Level bands for the battery ring. Red and orange are the whole point of the
+ * ring — a bolt already says "charging", only the sweep can say "nearly flat".
+ */
+@Composable
+internal fun batteryLevelColor(level: Int): Color =
+    when {
+        level <= BatteryLowLevel -> RedAccent
+        level <= BatteryMidLevel -> OrangeAccent
+        else -> GreenAccent
+    }
+
+/**
+ * Stroke colour for a lockscreen circle ring on a known [plate].
+ *
+ * [chipTintAccentFor] already answers "what colour is this event" — the session
+ * colour normalised to the event palette's vividness for media, the accent for
+ * everything else. The ring only has to make that legible where it lands.
+ */
+@Composable
+internal fun chipProgressColorFor(event: IslandEvent, plate: Color): Color =
+    progressColorOn(
+        chipTintAccentFor(event, AlphaColors.DbLockscreenPill.accentTintLuminance),
+        plate,
+    )
+
+/**
+ * [candidate] made legible on [plate], keeping its hue.
+ *
+ * A 2dp stroke needs more separation than body text at the same ratio, hence
+ * [MinProgressContrast] above the usual component floor. When the candidate
+ * cannot clear it, walk its lightness away from the plate rather than snapping
+ * to black or white — a level band or a session colour that turns monochrome
+ * has stopped saying the thing it was chosen to say.
+ */
+internal fun progressColorOn(candidate: Color, plate: Color): Color {
+    val bg = plate.copy(alpha = 1f).toArgb()
+    if (ColorUtils.calculateContrast(candidate.toArgb(), bg) >= MinProgressContrast) {
+        return candidate
+    }
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(candidate.toArgb(), hsl)
+    // Monet album colours are low-chroma pastels. Dragging one down in lightness without this
+    // floor lands on brown, which reads as washed rather than as the accent it came from.
+    hsl[1] = hsl[1].coerceAtLeast(AlphaMetrics.mediaAccentFillSaturationFloor)
+    val darken = ColorUtils.calculateLuminance(bg) > 0.5
+    var best = candidate
+    var bestContrast = ColorUtils.calculateContrast(candidate.toArgb(), bg)
+    var lightness = hsl[2]
+    repeat(ProgressLightnessSteps) {
+        lightness = (lightness + if (darken) -ProgressLightnessStep else ProgressLightnessStep)
+        if (lightness < 0f || lightness > 1f) return best
+        val shifted = ColorUtils.HSLToColor(floatArrayOf(hsl[0], hsl[1], lightness))
+        val contrast = ColorUtils.calculateContrast(shifted, bg)
+        if (contrast >= MinProgressContrast) return Color(shifted)
+        if (contrast > bestContrast) {
+            bestContrast = contrast
+            best = Color(shifted)
+        }
+    }
+    return best
+}
 
 @Composable
 private fun rememberPaletteColor(drawable: Drawable): Color? {

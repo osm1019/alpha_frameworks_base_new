@@ -53,8 +53,10 @@ import com.android.systemui.axdynamicbar.shared.ShapeXs
 import com.android.systemui.axdynamicbar.shared.SizeBadge
 import com.android.systemui.axdynamicbar.shared.SpaceLg
 import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
+import com.android.systemui.axdynamicbar.shared.chipProgressColorFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.dbLockscreenPillChrome
+import com.android.systemui.axdynamicbar.shared.ProgressTrackAlpha
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import kotlin.math.abs
@@ -76,9 +78,12 @@ internal fun KeyguardEventChip(
     val rawAccent = chipAccentColorFor(event)
     val accent by
         animateColorAsState(rawAccent, motionScheme.fastEffectsSpec(), label = "kg_chip_accent")
-    val chrome = dbLockscreenPillChrome(accent, isMedia = event is IslandEvent.Media, blurred = blurred)
+    val chrome = dbLockscreenPillChrome(accent, untinted = event is IslandEvent.Media, blurred = blurred)
     val contentColor by
         animateColorAsState(chrome.content, motionScheme.fastEffectsSpec(), label = "kg_chip_content")
+    val rawProgressColor = chipProgressColorFor(event, chrome.body)
+    val progressColor by
+        animateColorAsState(rawProgressColor, motionScheme.fastEffectsSpec(), label = "kg_chip_progress")
     val rawProgress = chipProgressFor(event)
     val progressTarget = rawProgress ?: 0f
     val progressAnim = remember { Animatable(progressTarget) }
@@ -116,7 +121,8 @@ internal fun KeyguardEventChip(
         if (progress != null) {
             KeyguardChipProgressRing(
                 progress = progress,
-                accent = accent,
+                fill = progressColor,
+                track = contentColor.copy(alpha = ProgressTrackAlpha),
                 modifier = Modifier.size(size),
             )
         }
@@ -166,12 +172,7 @@ private fun LaneEventIcon(event: IslandEvent, tint: Color, size: Dp) {
 }
 
 @Composable
-internal fun ScaledPillEventIcon(
-    event: IslandEvent,
-    tint: Color,
-    size: Dp,
-    animated: Boolean = true,
-) {
+internal fun ScaledPillEventIcon(event: IslandEvent, tint: Color, size: Dp) {
     val native = SizeBadge
     val factor = size / native
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
@@ -181,7 +182,7 @@ internal fun ScaledPillEventIcon(
                 scaleY = factor
             }
         ) {
-            PillEventIcon(event, tint = tint, animated = animated)
+            PillEventIcon(event, tint = tint)
         }
     }
 }
@@ -189,27 +190,24 @@ internal fun ScaledPillEventIcon(
 /**
  * 0–360° sweep from 12 o'clock. Determinate progress only.
  *
- * Fill is the event accent (charging green, album colour, …). A dark halo and a 2dp
- * stroke keep it readable on glass and on album art; the hue is not washed toward
- * onSurface.
+ * [track] is the full circle (total / missing), [fill] the swept part (done).
+ * Both are picked against the plate by the caller, so nothing is drawn here
+ * that has not already been checked for contrast — no halo underneath.
  */
 @Composable
 internal fun KeyguardChipProgressRing(
     progress: Float,
-    accent: Color,
+    fill: Color,
+    track: Color,
     modifier: Modifier = Modifier,
 ) {
     Canvas(modifier) {
         val stroke = 2.dp.toPx()
-        val halo = 3.5.dp.toPx()
         val inset = stroke / 2 + 1.dp.toPx()
         val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
         val topLeft = Offset(inset, inset)
-        val haloStyle = Stroke(width = halo, cap = StrokeCap.Round)
         val style = Stroke(width = stroke, cap = StrokeCap.Round)
-        val haloColor = Color.Black.copy(alpha = 0.5f)
-        val track = accent.copy(alpha = 0.32f)
-        fun arc(color: Color, sweep: Float, strokeStyle: Stroke) {
+        fun arc(color: Color, sweep: Float) {
             drawArc(
                 color = color,
                 startAngle = -90f,
@@ -217,15 +215,10 @@ internal fun KeyguardChipProgressRing(
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
-                style = strokeStyle,
+                style = style,
             )
         }
-        arc(haloColor, 360f, haloStyle)
-        arc(track, 360f, style)
-        if (progress > 0f) {
-            val sweep = 360f * progress
-            arc(haloColor, sweep, haloStyle)
-            arc(accent, sweep, style)
-        }
+        arc(track, 360f)
+        if (progress > 0f) arc(fill, 360f * progress)
     }
 }

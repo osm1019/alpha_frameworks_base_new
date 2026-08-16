@@ -272,6 +272,10 @@ object AlphaColors {
          * Not the same number as a *fill* takes ([AlphaMetrics.mediaAccentFillLuminance]) — a fill has a hard
          * ceiling because [AlphaColors.onAccentColor] must read on it, a tint has none because the text is
          * measured against the mixed result afterwards. Set to where the event palette sits.
+         *
+         * A single constant is correct **here and only here**: this chip's body is night-locked, so
+         * the surface under the accent never changes. Theme-following surfaces need a pair — see
+         * [DbLockscreenPill.accentTintLuminance].
          */
         const val accentTintLuminance = 0.38f
     }
@@ -289,6 +293,22 @@ object AlphaColors {
      * neutral circles broke the row.
      */
     object DbLockscreenPill {
+
+        /**
+         * Relative luminance an album colour is normalised to on this surface.
+         *
+         * **Paired, not a constant.** This is the difference between here and
+         * [DbStatusBarChip.accentTintLuminance], and getting it wrong is a recurring bug rather
+         * than a one-off: the Dynamic Bar's lockscreen pill was dark on every theme when the
+         * colour model was written, so one target sufficed. Once [body] became theme-following a
+         * single number can only be right on one of the two — 0.38 against the light body is
+         * about 1.9:1, which is the "washed accent in day mode" report.
+         *
+         * Solve the light value against the light [body], not by eye. Same shape as the stack's
+         * `ensureContrast` bands: bright accent on a dark surface, dark accent on a light one.
+         */
+        val accentTintLuminance: Float
+            @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.38f else 0.12f
 
         /** Base the event accent tints, for every event except media. */
         val body: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh

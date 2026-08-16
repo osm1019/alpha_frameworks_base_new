@@ -292,7 +292,7 @@ private fun KeyguardSoloOccupant(
             )
             val chrome = dbLockscreenPillChrome(
                 rawAccent,
-                isMedia = event is IslandEvent.Media,
+                untinted = event is IslandEvent.Media,
                 blurred = blurred,
             )
             val contentColor by animateColorAsState(
@@ -372,7 +372,7 @@ private fun KeyguardIndicationPill(
     laneWidth: Dp,
 ) {
     val accent = chipAccentColorFor(indication)
-    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
+    val chrome = dbLockscreenPillChrome(accent, untinted = false, blurred = blurred)
     Box(contentAlignment = Alignment.Center) {
         if (blurred) {
             ChipGlassBackdrop(corner = height / 2, modifier = Modifier.matchParentSize())
@@ -437,7 +437,7 @@ private fun KeyguardChipBody(
     // Glass shell for every event: media = neutral glass; others keep event hue as a tint
     // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
     // media buttons + progress.
-    val chrome = dbLockscreenPillChrome(accent, isMedia = isMedia, blurred = blurred)
+    val chrome = dbLockscreenPillChrome(accent, untinted = isMedia, blurred = blurred)
     val bodyColor = chrome.body
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
     val progressTrack =
@@ -813,7 +813,7 @@ private fun KeyguardBatteryChip(
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }
-    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
+    val chrome = dbLockscreenPillChrome(accent, untinted = false, blurred = blurred)
     val contentColor = chrome.content
 
     val parts = rememberChargingParts(batteryString)
@@ -930,12 +930,10 @@ private fun KeyguardBatteryCircle(
     size: Dp,
     blurred: Boolean,
 ) {
-    val accent = when {
-        info.isCharging -> BatteryChargingColor
-        info.isPowerSave -> BatteryPowerSaveColor
-        else -> BatteryNeutralColor
-    }
-    val chrome = dbLockscreenPillChrome(accent, isMedia = false, blurred = blurred)
+    // Neutral plate, unlike the text pill: the ring is the level and it has to keep its band
+    // colour, which a body lerped 62% toward the same accent would swallow.
+    val chrome = dbLockscreenPillChrome(Color.Unspecified, untinted = true, blurred = blurred)
+    val levelColor = batteryLevelColor(info.level)
     val iconSize = size - SpaceLg
     val levelTarget = (info.level / 100f).coerceIn(0f, 1f)
     val levelAnim = remember { Animatable(levelTarget) }
@@ -967,7 +965,8 @@ private fun KeyguardBatteryCircle(
         }
         KeyguardChipProgressRing(
             progress = levelAnim.value,
-            accent = accent,
+            fill = progressColorOn(levelColor, chrome.body),
+            track = chrome.content.copy(alpha = ProgressTrackAlpha),
             modifier = Modifier.size(size),
         )
     }
