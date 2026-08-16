@@ -967,8 +967,7 @@ private fun KeyguardBatteryCircle(
         }
         KeyguardChipProgressRing(
             progress = levelAnim.value,
-            track = lerp(accent, chrome.content, 0.2f),
-            fill = lerp(accent, chrome.content, 0.6f),
+            accent = accent,
             modifier = Modifier.size(size),
         )
     }

@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -120,15 +119,15 @@ internal fun KeyguardEventChip(
                     .border(AlphaColors.DbLockscreenPill.rimWidth, chrome.border, CircleShape)
         )
         if (event is IslandEvent.Media) {
-            LaneMediaCover(event, contentColor, size)
+            // Leave a glass gutter so the progress ring is not painted on the cover.
+            LaneMediaCover(event, contentColor, size - 8.dp)
         } else {
             LaneEventIcon(event, contentColor, size - SpaceLg)
         }
         if (progress != null) {
             KeyguardChipProgressRing(
                 progress = progress,
-                track = lerp(accent, contentColor, 0.2f),
-                fill = lerp(accent, contentColor, 0.6f),
+                accent = accent,
                 modifier = Modifier.size(size),
             )
         }
@@ -262,40 +261,46 @@ internal fun ScaledPillEventIcon(
     }
 }
 
-/** 0–360° sweep from 12 o'clock. Determinate progress only — no pulse, no split-from-bottom. */
+/**
+ * 0–360° sweep from 12 o'clock. Determinate progress only.
+ *
+ * Fill is the event accent (charging green, album colour, …). A dark halo and a 2dp
+ * stroke keep it readable on glass and on album art; the hue is not washed toward
+ * onSurface.
+ */
 @Composable
 internal fun KeyguardChipProgressRing(
     progress: Float,
-    track: Color,
-    fill: Color,
+    accent: Color,
     modifier: Modifier = Modifier,
 ) {
     Canvas(modifier) {
         val stroke = 2.dp.toPx()
-        // Clear the body's 1dp hairline: at stroke/2 the ring lands straight on top of it.
+        val halo = 3.5.dp.toPx()
         val inset = stroke / 2 + 1.dp.toPx()
         val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
         val topLeft = Offset(inset, inset)
+        val haloStyle = Stroke(width = halo, cap = StrokeCap.Round)
         val style = Stroke(width = stroke, cap = StrokeCap.Round)
-        drawArc(
-            color = track,
-            startAngle = -90f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = topLeft,
-            size = arcSize,
-            style = style,
-        )
-        if (progress > 0f) {
+        val haloColor = Color.Black.copy(alpha = 0.5f)
+        val track = accent.copy(alpha = 0.32f)
+        fun arc(color: Color, sweep: Float, strokeStyle: Stroke) {
             drawArc(
-                color = fill,
+                color = color,
                 startAngle = -90f,
-                sweepAngle = 360f * progress,
+                sweepAngle = sweep,
                 useCenter = false,
                 topLeft = topLeft,
                 size = arcSize,
-                style = style,
+                style = strokeStyle,
             )
+        }
+        arc(haloColor, 360f, haloStyle)
+        arc(track, 360f, style)
+        if (progress > 0f) {
+            val sweep = 360f * progress
+            arc(haloColor, sweep, haloStyle)
+            arc(accent, sweep, style)
         }
     }
 }
