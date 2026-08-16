@@ -1710,10 +1710,33 @@ public class KeyguardIndicationController {
             if (!mHideTransientMessageHandler.isScheduled()) {
                 hideTransientIndication();
             }
+            // NP was cleared on unlock. A still-active recognition reappears via a
+            // fresh AMBIENT_INDICATION_SHOW (or a SHOW that arrived while unlocked).
+            // Do not rehydrate from sticky NP notifications — those outlive HIDE.
             updateDeviceEntryIndication(false);
+            updateNowPlayingIndication();
         } else {
             // If we unlock and return to keyguard quickly, previous error should not be shown
             hideTransientIndication();
+            clearNowPlayingOnUnlock();
+        }
+    }
+
+    /**
+     * Drop keyguard Now Playing when leaving the lock screen so unlock → relock
+     * does not resurrect a song after ASI has stopped recognizing (often no HIDE).
+     */
+    private void clearNowPlayingOnUnlock() {
+        if (TextUtils.isEmpty(mNowPlayingText) && mNowPlayingAlbumArt == null) {
+            if (mRotateTextViewController != null) {
+                mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
+            }
+            return;
+        }
+        mNowPlayingText = null;
+        clearNowPlayingAlbumArt();
+        if (mRotateTextViewController != null) {
+            mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
         }
     }
 
