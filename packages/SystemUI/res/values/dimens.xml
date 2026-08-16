@@ -382,6 +382,15 @@
     <!-- The min height on the indication text shown on AOD -->
     <dimen name="keyguard_indication_text_min_height">48dp</dimen>
 
+    <!-- Now Playing pill: own row above the indication text, so the song never
+         rotates with charging messages -->
+    <dimen name="keyguard_now_playing_art_size">20dp</dimen>
+    <dimen name="keyguard_now_playing_pill_radius">16dp</dimen>
+    <dimen name="keyguard_now_playing_pill_padding_horizontal">12dp</dimen>
+    <dimen name="keyguard_now_playing_pill_padding_vertical">6dp</dimen>
+    <dimen name="keyguard_now_playing_pill_spacing">8dp</dimen>
+    <dimen name="keyguard_now_playing_pill_margin_bottom">8dp</dimen>
+
     <!-- Shadows under the clock, date and other keyguard text fields -->
     <dimen name="keyguard_shadow_radius">5</dimen>
 

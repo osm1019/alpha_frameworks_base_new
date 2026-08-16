@@ -251,6 +251,10 @@ public class KeyguardIndicationController {
     private FaceUnlockImageView mFaceIconView;
     private KeyguardIndicationTextView mTopIndicationView;
     private KeyguardIndicationTextView mLockScreenIndicationView;
+    /** Dedicated Now Playing row, so the song never rotates with charging messages. */
+    @Nullable private ViewGroup mNowPlayingPill;
+    @Nullable private android.widget.ImageView mNowPlayingArtView;
+    @Nullable private android.widget.TextView mNowPlayingTextView;
     private final IBatteryStats mBatteryInfo;
     private final SettableWakeLock mWakeLock;
     private final DockManager mDockManager;
@@ -596,6 +600,9 @@ public class KeyguardIndicationController {
         mTopIndicationView = indicationArea.findViewById(R.id.keyguard_indication_text);
         mLockScreenIndicationView = indicationArea.findViewById(
                 R.id.keyguard_indication_text_bottom);
+        mNowPlayingPill = indicationArea.findViewById(R.id.keyguard_now_playing_pill);
+        mNowPlayingArtView = indicationArea.findViewById(R.id.keyguard_now_playing_art);
+        mNowPlayingTextView = indicationArea.findViewById(R.id.keyguard_now_playing_text);
         if (Flags.indicationTextA11yFix()) {
             setIndicationColorToThemeColor();
         } else {
@@ -1230,24 +1237,49 @@ public class KeyguardIndicationController {
 
     private void updateNowPlayingIndication() {
         if (mDozing) {
+            // AOD draws the song itself in updateDeviceEntryIndication().
+            hideNowPlayingPill();
             updateDeviceEntryIndication(false);
             return;
         }
-        if (mRotateTextViewController == null) {
+        // The pill owns Now Playing on the lock screen — keep it out of the rotating
+        // strip so it never takes turns with charging or owner info.
+        if (mRotateTextViewController != null) {
+            mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
+        }
+        if (TextUtils.isEmpty(mNowPlayingText) || mNowPlayingPill == null
+                || mNowPlayingTextView == null) {
+            hideNowPlayingPill();
             return;
         }
-        if (!TextUtils.isEmpty(mNowPlayingText)) {
-            mRotateTextViewController.updateIndication(
-                    INDICATION_TYPE_NOW_PLAYING,
-                    new KeyguardIndication.Builder()
-                            .setMessage(withNowPlayingIcon(mNowPlayingText,
-                                    getInitialTextColorState().getDefaultColor()))
-                            .setTextColor(getInitialTextColorState())
-                            .setMinVisibilityMillis(IMPORTANT_MSG_MIN_DURATION)
-                            .build(),
-                    true);
+        mNowPlayingTextView.setText(mNowPlayingText);
+        mNowPlayingTextView.setTextColor(getInitialTextColorState());
+        updateNowPlayingPillArt();
+        mNowPlayingPill.setVisibility(View.VISIBLE);
+    }
+
+    /** Rounded album art when loaded, else the tinted music note. */
+    private void updateNowPlayingPillArt() {
+        if (mNowPlayingArtView == null) {
+            return;
+        }
+        if (mNowPlayingAlbumArt != null && !mNowPlayingAlbumArt.isRecycled()) {
+            final int sizePx = Math.round(TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    NOW_PLAYING_ART_SIZE_DP,
+                    mContext.getResources().getDisplayMetrics()));
+            mNowPlayingArtView.setImageTintList(null);
+            mNowPlayingArtView.setImageBitmap(
+                    createRoundedBitmap(mNowPlayingAlbumArt, sizePx));
         } else {
-            mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
+            mNowPlayingArtView.setImageTintList(getInitialTextColorState());
+            mNowPlayingArtView.setImageResource(R.drawable.ic_now_playing_note);
+        }
+    }
+
+    private void hideNowPlayingPill() {
+        if (mNowPlayingPill != null) {
+            mNowPlayingPill.setVisibility(View.GONE);
         }
     }
 
@@ -1731,6 +1763,7 @@ public class KeyguardIndicationController {
             if (mRotateTextViewController != null) {
                 mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
             }
+            hideNowPlayingPill();
             return;
         }
         mNowPlayingText = null;
@@ -1738,6 +1771,7 @@ public class KeyguardIndicationController {
         if (mRotateTextViewController != null) {
             mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
         }
+        hideNowPlayingPill();
     }
 
     private void setPersistentUnlockMessage(String persistentUnlockMessage) {
@@ -2757,9 +2791,14 @@ public class KeyguardIndicationController {
             if (mDozing) {
                 hideBiometricMessage();
                 hideFaceUnlockRecognizingMessage();
+                // AOD draws the song in updateDeviceEntryIndication() — the pill would double it.
+                hideNowPlayingPill();
             }
             updateFastchargeInfoPolling();
             updateDeviceEntryIndication(false);
+            if (!mDozing) {
+                updateNowPlayingIndication();
+            }
         }
     };
 

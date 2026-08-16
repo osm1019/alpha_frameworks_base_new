@@ -24,7 +24,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.phone.KeyguardIndicationTextView
 
@@ -35,6 +37,13 @@ class KeyguardIndicationArea(context: Context, private val attrs: AttributeSet?)
         setId(R.id.keyguard_indication_area)
         orientation = LinearLayout.VERTICAL
 
+        addView(
+            nowPlayingPill(),
+            LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = R.dimen.keyguard_now_playing_pill_margin_bottom.dp()
+            },
+        )
         addView(indicationTopRow(), LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         addView(
             indicationBottomRow(),
@@ -51,6 +60,42 @@ class KeyguardIndicationArea(context: Context, private val attrs: AttributeSet?)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         } else {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        }
+    }
+
+    /** Now Playing gets its own row so the song never rotates with charging messages. */
+    private fun nowPlayingPill(): LinearLayout {
+        return LinearLayout(context).apply {
+            id = R.id.keyguard_now_playing_pill
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            setBackgroundResource(R.drawable.keyguard_now_playing_pill)
+
+            val padH = R.dimen.keyguard_now_playing_pill_padding_horizontal.dp()
+            val padV = R.dimen.keyguard_now_playing_pill_padding_vertical.dp()
+            setPaddingRelative(padH, padV, padH, padV)
+
+            val artSize = R.dimen.keyguard_now_playing_art_size.dp()
+            addView(
+                ImageView(context).apply {
+                    id = R.id.keyguard_now_playing_art
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                },
+                LinearLayout.LayoutParams(artSize, artSize).apply {
+                    marginEnd = R.dimen.keyguard_now_playing_pill_spacing.dp()
+                },
+            )
+            addView(
+                TextView(context).apply {
+                    id = R.id.keyguard_now_playing_text
+                    gravity = Gravity.CENTER_VERTICAL
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    setTextAppearance(R.style.TextAppearance_Keyguard_BottomArea)
+                },
+                LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT),
+            )
         }
     }
 
