@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Chronometer
 import android.widget.FrameLayout
+import android.widget.TextView
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.dagger.SysUISingleton
@@ -331,6 +332,7 @@ constructor(
                                 startTimeMs = startTime,
                                 actions = notifActions,
                                 pausedDurationMs = 0L,
+                                contentIntent = sbn.notification?.contentIntent,
                             )
                         return
                     }
@@ -351,6 +353,7 @@ constructor(
                             appName = title.ifEmpty { existing.appName },
                             state = RecordingState.SAVED,
                             actions = notifActions,
+                            contentIntent = sbn.notification?.contentIntent,
                         )
                     return
                 }
@@ -725,6 +728,7 @@ constructor(
                 appIcon = icon,
                 isPaused = isPaused,
                 actions = actions,
+                contentIntent = sbn.notification?.contentIntent,
             )
         timerNotificationKey = sbn.key
         _timerEvent.value = event
@@ -765,9 +769,9 @@ constructor(
         }
 
         var startTimeMs = System.currentTimeMillis()
-        val chronoBase = extractChronometerBase(sbn)
-        if (chronoBase > 0L) {
-            val elapsed = SystemClock.elapsedRealtime() - chronoBase
+        val notifState = extractStopwatchState(sbn)
+        if (notifState.chronometerBase > 0L) {
+            val elapsed = SystemClock.elapsedRealtime() - notifState.chronometerBase
             if (elapsed > 0L) startTimeMs = System.currentTimeMillis() - elapsed
         }
 
@@ -779,21 +783,56 @@ constructor(
                 isRunning = isRunning,
                 appIcon = icon,
                 actions = actions,
+                lapNumber = notifState.lapNumber,
+                contentIntent = sbn.notification?.contentIntent,
             )
         stopwatchNotificationKey = sbn.key
         _stopwatchEvent.value = event
     }
 
-    private fun extractChronometerBase(sbn: StatusBarNotification): Long {
+    private fun extractChronometerBase(sbn: StatusBarNotification): Long =
+        inflateContentView(sbn) { findChronometer(it)?.base } ?: 0L
+
+    private data class StopwatchNotifState(val chronometerBase: Long, val lapNumber: Int?)
+
+    /** One inflation, both values — the stopwatch re-posts on every tick. */
+    private fun extractStopwatchState(sbn: StatusBarNotification): StopwatchNotifState =
+        inflateContentView(sbn) { inflated ->
+            StopwatchNotifState(
+                chronometerBase = findChronometer(inflated)?.base ?: 0L,
+                lapNumber = readLapNumber(inflated, sbn.packageName),
+            )
+        } ?: StopwatchNotifState(0L, null)
+
+    /**
+     * The lap the stopwatch is on, straight off the notification.
+     *
+     * DeskClock writes it into the content view's `state` field and replaces it with paused text
+     * while stopped, so reading a number here is also what makes the count vanish on pause and
+     * return on resume — and it stays right when the lap was taken from the shade or the app,
+     * which counting our own taps would not.
+     */
+    private fun readLapNumber(inflated: View, packageName: String): Int? {
+        val id = try {
+            context.packageManager
+                .getResourcesForApplication(packageName)
+                .getIdentifier("state", "id", packageName)
+        } catch (_: Exception) { 0 }
+        if (id == 0) return null
+        val text = inflated.findViewById<TextView>(id)?.text?.toString() ?: return null
+        return Regex("\\d+").find(text)?.value?.toIntOrNull()
+    }
+
+    private fun <T> inflateContentView(sbn: StatusBarNotification, read: (View) -> T?): T? {
         try {
-            val rv = sbn.notification.contentView ?: sbn.notification.bigContentView ?: return 0L
+            val rv = sbn.notification.contentView ?: sbn.notification.bigContentView ?: return null
             val pkgCtx = context.createPackageContext(sbn.packageName, Context.CONTEXT_RESTRICTED)
             val container = FrameLayout(context)
-            val inflated = rv.apply(pkgCtx, container) ?: return 0L
-            return findChronometer(inflated)?.base ?: 0L
+            val inflated = rv.apply(pkgCtx, container) ?: return null
+            return read(inflated)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to extract chronometer base from ${sbn.packageName}", e)
-            return 0L
+            Log.w(TAG, "Failed to read content view from ${sbn.packageName}", e)
+            return null
         }
     }
 

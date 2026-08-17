@@ -16,6 +16,7 @@
 
 package com.android.systemui.axdynamicbar.ui
 
+import com.android.systemui.axdynamicbar.data.ChargingEventSource
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -40,6 +41,7 @@ class AxDynamicBarKeyguardExpansion
 constructor(
     @Application applicationScope: CoroutineScope,
     private val interactor: AxDynamicBarInteractor,
+    private val chargingEventSource: ChargingEventSource,
 ) {
     private val _intent = MutableStateFlow(false)
 
@@ -47,6 +49,9 @@ constructor(
         interactor.uiState
             .map { it.shouldShow && it.topEvent != null }
             .distinctUntilChanged()
+
+    private val hasChargingSession =
+        chargingEventSource.chargingEvent.map { it != null }.distinctUntilChanged()
 
     /**
      * Context gate shared by both cards: on the keyguard, awake, with nothing else expanded over
@@ -92,9 +97,15 @@ constructor(
      * The battery card. `IslandEvent.Charging` is filtered on the keyguard so there are never two
      * charging displays, which leaves the lane's battery occupant with no event to pin — hence a
      * path of its own rather than [expandPinned].
+     *
+     * [hasChargingSession] is part of the gate, not just of the intent reset: the panel stops being
+     * composed the instant charging ends, and its scrim goes with it, so a card left "expanded"
+     * here would hold the keyguard's notification stack and clock hidden with nothing left to tap.
      */
     val isBatteryExpanded: StateFlow<Boolean> =
-        combine(_batteryIntent, canShowCard) { intent, show -> intent && show }
+        combine(_batteryIntent, canShowCard, hasChargingSession) { intent, show, charging ->
+                intent && show && charging
+            }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Lazily, false)
 
@@ -130,6 +141,12 @@ constructor(
                 }
             }
             .launchIn(applicationScope)
+
+        // An intent outlives its subject. Nothing above clears it when the thing the card was
+        // opened for ends, so the next charging session — or the next event — would find the
+        // intent still set and reopen a card the user never asked for.
+        hasChargingSession.onEach { if (!it) _batteryIntent.value = false }.launchIn(applicationScope)
+        hasChip.onEach { if (!it) _intent.value = false }.launchIn(applicationScope)
     }
 
     /**
@@ -160,6 +177,7 @@ constructor(
 
     /** Only one card at a time; the battery tap closes an event card that is already open. */
     fun expandBattery() {
+        if (chargingEventSource.chargingEvent.value == null) return
         _intent.value = false
         _batteryIntent.value = true
     }

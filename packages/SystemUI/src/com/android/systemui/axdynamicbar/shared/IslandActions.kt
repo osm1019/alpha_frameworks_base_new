@@ -1,5 +1,6 @@
 package com.android.systemui.axdynamicbar.shared
 
+import android.app.PendingIntent
 import android.net.Uri
 import com.android.systemui.axdynamicbar.model.IslandEvent
 
@@ -54,5 +55,6 @@ interface IslandActions {
     fun onNotificationAlertInteractionStart()
     fun onNotificationAlertInteractionEnd()
     fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification)
+    fun launchDismissingKeyguard(intent: PendingIntent)
     fun openBatteryStats()
 }

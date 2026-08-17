@@ -3,6 +3,7 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,14 +39,19 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -81,6 +88,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.cos
@@ -222,6 +230,7 @@ private fun KeyguardPanelSurface(content: @Composable () -> Unit) {
 @Composable
 private fun TonalBanner(
     colors: IslandColorScheme,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     Row(
@@ -229,6 +238,7 @@ private fun TonalBanner(
             .fillMaxWidth()
             .clip(ShapeLg)
             .background(colors.tonal)
+            .then(modifier)
             .padding(horizontal = SpaceXxl, vertical = SpaceLg),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SpaceMd),
@@ -887,7 +897,6 @@ private fun KeyguardMediaSegmentedProgress(
 
 @Composable
 private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActions) {
-    val context = LocalContext.current
     val colors = rememberIslandColors(event)
     var remainingMs by remember(event.endTimeMs) {
         mutableLongStateOf((event.endTimeMs - System.currentTimeMillis()).coerceAtLeast(0L))
@@ -919,7 +928,12 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
         verticalArrangement = Arrangement.spacedBy(SpaceXxl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TonalBanner(colors) {
+        TonalBanner(
+            colors,
+            modifier = event.contentIntent?.let { intent ->
+                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+            } ?: Modifier,
+        ) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -953,24 +967,10 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SpaceLg),
-        ) {
-            val toggleAction = event.actions.firstOrNull()
-            if (toggleAction != null) {
-                ExpressivePillButton(
-                    label = if (event.isPaused) stringResource(R.string.ax_dynamic_bar_resume) else stringResource(R.string.ax_dynamic_bar_pause),
-                    icon = if (event.isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentColor = colors.onAccent,
-                    backgroundColor = colors.accent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { toggleAction.action.actionIntent?.sendWithBal(context) },
-                )
-            }
+        KeyguardEventActions(event.actions, colors) {
             ExpressivePillButton(
                 label = stringResource(R.string.ax_dynamic_bar_dismiss),
-                icon = Icons.Filled.Stop,
+                icon = Icons.Filled.Close,
                 contentColor = colors.accent,
                 backgroundColor = colors.tonal,
                 modifier = Modifier.weight(1f),
@@ -983,7 +983,6 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
 
 @Composable
 private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: IslandActions) {
-    val context = LocalContext.current
     val colors = rememberIslandColors(event)
     var elapsedMs by remember(event.startTimeMs) {
         mutableLongStateOf((System.currentTimeMillis() - event.startTimeMs).coerceAtLeast(0L))
@@ -1006,7 +1005,12 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
         verticalArrangement = Arrangement.spacedBy(SpaceXxl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TonalBanner(colors) {
+        TonalBanner(
+            colors,
+            modifier = event.contentIntent?.let { intent ->
+                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+            } ?: Modifier,
+        ) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
@@ -1023,37 +1027,28 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
             )
         }
 
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SizeAlbumLg)) {
-            ProgressRing(
-                progress = secFraction,
-                color = colors.accent,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Text(
-                if (event.isRunning) formatStopwatch(elapsedMs) else stringResource(R.string.ax_dynamic_bar_paused),
-                color = AlphaColors.DbKeyguardCard.text,
-                style = MaterialTheme.typography.displayMedium,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SpaceLg),
-        ) {
-            val toggleAction = event.actions.firstOrNull()
-            if (toggleAction != null) {
-                ExpressivePillButton(
-                    label = if (event.isRunning) stringResource(R.string.ax_dynamic_bar_pause) else stringResource(R.string.ax_dynamic_bar_resume),
-                    icon = if (event.isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentColor = colors.onAccent,
-                    backgroundColor = colors.accent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { toggleAction.action.actionIntent?.sendWithBal(context) },
+        // The ring stays centred whether or not a lap is showing, so nothing shifts when the
+        // count appears on the first lap or leaves on pause.
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SizeAlbumLg)) {
+                ProgressRing(
+                    progress = secFraction,
+                    color = colors.accent,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Text(
+                    if (event.isRunning) formatStopwatch(elapsedMs) else stringResource(R.string.ax_dynamic_bar_paused),
+                    color = AlphaColors.DbKeyguardCard.text,
+                    style = MaterialTheme.typography.displayMedium,
                 )
             }
+            event.lapNumber?.let { LapCount(it, Modifier.align(Alignment.CenterEnd)) }
+        }
+
+        KeyguardEventActions(event.actions, colors) {
             ExpressivePillButton(
-                label = stringResource(R.string.ax_dynamic_bar_reset),
-                icon = Icons.Filled.Stop,
+                label = stringResource(R.string.ax_dynamic_bar_dismiss),
+                icon = Icons.Filled.Close,
                 contentColor = colors.accent,
                 backgroundColor = colors.tonal,
                 modifier = Modifier.weight(1f),
@@ -1066,7 +1061,6 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
 
 @Composable
 private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, interactor: IslandActions) {
-    val context = LocalContext.current
     val colors = rememberIslandColors(event)
     var elapsedMs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(event.startTimeMs, event.state, event.pausedDurationMs) {
@@ -1091,7 +1085,14 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
         verticalArrangement = Arrangement.spacedBy(SpaceXxl),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TonalBanner(colors) {
+        // The banner is the card's only non-button surface that reads as tappable, so it carries
+        // the notification's own tap target — the recorder decides where that lands, not us.
+        TonalBanner(
+            colors,
+            modifier = event.contentIntent?.let { intent ->
+                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+            } ?: Modifier,
+        ) {
             if (isRecording) PulsingDot(color = colors.accent, size = SpaceMd)
             Icon(Icons.Filled.Mic, null, tint = colors.accent, modifier = Modifier.size(SizeIconSm))
             Text(
@@ -1126,24 +1127,18 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SpaceLg),
+        // Pause and Stop only. Once stopped the recorder posts Play / Share / Delete, and not one
+        // of them finishes on this card — delete wants a confirmation, share opens a chooser, play
+        // needs a player. Stop takes the event with it, so that state is never reached from here.
+        KeyguardEventActions(
+            actions = event.actions,
+            colors = colors,
+            allowed = RecorderActions,
+            afterSend = { kind -> if (kind == NotificationActionType.STOP) interactor.dismissEvent(event) },
         ) {
-            val pauseResume = event.actions.firstOrNull()
-            if (pauseResume != null) {
-                ExpressivePillButton(
-                    label = if (isRecording) stringResource(R.string.ax_dynamic_bar_pause) else stringResource(R.string.ax_dynamic_bar_resume),
-                    icon = if (isRecording) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentColor = colors.onAccent,
-                    backgroundColor = colors.accent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { pauseResume.action.actionIntent?.sendWithBal(context) },
-                )
-            }
             ExpressivePillButton(
-                label = stringResource(R.string.ax_dynamic_bar_stop),
-                icon = Icons.Filled.Stop,
+                label = stringResource(R.string.ax_dynamic_bar_dismiss),
+                icon = Icons.Filled.Close,
                 contentColor = colors.accent,
                 backgroundColor = colors.tonal,
                 modifier = Modifier.weight(1f),
@@ -1153,6 +1148,119 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
     }
 }
 }
+
+/**
+ * The app's own actions, for the panels whose event is a clock or a recorder notification.
+ *
+ * These cards used to draw a fixed pair: `actions.first()` labelled Pause/Resume from the event's
+ * own state, and a second button that only ever called `dismissEvent`. Both halves were wrong.
+ * `Notification.Action` order is the app's business — AOSP's clock posts **+1 min** second on a
+ * running timer and **Lap** second on a running stopwatch, and the recorder posts the real **Stop**
+ * there — so an index is not a meaning, and a button that says Stop while calling `dismissEvent`
+ * leaves a recorder recording.
+ *
+ * So: [classify] decides the icon, the app's own label decides the text, and the action's own
+ * intent is what fires. Nothing is invented. A running timer or stopwatch has no terminal action to
+ * offer — `Reset` only appears once paused — and this draws no substitute for one; the scrim
+ * collapses the card.
+ */
+@Composable
+private fun KeyguardEventActions(
+    actions: List<IslandEvent.NotificationAction>,
+    colors: IslandColorScheme,
+    allowed: Set<NotificationActionType>? = null,
+    afterSend: (NotificationActionType) -> Unit = {},
+    onEmpty: (@Composable RowScope.() -> Unit)? = null,
+) {
+    val context = LocalContext.current
+    val classified =
+        actions.map { notifAction ->
+            val pkg = notifAction.action.actionIntent?.creatorPackage ?: context.packageName
+            notifAction to notifAction.action.classify(context, pkg)
+        }
+        .filter { (_, kind) -> allowed == null || kind in allowed }
+        .take(MaxKeyguardActions)
+
+    if (classified.isEmpty()) {
+        onEmpty?.let { Row(modifier = Modifier.fillMaxWidth()) { it() } }
+        return
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(SpaceLg),
+    ) {
+        classified.forEachIndexed { index, (notifAction, kind) ->
+            // The app's first action is its primary one on every notification we render here
+            // (Pause / Resume), so it keeps the filled plate the panels already used.
+            val filled = index == 0
+            ExpressivePillButton(
+                label = notifAction.label.toString(),
+                icon = keyguardActionIcon(kind),
+                contentColor = if (filled) colors.onAccent else colors.accent,
+                backgroundColor = if (filled) colors.accent else colors.tonal,
+                modifier = Modifier.weight(1f),
+                onClick = {
+                    try {
+                        notifAction.action.actionIntent?.sendWithBal(context)
+                    } catch (_: Exception) {}
+                    afterSend(kind)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * The lap the stopwatch is on. A bare cardinal — it only ever appears after the user has pressed
+ * Lap, so there is nobody to explain it to, and AOSP's own notification is no wordier.
+ *
+ * One kick when the number changes, not a loop: the point is confirming the tap landed, which a
+ * constant pulse cannot say, and a permanently animating element on this blurred surface is what
+ * the motion sweep removed everywhere else.
+ */
+@Composable
+private fun LapCount(lap: Int, modifier: Modifier = Modifier) {
+    val motionScheme = MaterialTheme.motionScheme
+    val scale = remember { Animatable(1f) }
+    var previous by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(lap) {
+        if (previous != null && previous != lap) {
+            scale.snapTo(LapKickScale)
+            scale.animateTo(1f, motionScheme.fastSpatialSpec())
+        }
+        previous = lap
+    }
+    Text(
+        lap.toString(),
+        color = RedAccent,
+        style = MaterialTheme.typography.headlineSmall,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale.value
+            scaleY = scale.value
+        },
+    )
+}
+
+private const val LapKickScale = 1.35f
+
+private const val MaxKeyguardActions = 3
+
+private val RecorderActions =
+    setOf(NotificationActionType.PAUSE, NotificationActionType.RESUME, NotificationActionType.STOP)
+
+private fun keyguardActionIcon(kind: NotificationActionType): ImageVector? =
+    when (kind) {
+        NotificationActionType.PAUSE -> Icons.Filled.Pause
+        NotificationActionType.RESUME -> Icons.Filled.PlayArrow
+        NotificationActionType.STOP -> Icons.Filled.Stop
+        NotificationActionType.DELETE -> Icons.Filled.Delete
+        NotificationActionType.RESET -> Icons.Filled.RestartAlt
+        NotificationActionType.LAP -> Icons.Filled.Flag
+        NotificationActionType.ADD_MINUTE -> Icons.Filled.Add
+        NotificationActionType.SNOOZE -> Icons.Filled.Snooze
+        NotificationActionType.DISMISS -> Icons.Filled.Close
+        NotificationActionType.OTHER -> null
+    }
 
 /**
  * The battery card, opened from the lane's battery occupant.

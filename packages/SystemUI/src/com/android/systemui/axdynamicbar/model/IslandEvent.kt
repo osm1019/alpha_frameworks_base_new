@@ -1,6 +1,7 @@
 package com.android.systemui.axdynamicbar.model
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.RemoteInput
 import android.graphics.drawable.Drawable
 import android.net.Uri
@@ -93,6 +94,8 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val actions: List<NotificationAction> = emptyList(),
         val appIcon: Drawable? = null,
         val pausedDurationMs: Long = 0L,
+        /** The recorder notification's own tap target, so a card can open the app it describes. */
+        val contentIntent: PendingIntent? = null,
     ) : IslandEvent(priority = 84, id = "audio_recording") {
         override fun withoutDrawables() = copy(appIcon = null)
     }
@@ -241,6 +244,7 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val appIcon: Drawable? = null,
         val isPaused: Boolean = false,
         val actions: List<NotificationAction> = emptyList(),
+        val contentIntent: PendingIntent? = null,
     ) : IslandEvent(priority = 45, id = "timer") {
         override fun withoutDrawables() = copy(appIcon = null)
     }
@@ -251,6 +255,9 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val isRunning: Boolean = true,
         val appIcon: Drawable? = null,
         val actions: List<NotificationAction> = emptyList(),
+        /** Null until the first lap, and again while paused — the app stops reporting one. */
+        val lapNumber: Int? = null,
+        val contentIntent: PendingIntent? = null,
     ) : IslandEvent(priority = 44, id = "stopwatch") {
         override fun withoutDrawables() = copy(appIcon = null)
     }

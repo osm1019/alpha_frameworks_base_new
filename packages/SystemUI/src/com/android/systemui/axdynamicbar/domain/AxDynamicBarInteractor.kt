@@ -1,6 +1,7 @@
 package com.android.systemui.axdynamicbar.domain
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -761,6 +762,9 @@ constructor(
         val intent = event.sbn.notification?.contentIntent ?: return
         activityStarter.startPendingIntentDismissingKeyguard(intent)
     }
+
+    override fun launchDismissingKeyguard(intent: PendingIntent) =
+        activityStarter.startPendingIntentDismissingKeyguard(intent)
 
     override fun setTorchLevel(level: Int) = repository.torch.setLevel(level)
 
