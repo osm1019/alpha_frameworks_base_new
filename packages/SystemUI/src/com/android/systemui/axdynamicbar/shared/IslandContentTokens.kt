@@ -716,6 +716,15 @@ internal fun rememberMediaProgress(event: IslandEvent.Media): MediaProgress {
     return MediaProgress(event.progress, event.position)
 }
 
+/**
+ * Fixed-advance digits, for text that counts.
+ *
+ * Every clock below is zero-padded, so the string keeps its length — but the display styles use
+ * the brand typeface, which is user-swappable through the font overlays, and a proportional figure
+ * set still gives each digit its own width. A centred clock then shuffles sideways on every tick.
+ */
+internal fun TextStyle.tabularFigures(): TextStyle = copy(fontFeatureSettings = "tnum")
+
 internal fun formatElapsedTime(ms: Long): String {
     val secs = (ms / 1000).coerceAtLeast(0)
     return "%02d:%02d".format(secs / 60, secs % 60)

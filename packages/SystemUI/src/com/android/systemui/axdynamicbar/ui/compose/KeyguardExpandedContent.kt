@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -80,8 +81,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.geometry.CornerRadius
@@ -963,7 +966,7 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
             Text(
                 if (event.isPaused) stringResource(R.string.ax_dynamic_bar_paused) else formatCountdownLong(remainingMs),
                 color = AlphaColors.DbKeyguardCard.text,
-                style = MaterialTheme.typography.displayMedium,
+                style = MaterialTheme.typography.displayMedium.tabularFigures(),
             )
         }
 
@@ -1027,22 +1030,30 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
             )
         }
 
-        // The ring stays centred whether or not a lap is showing, so nothing shifts when the
-        // count appears on the first lap or leaves on pause.
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SizeAlbumLg)) {
-                ProgressRing(
-                    progress = secFraction,
-                    color = colors.accent,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Text(
-                    if (event.isRunning) formatStopwatch(elapsedMs) else stringResource(R.string.ax_dynamic_bar_paused),
-                    color = AlphaColors.DbKeyguardCard.text,
-                    style = MaterialTheme.typography.displayMedium,
-                )
+        val clockStyle = MaterialTheme.typography.displayMedium.tabularFigures()
+        val lapStyle = MaterialTheme.typography.headlineSmall
+        // Half of each line box plus a gap: the count clears the clock at any font scale.
+        val lapOffset = with(LocalDensity.current) {
+            (clockStyle.lineHeight.toDp() + lapStyle.lineHeight.toDp()) / 2 + SpaceMd
+        }
+
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SizeAlbumLg)) {
+            ProgressRing(
+                progress = secFraction,
+                color = colors.accent,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Text(
+                if (event.isRunning) formatStopwatch(elapsedMs) else stringResource(R.string.ax_dynamic_bar_paused),
+                color = AlphaColors.DbKeyguardCard.text,
+                style = clockStyle,
+            )
+            // Overlaid on the ring rather than stacked above the clock, so the clock keeps the
+            // centre and cannot be pushed off it when the count appears on the first lap or
+            // leaves on pause.
+            event.lapNumber?.let {
+                LapCount(it, lapStyle, Modifier.align(Alignment.Center).offset(y = -lapOffset))
             }
-            event.lapNumber?.let { LapCount(it, Modifier.align(Alignment.CenterEnd)) }
         }
 
         KeyguardEventActions(event.actions, colors) {
@@ -1109,7 +1120,7 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
         Text(
             formatElapsedTime(elapsedMs),
             color = AlphaColors.DbKeyguardCard.text,
-            style = MaterialTheme.typography.displayLarge,
+            style = MaterialTheme.typography.displayLarge.tabularFigures(),
         )
 
         if (isRecording) {
@@ -1219,7 +1230,7 @@ private fun KeyguardEventActions(
  * the motion sweep removed everywhere else.
  */
 @Composable
-private fun LapCount(lap: Int, modifier: Modifier = Modifier) {
+private fun LapCount(lap: Int, style: TextStyle, modifier: Modifier = Modifier) {
     val motionScheme = MaterialTheme.motionScheme
     val scale = remember { Animatable(1f) }
     var previous by remember { mutableStateOf<Int?>(null) }
@@ -1233,7 +1244,7 @@ private fun LapCount(lap: Int, modifier: Modifier = Modifier) {
     Text(
         lap.toString(),
         color = RedAccent,
-        style = MaterialTheme.typography.headlineSmall,
+        style = style,
         modifier = modifier.graphicsLayer {
             scaleX = scale.value
             scaleY = scale.value
