@@ -21,6 +21,7 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.shade.data.repository.ShadeRepository
 import com.android.systemui.shade.domain.interactor.ShadeInteractor
@@ -70,6 +71,7 @@ constructor(
     private val keyguardStateController: KeyguardStateController,
     val sliderHapticsViewModelFactory: SliderHapticsViewModel.Factory,
     private val activityStarter: ActivityStarter,
+    private val falsingManager: FalsingManager,
     private val indicationController: KeyguardIndicationController,
     private val shadeInteractor: ShadeInteractor,
     private val shadeRepository: ShadeRepository,
@@ -743,11 +745,27 @@ constructor(
     override fun toggleTorch() = repository.torch.toggleTorch()
 
     /**
+     * A tap that leaves the keyguard has to be *classified*, or it counts against us.
+     *
+     * `BrightLineFalsingManager` records any gesture nobody asked about as false, with a 0.7–0.8
+     * penalty — and a clean tap draws the higher one. Two of those push the running belief past
+     * 0.9, and `CentralSurfacesImpl`'s belief listener answers by calling
+     * `StatusBarKeyguardViewManager.reset(isFalsingReset = true)`, which hides the alternate
+     * bouncer and fires `notifyDismissCancelled()`. The pending intent is dropped with the
+     * dismissal, so the card looks like it did nothing.
+     *
+     * Asking here is what registers the gesture as a tap. It also does the job the API is named
+     * for: a genuine pocket touch still gets refused.
+     */
+    private fun tapPassedFalsing(): Boolean = !falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)
+
+    /**
      * Battery usage, not the battery page: `ACTION_POWER_USAGE_SUMMARY` lands on Settings' battery
      * screen, one level above the stats this card's button names. Dismisses the keyguard first —
      * this is a real Settings activity, not an in-place toggle, so it cannot render behind the lock.
      */
     override fun openBatteryStats() {
+        if (!tapPassedFalsing()) return
         val intent = Intent().apply {
             component = ComponentName(
                 "com.android.settings",
@@ -760,11 +778,14 @@ constructor(
 
     override fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification) {
         val intent = event.sbn.notification?.contentIntent ?: return
+        if (!tapPassedFalsing()) return
         activityStarter.startPendingIntentDismissingKeyguard(intent)
     }
 
-    override fun launchDismissingKeyguard(intent: PendingIntent) =
+    override fun launchDismissingKeyguard(intent: PendingIntent) {
+        if (!tapPassedFalsing()) return
         activityStarter.startPendingIntentDismissingKeyguard(intent)
+    }
 
     override fun setTorchLevel(level: Int) = repository.torch.setLevel(level)
 
