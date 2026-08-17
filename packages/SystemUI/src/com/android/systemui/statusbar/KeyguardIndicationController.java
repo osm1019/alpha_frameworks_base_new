@@ -74,7 +74,6 @@ import android.graphics.ImageDecoder;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.hardware.biometrics.BiometricSourceType;
@@ -93,11 +92,8 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
-import android.text.Spannable;
-import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.format.Formatter;
-import android.text.style.ImageSpan;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewGroup;
@@ -1173,44 +1169,7 @@ public class KeyguardIndicationController {
         }
     }
 
-    /**
-     * Inline leading glyph next to the song. Prefer rounded album art when loaded;
-     * otherwise fall back to the music-note drawable we added for the strip.
-     *
-     * <p>A compound drawable sits at the view's start edge, and the indication row is
-     * match_parent with centered text — so the icon has to be an inline span to stay
-     * with the song.
-     */
-    private CharSequence withNowPlayingIcon(CharSequence text, int tintColor) {
-        Drawable icon = null;
-        if (mNowPlayingAlbumArt != null && !mNowPlayingAlbumArt.isRecycled()) {
-            final int sizePx = Math.round(TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP,
-                    NOW_PLAYING_ART_SIZE_DP,
-                    mContext.getResources().getDisplayMetrics()));
-            icon = new BitmapDrawable(mContext.getResources(),
-                    createRoundedBitmap(mNowPlayingAlbumArt, sizePx));
-            icon.setBounds(0, 0, sizePx, sizePx);
-            // Do not tint album art white — that would wash out the cover.
-        } else {
-            icon = mContext.getDrawable(R.drawable.ic_now_playing_note);
-            if (icon != null) {
-                icon = icon.mutate();
-                icon.setBounds(0, 0, icon.getIntrinsicWidth(), icon.getIntrinsicHeight());
-                icon.setTint(tintColor);
-            }
-        }
-        if (icon == null) {
-            return text;
-        }
-        final SpannableStringBuilder builder = new SpannableStringBuilder("  ");
-        builder.setSpan(new ImageSpan(icon, ImageSpan.ALIGN_CENTER), 0, 1,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        builder.append(text);
-        return builder;
-    }
-
-    /** Square center-crop with rounded corners for the inline keyguard strip. */
+    /** Square center-crop with rounded corners for the Now Playing pill. */
     private static Bitmap createRoundedBitmap(Bitmap src, int sizePx) {
         final int w = src.getWidth();
         final int h = src.getHeight();
@@ -1236,14 +1195,8 @@ public class KeyguardIndicationController {
     }
 
     private void updateNowPlayingIndication() {
-        if (mDozing) {
-            // AOD draws the song itself in updateDeviceEntryIndication().
-            hideNowPlayingPill();
-            updateDeviceEntryIndication(false);
-            return;
-        }
-        // The pill owns Now Playing on the lock screen — keep it out of the rotating
-        // strip so it never takes turns with charging or owner info.
+        // The pill owns Now Playing on both the lock screen and AOD, so the song never
+        // takes turns with charging or owner info in the indication strip.
         if (mRotateTextViewController != null) {
             mRotateTextViewController.hideIndication(INDICATION_TYPE_NOW_PLAYING);
         }
@@ -1252,14 +1205,17 @@ public class KeyguardIndicationController {
             hideNowPlayingPill();
             return;
         }
+        final ColorStateList tint = mDozing
+                ? ColorStateList.valueOf(Color.WHITE)
+                : getInitialTextColorState();
         mNowPlayingTextView.setText(mNowPlayingText);
-        mNowPlayingTextView.setTextColor(getInitialTextColorState());
-        updateNowPlayingPillArt();
+        mNowPlayingTextView.setTextColor(tint);
+        updateNowPlayingPillArt(tint);
         mNowPlayingPill.setVisibility(View.VISIBLE);
     }
 
     /** Rounded album art when loaded, else the tinted music note. */
-    private void updateNowPlayingPillArt() {
+    private void updateNowPlayingPillArt(ColorStateList tint) {
         if (mNowPlayingArtView == null) {
             return;
         }
@@ -1272,7 +1228,7 @@ public class KeyguardIndicationController {
             mNowPlayingArtView.setImageBitmap(
                     createRoundedBitmap(mNowPlayingAlbumArt, sizePx));
         } else {
-            mNowPlayingArtView.setImageTintList(getInitialTextColorState());
+            mNowPlayingArtView.setImageTintList(tint);
             mNowPlayingArtView.setImageResource(R.drawable.ic_now_playing_note);
         }
     }
@@ -1994,9 +1950,6 @@ public class KeyguardIndicationController {
                 newIndication = mBiometricMessage; // note: doesn't show mBiometricMessageFollowUp
             } else if (!TextUtils.isEmpty(mTransientIndication)) {
                 newIndication = mTransientIndication;
-            } else if (!TextUtils.isEmpty(mNowPlayingText)) {
-                // Show Now Playing in the same keyguard strip as Charged while dozing.
-                newIndication = withNowPlayingIcon(mNowPlayingText, Color.WHITE);
             } else if (!mBatteryPresent) {
                 // If there is no battery detected, hide the indication area and bail
                 mIndicationArea.setVisibility(GONE);
@@ -2791,14 +2744,11 @@ public class KeyguardIndicationController {
             if (mDozing) {
                 hideBiometricMessage();
                 hideFaceUnlockRecognizingMessage();
-                // AOD draws the song in updateDeviceEntryIndication() — the pill would double it.
-                hideNowPlayingPill();
             }
             updateFastchargeInfoPolling();
             updateDeviceEntryIndication(false);
-            if (!mDozing) {
-                updateNowPlayingIndication();
-            }
+            // Retint the pill for the doze palette; it stays up across the transition.
+            updateNowPlayingIndication();
         }
     };
 
