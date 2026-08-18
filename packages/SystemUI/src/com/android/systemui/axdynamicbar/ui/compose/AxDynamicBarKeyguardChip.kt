@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -90,6 +91,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.LocalNightLockedSurface
 import com.android.systemui.alpha.theme.AlphaMetrics
 import com.android.systemui.alpha.theme.AlphaOpacity
 import com.android.systemui.axdynamicbar.model.IslandEvent
@@ -145,6 +147,20 @@ private fun rememberChargingParts(batteryString: String): List<String> {
 fun AxDynamicBarKeyguardChip(
     viewModel: AxDynamicBarChipViewModel,
     modifier: Modifier = Modifier,
+) {
+    // Event hues resolve to their dark band on both themes, the way `materialColorPrimaryFixed`
+    // does for the shortcut beside this lane: these are chip *bodies*, and the light band is tuned
+    // for accents drawn as foreground text — tone 40, which lands a body at ~2.3:1 in day mode.
+    // Only the hues move; the lane's neutrals still follow the theme.
+    CompositionLocalProvider(LocalNightLockedSurface provides true) {
+        AxDynamicBarKeyguardChipContent(viewModel, modifier)
+    }
+}
+
+@Composable
+private fun AxDynamicBarKeyguardChipContent(
+    viewModel: AxDynamicBarChipViewModel,
+    modifier: Modifier,
 ) {
     val state by viewModel.chipState.collectAsStateWithLifecycle()
     val laneInputs by viewModel.keyguardLaneInputs.collectAsStateWithLifecycle()
@@ -475,9 +491,8 @@ private fun KeyguardChipBody(
     val isMedia = event is IslandEvent.Media
     val dynamicHeight = height
 
-    // Glass shell for every event: media = neutral glass; others keep event hue as a tint
-    // (charging green, timer orange, …) instead of solid full-fill. Style only recolors
-    // media buttons + progress.
+    // Glass shell for every event: media stays neutral so it reads as part of the shortcut row,
+    // every other event takes its hue whole. Style only recolors media buttons + progress.
     val chrome = dbLockscreenPillChrome(accent, untinted = isMedia, blurred = blurred)
     val bodyColor = chrome.body
     val neutralChrome = mediaStyle != AxLockscreenMediaStyle.WAVEFORM
