@@ -106,7 +106,7 @@ internal fun NotificationExpanded(
         Row(
             modifier = Modifier.fillMaxWidth()
                 .clip(ShapeLg)
-                .background(accent.copy(alpha = AlphaFaint))
+                .background(AlphaColors.DbStackCard.sectionSurface(accent))
                 .padding(SpaceLg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceLg),
@@ -469,7 +469,7 @@ internal fun NotificationGroupCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ShapeLg)
-                .background(accent.copy(alpha = AlphaFaint))
+                .background(AlphaColors.DbStackCard.sectionSurface(accent))
                 .clickable { onToggleExpand() }
                 .padding(SpaceLg),
             verticalAlignment = Alignment.CenterVertically,

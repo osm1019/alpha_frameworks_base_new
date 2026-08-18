@@ -58,6 +58,7 @@ import kotlinx.coroutines.delay
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.*
 import com.android.systemui.res.R
+import com.android.systemui.alpha.theme.AlphaColors
 
 private val EXPANDED_BOTTOM_PAD = 110.dp
 
@@ -296,7 +297,7 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ShapeLg)
-                .background(accent.copy(alpha = AlphaFaint))
+                .background(AlphaColors.DbStackCard.sectionSurface(accent))
                 .padding(SpaceLg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SpaceLg),
@@ -362,12 +363,10 @@ internal fun CallExpanded(event: IslandEvent.Call, interactor: IslandActions) {
                     }
                     ExpressivePillButton(
                         label = action.label.toString(),
-                        contentColor = if (isDestructive) RedAccent
+                        contentColor = AlphaColors.onAccentColor,
+                        backgroundColor = if (isDestructive) RedAccent
                             else if (isAnswer) GreenAccent
                             else accent,
-                        backgroundColor = if (isDestructive) RedAccent.copy(alpha = AlphaFaint)
-                            else if (isAnswer) GreenAccent.copy(alpha = AlphaFaint)
-                            else accent.copy(alpha = AlphaFaint),
                         modifier = Modifier.weight(1f),
                         onClick = {
                             try { action.action.actionIntent?.sendWithBal(context) }

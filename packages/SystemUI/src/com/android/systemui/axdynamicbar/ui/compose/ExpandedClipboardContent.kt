@@ -59,7 +59,7 @@ internal fun ClipboardExpanded(event: IslandEvent.Clipboard, interactor: IslandA
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(ShapeLg)
-                .background(IndigoAccent.copy(alpha = AlphaFaint))
+                .background(AlphaColors.DbStackCard.sectionSurface(IndigoAccent))
                 .padding(SpaceXxl),
             verticalAlignment = Alignment.CenterVertically,
         ) {
