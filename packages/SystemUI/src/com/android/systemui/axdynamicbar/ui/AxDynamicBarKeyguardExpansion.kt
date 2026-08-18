@@ -18,6 +18,7 @@ package com.android.systemui.axdynamicbar.ui
 
 import com.android.systemui.axdynamicbar.data.ChargingEventSource
 import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
+import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import javax.inject.Inject
@@ -127,8 +128,26 @@ constructor(
     /** Set while a lane tap owns the pin, so the card closing can hand it back. */
     private var pinnedByLane = false
 
+    /**
+     * The event this card was opened for. The stack pin is shared with C and still moves when a
+     * new event arrives; this card must not follow it or a clipboard copy replaces a timer the
+     * user is reading. Looked up live so a media track change still updates the same sheet.
+     * A snapshot covers the exit animation after that event has already left the stack.
+     */
+    private val _heldEventId = MutableStateFlow<String?>(null)
+    private val _heldSnapshot = MutableStateFlow<IslandEvent?>(null)
+
+    val heldEvent: StateFlow<IslandEvent?> =
+        combine(_heldEventId, _heldSnapshot, interactor.uiState) { id, snap, ui ->
+                if (id == null) null
+                else ui.events.firstOrNull { it.id == id } ?: snap?.takeIf { it.id == id }
+            }
+            .distinctUntilChanged()
+            .stateIn(applicationScope, SharingStarted.Eagerly, null)
+
     fun notifyCollapseSettled() {
         releaseLanePin()
+        clearHold()
         _collapseSettled.tryEmit(Unit)
     }
 
@@ -138,6 +157,7 @@ constructor(
                 if (!it) {
                     collapse()
                     releaseLanePin()
+                    clearHold()
                 }
             }
             .launchIn(applicationScope)
@@ -147,20 +167,28 @@ constructor(
         // intent still set and reopen a card the user never asked for.
         hasChargingSession.onEach { if (!it) _batteryIntent.value = false }.launchIn(applicationScope)
         hasChip.onEach { if (!it) _intent.value = false }.launchIn(applicationScope)
+
+        combine(_heldEventId, interactor.uiState) { id, ui ->
+                id != null && ui.events.none { it.id == id }
+            }
+            .distinctUntilChanged()
+            .onEach { gone -> if (gone) _intent.value = false }
+            .launchIn(applicationScope)
     }
 
     /**
      * Open the card for the lane occupant at [index].
      *
-     * The panel renders `topEvent`, so choosing one means moving the pin — which is shared with
-     * the status bar chip, the cutout and NowBar. The lane has no dismiss affordance, so the tap
-     * that opened the card is the only thing that can put the pin back; [releaseLanePin] does it
-     * once the card has finished closing, rather than mid-exit where the swap would be visible.
+     * Pinning still happens so C/cutout agree on which event won the tap. The card itself
+     * renders [heldEvent], not `topEvent`, because a later transient pin must not swap the
+     * sheet. [releaseLanePin] puts the pin back once the card has finished closing.
      */
     fun expandPinned(index: Int) {
+        val event = interactor.uiState.value.events.getOrNull(index) ?: return
         interactor.pinEventAt(index)
         pinnedByLane = true
-        expand()
+        hold(event)
+        showEventCard()
     }
 
     private fun releaseLanePin() {
@@ -169,10 +197,32 @@ constructor(
         interactor.pinEventAt(0)
     }
 
-    fun expand() {
-        if (interactor.uiState.value.topEvent == null) return
+    private fun hold(event: IslandEvent) {
+        _heldEventId.value = event.id
+        _heldSnapshot.value = event
+    }
+
+    private fun clearHold() {
+        _heldEventId.value = null
+        _heldSnapshot.value = null
+    }
+
+    private fun showEventCard() {
         _batteryIntent.value = false
         _intent.value = true
+    }
+
+    fun expand() {
+        val top = interactor.uiState.value.topEvent ?: return
+        if (_heldEventId.value == null) hold(top)
+        showEventCard()
+    }
+
+    /** Incoming call — the one interrupt allowed to replace an open sheet. */
+    fun expandFor(eventId: String) {
+        val event = interactor.uiState.value.events.firstOrNull { it.id == eventId } ?: return
+        hold(event)
+        showEventCard()
     }
 
     /** Only one card at a time; the battery tap closes an event card that is already open. */

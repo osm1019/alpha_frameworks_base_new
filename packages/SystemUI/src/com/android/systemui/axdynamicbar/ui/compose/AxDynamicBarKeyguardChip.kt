@@ -153,6 +153,7 @@ fun AxDynamicBarKeyguardChip(
     val isKeyguardEnabled by viewModel.isKeyguardEnabled.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
     val isEventExpanded by viewModel.isEventExpanded.collectAsStateWithLifecycle()
+    val heldEvent by viewModel.keyguardExpansion.heldEvent.collectAsStateWithLifecycle()
     val lockscreenMediaStyle by viewModel.lockscreenMediaStyle.collectAsStateWithLifecycle()
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
     val isBatteryExpanded by
@@ -166,7 +167,7 @@ fun AxDynamicBarKeyguardChip(
     Box(modifier = modifier) {
 
         val expandedVisibleState = remember { MutableTransitionState(false) }
-        expandedVisibleState.targetState = isEventExpanded && state != null
+        expandedVisibleState.targetState = isEventExpanded && heldEvent != null
         LaunchedEffect(expandedVisibleState.isIdle, expandedVisibleState.currentState) {
             if (expandedVisibleState.isIdle && !expandedVisibleState.currentState) {
                 viewModel.keyguardExpansion.notifyCollapseSettled()
@@ -180,10 +181,10 @@ fun AxDynamicBarKeyguardChip(
                 .fillMaxWidth()
                 .align(Alignment.Center),
         ) {
-            state?.let {
+            heldEvent?.let { event ->
                 KeyguardExpandedContent(
-                    event = it.event,
-                    allEvents = it.allEvents,
+                    event = event,
+                    allEvents = state?.allEvents ?: emptyList(),
                     interactor = viewModel.interactor,
                     onCollapse = { viewModel.keyguardExpansion.collapse() },
                     hapticsViewModelFactory = viewModel.interactor.sliderHapticsViewModelFactory,

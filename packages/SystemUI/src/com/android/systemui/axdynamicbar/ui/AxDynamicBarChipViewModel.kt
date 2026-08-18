@@ -223,7 +223,7 @@ constructor(
                     if (incomingCallId != null) {
                         interactor.dismissNotificationAlert()
                         if (interactor.isOnKeyguard.value) {
-                            keyguardExpansion.expand()
+                            keyguardExpansion.expandFor(incomingCallId)
                         } else {
                             statusBarExpansion.expand()
                         }
