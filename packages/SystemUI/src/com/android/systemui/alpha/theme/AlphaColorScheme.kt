@@ -39,12 +39,6 @@ import com.android.internal.R
  * provide this at their root, which is cheaper than a `nightLocked` parameter on each of the four
  * functions between a chip and the palette, and it reaches the pill content too, which reads the
  * hues directly.
- *
- * The keyguard lane provides it for a second reason, and the name undersells it there: the lane's
- * *neutrals* still follow the theme, only its event hues are pinned. A lane chip's body is the hue
- * itself, and the light band is solved for accents drawn as foreground text — tone 40, which as a
- * body sits at ~2.3:1 in day mode. Pinning matches `materialColorPrimaryFixed`, which the shortcut
- * beside the lane uses in both themes for exactly this reason.
  */
 val LocalNightLockedSurface: ProvidableCompositionLocal<Boolean> = staticCompositionLocalOf { false }
 
@@ -342,13 +336,10 @@ object AlphaColors {
     /**
      * The pill above the lockscreen shortcut row.
      *
-     * It sits *between* the two keyguard shortcut buttons, so [mediaBody] deliberately matches what
-     * `KeyguardQuickAffordanceViewBinder` gives them at rest — media carries no event hue, so it has
-     * to read as part of that band rather than as a live chip.
-     *
-     * Every other event takes the accent **whole**. The shortcut next to it does the same thing when
-     * it is switched on (`materialColorPrimaryFixed`, glyph inverted), and a live chip is that kind
-     * of object, not furniture.
+     * It sits *between* the two keyguard shortcut buttons, so [body] deliberately matches what
+     * `KeyguardQuickAffordanceViewBinder` gives them — the bottom row has to read as one band. That is
+     * also why media alone skips the event tint here ([mediaBody]): a coloured media pill between two
+     * neutral circles broke the row.
      */
     object DbLockscreenPill {
 
@@ -374,6 +365,8 @@ object AlphaColors {
         /** Media takes the body untinted — see the class note. */
         val mediaBody: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
 
+        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
+
         /**
          * Same pairing as [DbStatusBarChip]: open when frost is behind the pill, denser when the
          * compositor refuses a blur region. Unlike that chip this body stays theme-following —
@@ -383,19 +376,13 @@ object AlphaColors {
         const val bodyAlphaNoBlur = 0.90f
         val blurRadius = 12.dp
 
-        /**
-         * Hairline alpha for an event chip, applied to whatever content colour the body resolved
-         * to. Derived rather than fixed because the body is the event hue now: a rim pinned to
-         * `onSurface` was calibrated to lift a *dark* translucent chip off the wallpaper, and on a
-         * bright accent it draws a light line along a light edge — measured 1.01:1 on the torch
-         * chip, which is no rim at all.
-         */
-        const val rimOnAccentAlpha = 0.20f
-
-        /** Hairline. Media uses the neutral rim; event chips derive theirs — see [rimOnAccentAlpha]. */
+        /** Hairline. Media uses the neutral rim, tinted events the brighter one. */
         val mediaRim: Color
             @Composable @ReadOnlyComposable
             get() = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        val rim: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.16f else 0.12f)
 
         val rimWidth = 1.dp
 
@@ -713,9 +700,8 @@ object AlphaColors {
             @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
 
         /**
-         * Charging ring. Its own hues and its own baked-in alpha (0xCC) — deliberately *not*
-         * [red] / [orange] / [green], and not split per theme. A
-         * wart inherited from the extraction; now at least it is a wart in one named place.
+         * Charging ring. Level-banded red / orange / green with baked-in alpha (0xCC).
+         * Pre-defined charging colours, not theme accents, not split per theme.
          */
         val chargeRingLow = Color(0xCCF44336)
         val chargeRingMid = Color(0xCCFF9800)

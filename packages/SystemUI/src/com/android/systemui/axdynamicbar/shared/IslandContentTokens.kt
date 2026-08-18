@@ -312,18 +312,11 @@ internal fun dbLockscreenPillChrome(
             content = pill.text,
         )
     }
-    // The event colour itself, not a neutral stained with it. A lane chip marks something that is
-    // *happening*, which is the state the keyguard shortcut beside it paints as a full accent with
-    // an inverted glyph — a tinted neutral is the look of the inactive shortcut, one row down from
-    // what this is. It also makes the colour statable: a lerp against a wallpaper-derived surface
-    // cannot be written down, and the blend landed the glyph in the dead zone where neither content
-    // colour cleared the floor, so every chip was being rescued by the black/white fallback.
-    val mixed = accent.copy(alpha = 1f)
-    val content = contentColorOn(mixed, pill.text, pill.textInverse)
+    val mixed = lerp(pill.body, accent.copy(alpha = 1f), pill.tintAmount)
     return IslandGlassChrome(
         body = glass(mixed),
-        border = content.copy(alpha = AlphaColors.DbLockscreenPill.rimOnAccentAlpha),
-        content = content,
+        border = pill.rim,
+        content = contentColorOn(mixed, pill.text, pill.textInverse),
     )
 }
 
