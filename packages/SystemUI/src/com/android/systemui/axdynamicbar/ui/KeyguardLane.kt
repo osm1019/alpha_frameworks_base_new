@@ -94,9 +94,17 @@ internal fun pickPersistentIndication(
  * [dismissed] is the battery card's dismiss. It has to be passed in because the occupant is not an
  * event: there is no id for `dismissedEventIds` to hold, so the caller owns the flag and clears it
  * when the charging session ends — the same lifetime a dismissed event gets.
+ *
+ * [hasCard] is whether the card this occupant opens still has an event to show, and it already
+ * implies charging: the source nulls its event the moment charging stops. It is a separate answer
+ * from [dismissed] because dismissing charging on any *other* surface nulls that event for the
+ * rest of the session, and an occupant that outlives its card is one that goes dead to the touch.
  */
-internal fun batteryForLane(info: KeyguardBatteryInfo, dismissed: Boolean): KeyguardBatteryInfo? =
-    info.takeIf { it.isCharging && !dismissed }
+internal fun batteryForLane(
+    info: KeyguardBatteryInfo,
+    hasCard: Boolean,
+    dismissed: Boolean,
+): KeyguardBatteryInfo? = info.takeIf { hasCard && !dismissed }
 
 /**
  * First rule that produces content wins:

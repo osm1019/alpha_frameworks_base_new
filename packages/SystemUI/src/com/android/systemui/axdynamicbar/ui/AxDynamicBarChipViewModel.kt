@@ -173,17 +173,31 @@ constructor(
     }
 
     /**
+     * The lane's battery occupant, or null when the lane must not hold one.
+     *
+     * Gated on [chargingEvent] — the card's own source — and not merely on charging.
+     * `expandBattery` opens that flow, and dismissing the charging event on any other surface
+     * runs `clearCharging()`, which nulls it and latches for the rest of the session while
+     * `isActuallyCharging` stays true. Reading what the card reads is what keeps the occupant
+     * from outliving its card and taking taps that can never open anything.
+     */
+    private val laneBattery: StateFlow<KeyguardBatteryInfo?> =
+        combine(keyguardBatteryInfo, chargingEvent, _batteryDismissed) { info, event, dismissed ->
+            batteryForLane(info, hasCard = event != null, dismissed = dismissed)
+        }
+            .stateIn(applicationScope, SharingStarted.Lazily, null)
+
+    /**
      * Lockscreen lane inputs. Occupancy (temporary indication / row / persistent indication)
      * is resolved in composition once the usable width is known.
      */
     internal val keyguardLaneInputs: StateFlow<KeyguardLaneInputs> =
         combine(
             interactor.keyguardIndications,
-            keyguardBatteryInfo,
+            laneBattery,
             interactor.uiState,
             interactor.isOnKeyguard,
-            _batteryDismissed,
-        ) { indications, battery, ui, onKg, batteryDismissed ->
+        ) { indications, battery, ui, onKg ->
             if (!onKg) {
                 KeyguardLaneInputs(null, null, null, emptyList())
             } else {
@@ -191,7 +205,7 @@ constructor(
                 KeyguardLaneInputs(
                     temporaryIndication = pickTemporaryIndication(values),
                     persistentIndication = pickPersistentIndication(values),
-                    battery = batteryForLane(battery, batteryDismissed),
+                    battery = battery,
                     events = ui.events,
                 )
             }
