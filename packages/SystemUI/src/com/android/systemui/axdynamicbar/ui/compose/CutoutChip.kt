@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -103,6 +104,7 @@ import com.android.systemui.axdynamicbar.shared.StatusBarPillWidth
 import com.android.systemui.axdynamicbar.shared.chipTintAccentFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.LocalNightLockedSurface
 import com.android.systemui.axdynamicbar.shared.dbStatusBarChipChrome
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -189,6 +191,19 @@ private fun chargingRightLaneText(event: IslandEvent.Charging): String {
 @Composable
 fun CutoutChip(
     modifier: Modifier = Modifier,
+    viewModel: AxDynamicBarChipViewModel,
+    cutoutRectPx: Rect,
+    placementHint: CutoutPlacementHint,
+) {
+    CompositionLocalProvider(LocalNightLockedSurface provides true) {
+        CutoutChipContent(modifier, viewModel, cutoutRectPx, placementHint)
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun CutoutChipContent(
+    modifier: Modifier,
     viewModel: AxDynamicBarChipViewModel,
     cutoutRectPx: Rect,
     placementHint: CutoutPlacementHint,

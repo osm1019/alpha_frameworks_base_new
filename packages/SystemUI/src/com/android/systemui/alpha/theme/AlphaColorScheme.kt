@@ -20,13 +20,27 @@ import androidx.annotation.ColorRes
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.internal.R
+
+/**
+ * Marks a subtree that keeps its night form whatever the system theme is.
+ *
+ * The event palette resolves against the system theme, which is what every surface wants except
+ * the two night-locked chips. Hand those the light band in day mode and a tone-40 accent gets
+ * mixed into a `…_dark` body — the accent vanishing into the chip instead of colouring it. They
+ * provide this at their root, which is cheaper than a `nightLocked` parameter on each of the four
+ * functions between a chip and the palette, and it reaches the pill content too, which reads the
+ * hues directly.
+ */
+val LocalNightLockedSurface: ProvidableCompositionLocal<Boolean> = staticCompositionLocalOf { false }
 
 private val isDarkTheme: Boolean
     @Composable @ReadOnlyComposable get() = isSystemInDarkTheme()
@@ -98,52 +112,63 @@ private fun nightRole(@ColorRes id: Int): Color = Color(LocalContext.current.get
  */
 object AlphaColors {
 
+    /** Which band the hue getters below answer with. See [LocalNightLockedSurface]. */
     private val isDark: Boolean
-        @Composable @ReadOnlyComposable get() = isSystemInDarkTheme()
+        @Composable @ReadOnlyComposable
+        get() = LocalNightLockedSurface.current || isSystemInDarkTheme()
 
     // ── Event palette ────────────────────────────────────────────────────────────────────
     // Shared hues, mapped to events by `eventStyleFor`. Named by colour because each one
     // serves several elements.
     //
-    // Split per theme so the two sides tune independently. The pairs are identical today —
-    // change one without touching the other whenever a hue needs it.
+    // Split per theme so the two sides tune independently.
     //
     // ⚠️ RULE: a light-theme accent must never be **less vivid** than its dark counterpart.
     // Light surfaces wash colour out, so if a hue looks weak in day mode the fix is to push
     // the `…Light` value harder, never to soften it toward the background.
+    //
+    // Each pair is one hue at two lightnesses. The `…Light` values were solved, not picked:
+    // hue and HSL saturation held exactly at the dark value, lightness moved until the colour
+    // lands on **tone 40** — where Material puts `primary` in a light scheme. Against a tone-92
+    // `surfaceContainerHigh` body that is ~5.2:1, so an accent-coloured label clears small-text
+    // contrast and not just the graphics floor.
+    //
+    // The dark column is a tone-70-ish family and is legible on the dark bodies as it stands.
+    // Do not "simplify" a pair back to one value: identical pairs are what made every accent
+    // wash out in day mode, yellow worst of all at 1.2:1.
 
     val redDark = Color(0xFFEF5350)
-    val redLight = Color(0xFFEF5350)
+    val redLight = Color(0xFFBC1411)
 
     val pinkDark = Color(0xFFEC407A)
-    val pinkLight = Color(0xFFEC407A)
+    val pinkLight = Color(0xFFB9124B)
 
     val orangeDark = Color(0xFFFFA726)
-    val orangeLight = Color(0xFFFFA726)
+    val orangeLight = Color(0xFF895100)
 
     val yellowDark = Color(0xFFFFCA28)
-    val yellowLight = Color(0xFFFFCA28)
+    val yellowLight = Color(0xFF775A00)
 
     val greenDark = Color(0xFF66BB6A)
-    val greenLight = Color(0xFF66BB6A)
+    val greenLight = Color(0xFF2F6A32)
 
     val mintDark = Color(0xFF26A69A)
-    val mintLight = Color(0xFF26A69A)
+    val mintLight = Color(0xFF186962)
 
     val tealDark = Color(0xFF29B6F6)
-    val tealLight = Color(0xFF29B6F6)
+    val tealLight = Color(0xFF06658F)
 
     val blueDark = Color(0xFF42A5F5)
-    val blueLight = Color(0xFF42A5F5)
+    val blueLight = Color(0xFF0960A7)
 
     val indigoDark = Color(0xFF7E57C2)
-    val indigoLight = Color(0xFF7E57C2)
+    val indigoLight = Color(0xFF7045BB)
 
     val purpleDark = Color(0xFFAB47BC)
-    val purpleLight = Color(0xFFAB47BC)
+    val purpleLight = Color(0xFF8F399E)
 
     val pausedGrayDark = Color(0xFF8E8E93)
-    val pausedGrayLight = Color(0xFF8E8E93)
+    val pausedGrayLight = Color(0xFF5E5E62)
 
     // Resolved for the active theme — this is what call sites use.
 

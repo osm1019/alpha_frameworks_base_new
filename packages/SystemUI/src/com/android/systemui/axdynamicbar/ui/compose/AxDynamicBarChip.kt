@@ -8,6 +8,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import kotlin.math.abs
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -56,6 +57,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.systemui.alpha.theme.AlphaColors
+import com.android.systemui.alpha.theme.LocalNightLockedSurface
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.res.stringResource
@@ -95,6 +97,18 @@ fun AxDynamicBarChip(
     viewModel: AxDynamicBarChipViewModel,
     modifier: Modifier = Modifier,
     ignoreKeyguard: Boolean = false,
+) {
+    CompositionLocalProvider(LocalNightLockedSurface provides true) {
+        AxDynamicBarChipContent(viewModel, modifier, ignoreKeyguard)
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun AxDynamicBarChipContent(
+    viewModel: AxDynamicBarChipViewModel,
+    modifier: Modifier,
+    ignoreKeyguard: Boolean,
 ) {
     val state by viewModel.chipState.collectAsStateWithLifecycle()
     val isOnKeyguard by viewModel.isOnKeyguard.collectAsStateWithLifecycle()
