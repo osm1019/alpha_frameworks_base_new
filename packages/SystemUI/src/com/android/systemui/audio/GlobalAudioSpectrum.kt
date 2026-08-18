@@ -21,6 +21,7 @@ import android.media.audiofx.Visualizer
 import android.os.SystemClock
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.pow
@@ -53,12 +54,20 @@ internal object GlobalAudioSpectrum {
     var levels: FloatArray = FloatArray(0)
         private set
 
-    /** Bumped on every captured frame. Read on the UI thread to notice new data. */
-    @Volatile
-    var revision: Int = 0
-        private set
+    /**
+     * Bumped whenever [levels] changes — a new frame, or the tap closing. Read on the UI thread to
+     * notice new data.
+     *
+     * Atomic rather than a `@Volatile` increment: `++` is read-modify-write, so it is only safe
+     * while exactly one thread produces frames. That is true today and is not worth depending on.
+     */
+    private val revisionCounter = AtomicInteger(0)
 
-    private var visualizer: Visualizer? = null
+    val revision: Int
+        get() = revisionCounter.get()
+
+    /** Written under the lock, read by [isLive] outside it. */
+    @Volatile private var visualizer: Visualizer? = null
     private var refCount = 0
     @Volatile private var lastEnergyUptimeMs = 0L
     private val listeners = CopyOnWriteArrayList<FftListener>()
@@ -166,6 +175,9 @@ internal object GlobalAudioSpectrum {
         visualizer = null
         levels = FloatArray(0)
         lastEnergyUptimeMs = 0L
+        // Publish the clear as well as the frames: a consumer watching [revision] would otherwise
+        // hold the last frame's bars until something else woke it.
+        revisionCounter.incrementAndGet()
     }
 
     /**
@@ -199,7 +211,7 @@ internal object GlobalAudioSpectrum {
             }
             if (peak > SILENCE_FLOOR) lastEnergyUptimeMs = SystemClock.uptimeMillis()
             levels = out
-            revision++
+            revisionCounter.incrementAndGet()
         }
         for (listener in listeners) {
             listener.onFft(fft)
