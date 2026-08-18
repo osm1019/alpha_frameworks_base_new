@@ -18,7 +18,9 @@
 package com.android.systemui.keyguard.ui.viewmodel
 
 import android.content.Context
+import androidx.core.graphics.ColorUtils
 import com.android.settingslib.Utils
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
@@ -68,24 +70,23 @@ constructor(
     glanceableHubToLockscreenTransitionViewModel: GlanceableHubToLockscreenTransitionViewModel,
     private val sceneInteractor: Lazy<SceneInteractor>,
 ) {
+    /**
+     * One-time shot — see `AlphaColors.KeyguardFurniture`. The alpha rides in the ARGB rather than
+     * on the view, because [alpha] below is already owned by the transition view models and would
+     * overwrite anything set on `bgView.alpha`; in the colour it multiplies with them instead.
+     */
+    private fun surfaceColor(): Int =
+        ColorUtils.setAlphaComponent(
+            Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.colorSurface),
+            AlphaColors.KeyguardFurniture.bodyAlpha255,
+        )
+
     val color: Flow<Int> =
         deviceEntryIconViewModel.useBackgroundProtection.flatMapLatest { useBackground ->
             if (useBackground) {
                 configurationInteractor.onAnyConfigurationChange
-                    .map {
-                        Utils.getColorAttrDefaultColor(
-                            context,
-                            com.android.internal.R.attr.colorSurface,
-                        )
-                    }
-                    .onStart {
-                        emit(
-                            Utils.getColorAttrDefaultColor(
-                                context,
-                                com.android.internal.R.attr.colorSurface,
-                            )
-                        )
-                    }
+                    .map { surfaceColor() }
+                    .onStart { emit(surfaceColor()) }
             } else {
                 flowOf(0)
             }

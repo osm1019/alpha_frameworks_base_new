@@ -30,9 +30,11 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.Lifecycle
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.keyguard.logging.KeyguardQuickAffordancesLogger
+import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.animation.Expandable
 import com.android.systemui.animation.view.LaunchableImageView
 import com.android.systemui.common.shared.model.Icon
@@ -187,12 +189,19 @@ constructor(
         view.backgroundTintList =
             if (!viewModel.isSelected) {
                 ColorStateList.valueOf(
-                    view.context.getColor(
-                        if (viewModel.isActivated) {
-                            com.android.internal.R.color.materialColorPrimaryFixed
-                        } else {
-                            com.android.internal.R.color.materialColorSurfaceContainerHigh
-                        }
+                    // One-time shot — see AlphaColors.KeyguardFurniture. The wallpaper reads through
+                    // so this plate stops being opaque next to the translucent Dynamic Bar lane.
+                    // The selected branch below keeps its opaque swatch: that is the wallpaper
+                    // picker preview, which is not drawn on a wallpaper.
+                    ColorUtils.setAlphaComponent(
+                        view.context.getColor(
+                            if (viewModel.isActivated) {
+                                com.android.internal.R.color.materialColorPrimaryFixed
+                            } else {
+                                com.android.internal.R.color.materialColorSurfaceContainerHigh
+                            }
+                        ),
+                        AlphaColors.KeyguardFurniture.bodyAlpha255,
                     )
                 )
             } else {

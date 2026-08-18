@@ -220,6 +220,23 @@ object AlphaColors {
     val contrastFloorLightColor = Color.White
     val contrastFloorDarkColor = Color.Black
 
+    /**
+     * The AOSP lockscreen furniture the Dynamic Bar lane sits among — the two shortcuts, the device
+     * entry background, the notification shelf. Not our views: we only restate their alpha so the
+     * row stops being three opaque plates around a translucent lane.
+     *
+     * ⚠️ **One-time shot.** Alpha only, no blur backdrop — deliberately, because a backdrop behind
+     * the device entry icon is not something to experiment with. This is a closer match to the
+     * lane, not the same material, and it is not a pattern to build on. A17 rewrites the lockscreen
+     * colour model properly; see `a17/alpha-rebase-plan.md` §11.
+     *
+     * [DbLockscreenPill.bodyAlphaNoBlur]'s value, because that is the no-backdrop case.
+     */
+    object KeyguardFurniture {
+        const val bodyAlpha = 0.90f
+        const val bodyAlpha255 = 230 // (0.90 * 255).roundToInt(), for the ARGB call sites
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────────────────────
     // Status bar chip (and the cutout chip — same object, two mounts)
     // ─────────────────────────────────────────────────────────────────────────────────────────────

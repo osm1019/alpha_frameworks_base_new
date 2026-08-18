@@ -73,6 +73,9 @@ import java.io.PrintWriter;
  */
 public class NotificationShelf extends ActivatableNotificationView {
 
+    /** Mirrors {@code AlphaColors.KeyguardFurniture.bodyAlpha}. */
+    private static final float KEYGUARD_BACKGROUND_ALPHA = 0.90f;
+
     private static final int TAG_CONTINUOUS_CLIPPING = R.id.continuous_clipping_tag;
     private static final String TAG = "NotificationShelf";
 
@@ -1086,6 +1089,17 @@ public class NotificationShelf extends ActivatableNotificationView {
 
     public void setCanModifyColorOfNotifications(boolean canModifyColorOfNotifications) {
         mCanModifyColorOfNotifications = canModifyColorOfNotifications;
+    }
+
+    /**
+     * One-time shot — see {@code AlphaColors.KeyguardFurniture}. Translucent on the keyguard so the
+     * shelf sits with the Dynamic Bar lane; opaque everywhere else, because in the shade it sits
+     * over a scrim rather than the wallpaper and transparency there reads as a defect.
+     */
+    public void setOnKeyguard(boolean onKeyguard) {
+        if (mBackgroundNormal != null) {
+            mBackgroundNormal.setAlpha(onKeyguard ? KEYGUARD_BACKGROUND_ALPHA : 1f);
+        }
     }
 
     public void setCanInteract(boolean canInteract) {

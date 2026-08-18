@@ -40,6 +40,10 @@ constructor(
     val isClickable: Flow<Boolean>
         get() = interactor.isShowingOnKeyguard
 
+    /** Drives the shelf's one-time translucency — see `AlphaColors.KeyguardFurniture`. */
+    val isOnKeyguard: Flow<Boolean>
+        get() = interactor.isShowingOnKeyguard
+
     /** Is the shelf allowed to modify the color of notifications in the host layout? */
     val canModifyColorOfNotifications: Flow<Boolean>
         get() = interactor.isShelfStatic.map { static -> !static }

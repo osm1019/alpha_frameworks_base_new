@@ -42,6 +42,7 @@ object NotificationShelfViewBinder {
                 viewModel.canModifyColorOfNotifications.collect(::setCanModifyColorOfNotifications)
             }
             launch { viewModel.isClickable.collect(::setCanInteract) }
+            launch { viewModel.isOnKeyguard.collect(::setOnKeyguard) }
 
             if (SceneContainerFlag.isEnabled) {
                 launch { viewModel.isAlignedToEnd.collect(::setAlignedToEnd) }
