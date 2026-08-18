@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Drawable
+import android.view.HapticFeedbackConstants
 import androidx.core.graphics.ColorUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,9 +36,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +54,7 @@ import com.android.systemui.axdynamicbar.model.IslandEvent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -679,6 +683,37 @@ internal fun ActionChip(
     }
 }
 
+/**
+ * Whether a tap on the surrounding surface may act.
+ *
+ * Accepts everything by default: only the keyguard card provides a real gate, because that is the
+ * one surface where the falsing manager is consulted at all. Nothing below has to know which
+ * surface it is drawing on — see `IslandActions.acceptKeyguardTap` for why every tap there has to
+ * ask, including the ones that are never refused.
+ */
+internal val LocalTapGate: ProvidableCompositionLocal<(Boolean) -> Boolean> =
+    staticCompositionLocalOf { { true } }
+
+/**
+ * Wraps [onClick] in [LocalTapGate].
+ *
+ * A refused tap gets the REJECT haptic. AOSP pairs that buzz with `notification_tap_again` in the
+ * keyguard indication area, which the lane suppresses, so on this surface the buzz carries the
+ * whole message — and the message is worth giving, because the tap after it goes through.
+ */
+@Composable
+internal fun gatedTap(leavesKeyguard: Boolean = false, onClick: () -> Unit): () -> Unit {
+    val gate = LocalTapGate.current
+    val view = LocalView.current
+    return {
+        if (gate(leavesKeyguard)) {
+            onClick()
+        } else {
+            view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+        }
+    }
+}
+
 @Composable
 internal fun ExpressivePillButton(
     label: String,
@@ -689,7 +724,7 @@ internal fun ExpressivePillButton(
     onClick: () -> Unit,
 ) {
     Surface(
-        onClick = onClick,
+        onClick = gatedTap(onClick = onClick),
         shape = RoundedCornerShape(percent = 50),
         color = backgroundColor,
         modifier = modifier,

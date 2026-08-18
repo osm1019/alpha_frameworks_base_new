@@ -2,6 +2,8 @@
 
 package com.android.systemui.axdynamicbar.ui.compose
 
+import android.app.PendingIntent
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -62,6 +64,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.FloatState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,6 +85,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -156,12 +160,39 @@ internal fun KeyguardExpandedContent(
             ) { onCollapse() },
         contentAlignment = Alignment.Center,
     ) {
-        when (event) {
-            is IslandEvent.Media -> KeyguardMediaPanel(event, interactor, lockscreenMediaStyle)
-            is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor)
-            is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor)
-            is IslandEvent.AudioRecording -> KeyguardAudioRecordingPanel(event, interactor)
-            else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
+        CompositionLocalProvider(LocalTapGate provides interactor::acceptKeyguardTap) {
+            when (event) {
+                is IslandEvent.Media ->
+                    KeyguardMediaPanel(event, interactor, lockscreenMediaStyle, onCollapse)
+                is IslandEvent.Timer -> KeyguardTimerPanel(event, interactor, onCollapse)
+                is IslandEvent.Stopwatch -> KeyguardStopwatchPanel(event, interactor, onCollapse)
+                is IslandEvent.AudioRecording ->
+                    KeyguardAudioRecordingPanel(event, interactor, onCollapse)
+                else -> KeyguardGenericPanel(event, interactor, hapticsViewModelFactory)
+            }
+        }
+    }
+}
+
+/**
+ * A tap that hands the screen to another activity.
+ *
+ * Closes the card on the way out: the launch parks on the bouncer until you authenticate, and
+ * with the card still sitting on top of it nothing on screen answers the tap. A refusal buzzes
+ * instead — see [gatedTap]. The launch does its own classifying, so this does not gate first.
+ */
+@Composable
+private fun Modifier.launchingClickable(
+    intent: PendingIntent,
+    interactor: IslandActions,
+    onCollapse: () -> Unit,
+): Modifier {
+    val view = LocalView.current
+    return clickable {
+        if (interactor.launchDismissingKeyguard(intent)) {
+            onCollapse()
+        } else {
+            view.performHapticFeedback(HapticFeedbackConstants.REJECT)
         }
     }
 }
@@ -262,8 +293,9 @@ private fun KeyguardMediaPanel(
     event: IslandEvent.Media,
     interactor: IslandActions,
     style: AxLockscreenMediaStyle,
+    onCollapse: () -> Unit,
 ) {
-    KeyguardMediaCard(event, interactor, style)
+    KeyguardMediaCard(event, interactor, style, onCollapse)
 }
 
 /**
@@ -277,6 +309,7 @@ private fun KeyguardMediaCard(
     event: IslandEvent.Media,
     interactor: IslandActions,
     style: AxLockscreenMediaStyle,
+    onCollapse: () -> Unit,
 ) {
     val colors = rememberMediaColors(event)
     val accent = colors.accent
@@ -381,7 +414,7 @@ private fun KeyguardMediaCard(
                 KeyguardBareControl(
                     onClick = {
                         interactor.openMediaApp()
-                        interactor.collapseIsland()
+                        onCollapse()
                     },
                 ) {
                     val appIcon = event.appIcon
@@ -450,7 +483,7 @@ private fun KeyguardMediaCard(
                 KeyguardBareControl(
                     onClick = {
                         interactor.openMediaOutputSwitcher()
-                        interactor.collapseIsland()
+                        onCollapse()
                     },
                 ) {
                     Icon(
@@ -560,7 +593,7 @@ private fun KeyguardBareControl(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = onClick,
+                    onClick = gatedTap(onClick = onClick),
                 ),
         contentAlignment = Alignment.Center,
     ) {
@@ -576,6 +609,7 @@ private fun KeyguardPlayButton(
     onClick: () -> Unit,
 ) {
     val motionScheme = MaterialTheme.motionScheme
+    val gatedOnClick = gatedTap(onClick = onClick)
     val icon: @Composable () -> Unit = {
         AnimatedContent(
             targetState = isPlaying,
@@ -616,7 +650,7 @@ private fun KeyguardPlayButton(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = onClick,
+                            onClick = gatedOnClick,
                         ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -634,7 +668,7 @@ private fun KeyguardPlayButton(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = onClick,
+                            onClick = gatedOnClick,
                         ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -647,7 +681,7 @@ private fun KeyguardPlayButton(
             // body it gets measured against afterwards, and darkening a pastel to make one turns
             // it to slate. A fill has to hold its hue against the sheet on its own.
             Surface(
-                onClick = onClick,
+                onClick = gatedOnClick,
                 modifier = Modifier.size(KeyguardPlaySize),
                 shape = CircleShape,
                 color = MediaChrome.accentFill(accent),
@@ -899,7 +933,11 @@ private fun KeyguardMediaSegmentedProgress(
 }
 
 @Composable
-private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActions) {
+private fun KeyguardTimerPanel(
+    event: IslandEvent.Timer,
+    interactor: IslandActions,
+    onCollapse: () -> Unit,
+) {
     val colors = rememberIslandColors(event)
     var remainingMs by remember(event.endTimeMs) {
         mutableLongStateOf((event.endTimeMs - System.currentTimeMillis()).coerceAtLeast(0L))
@@ -934,7 +972,7 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
         TonalBanner(
             colors,
             modifier = event.contentIntent?.let { intent ->
-                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+                Modifier.launchingClickable(intent, interactor, onCollapse)
             } ?: Modifier,
         ) {
             Box(
@@ -985,7 +1023,11 @@ private fun KeyguardTimerPanel(event: IslandEvent.Timer, interactor: IslandActio
 }
 
 @Composable
-private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: IslandActions) {
+private fun KeyguardStopwatchPanel(
+    event: IslandEvent.Stopwatch,
+    interactor: IslandActions,
+    onCollapse: () -> Unit,
+) {
     val colors = rememberIslandColors(event)
     var elapsedMs by remember(event.startTimeMs) {
         mutableLongStateOf((System.currentTimeMillis() - event.startTimeMs).coerceAtLeast(0L))
@@ -1011,7 +1053,7 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
         TonalBanner(
             colors,
             modifier = event.contentIntent?.let { intent ->
-                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+                Modifier.launchingClickable(intent, interactor, onCollapse)
             } ?: Modifier,
         ) {
             Box(
@@ -1071,7 +1113,11 @@ private fun KeyguardStopwatchPanel(event: IslandEvent.Stopwatch, interactor: Isl
 }
 
 @Composable
-private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, interactor: IslandActions) {
+private fun KeyguardAudioRecordingPanel(
+    event: IslandEvent.AudioRecording,
+    interactor: IslandActions,
+    onCollapse: () -> Unit,
+) {
     val colors = rememberIslandColors(event)
     var elapsedMs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(event.startTimeMs, event.state, event.pausedDurationMs) {
@@ -1101,7 +1147,7 @@ private fun KeyguardAudioRecordingPanel(event: IslandEvent.AudioRecording, inter
         TonalBanner(
             colors,
             modifier = event.contentIntent?.let { intent ->
-                Modifier.clickable { interactor.launchDismissingKeyguard(intent) }
+                Modifier.launchingClickable(intent, interactor, onCollapse)
             } ?: Modifier,
         ) {
             if (isRecording) PulsingDot(color = colors.accent, size = SpaceMd)
@@ -1305,30 +1351,41 @@ internal fun KeyguardBatteryPanel(
             ) { onCollapse() },
         contentAlignment = Alignment.Center,
     ) {
-        KeyguardPanelSurface {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(SpaceSection),
-                verticalArrangement = Arrangement.spacedBy(SpaceXxl),
-            ) {
-                ChargingExpanded(event, interactor)
+        val view = LocalView.current
+        CompositionLocalProvider(LocalTapGate provides interactor::acceptKeyguardTap) {
+            KeyguardPanelSurface {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(SpaceSection),
+                    verticalArrangement = Arrangement.spacedBy(SpaceXxl),
+                ) {
+                    ChargingExpanded(event, interactor)
 
-                Row(horizontalArrangement = Arrangement.spacedBy(SpaceMd)) {
-                    ExpressivePillButton(
-                        label = stringResource(R.string.ax_dynamic_bar_battery_usage),
-                        icon = Icons.Filled.BarChart,
-                        contentColor = BlueAccent,
-                        backgroundColor = BlueAccent.copy(alpha = AlphaFaint),
-                        modifier = Modifier.weight(1f),
-                        onClick = { interactor.openBatteryStats() },
-                    )
-                    ExpressivePillButton(
-                        label = stringResource(R.string.ax_dynamic_bar_dismiss),
-                        icon = Icons.Filled.Close,
-                        contentColor = RedAccent,
-                        backgroundColor = RedAccent.copy(alpha = AlphaFaint),
-                        modifier = Modifier.weight(1f),
-                        onClick = onDismiss,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(SpaceMd)) {
+                        ExpressivePillButton(
+                            label = stringResource(R.string.ax_dynamic_bar_battery_usage),
+                            icon = Icons.Filled.BarChart,
+                            contentColor = BlueAccent,
+                            backgroundColor = BlueAccent.copy(alpha = AlphaFaint),
+                            modifier = Modifier.weight(1f),
+                            // Settings waits on the bouncer either way; closing is what tells you
+                            // the tap landed, since the card would otherwise cover the whole answer.
+                            onClick = {
+                                if (interactor.openBatteryStats()) {
+                                    onCollapse()
+                                } else {
+                                    view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+                                }
+                            },
+                        )
+                        ExpressivePillButton(
+                            label = stringResource(R.string.ax_dynamic_bar_dismiss),
+                            icon = Icons.Filled.Close,
+                            contentColor = RedAccent,
+                            backgroundColor = RedAccent.copy(alpha = AlphaFaint),
+                            modifier = Modifier.weight(1f),
+                            onClick = onDismiss,
+                        )
+                    }
                 }
             }
         }

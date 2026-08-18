@@ -745,27 +745,45 @@ constructor(
     override fun toggleTorch() = repository.torch.toggleTorch()
 
     /**
-     * A tap that leaves the keyguard has to be *classified*, or it counts against us.
+     * Classify a tap on the keyguard, and answer whether it may act.
      *
-     * `BrightLineFalsingManager` records any gesture nobody asked about as false, with a 0.7–0.8
-     * penalty — and a clean tap draws the higher one. Two of those push the running belief past
-     * 0.9, and `CentralSurfacesImpl`'s belief listener answers by calling
-     * `StatusBarKeyguardViewManager.reset(isFalsingReset = true)`, which hides the alternate
-     * bouncer and fires `notifyDismissCancelled()`. The pending intent is dropped with the
-     * dismissal, so the card looks like it did nothing.
+     * `BrightLineFalsingManager` books any gesture nobody asked about as false, and one that
+     * looks like a clean tap draws the higher 0.8 penalty. Two of those put the running belief
+     * past 0.9, and from there `isFalseTap` refuses the next *classified* tap outright, for
+     * "bad history" — so an unclassified tap on one control is what swallows the tap on the
+     * next. Opening a card and pressing a button inside it is exactly two taps, which is why
+     * the button read as dead. That is the reason everything tappable on this surface calls
+     * this, and not only the actions that can be refused.
      *
-     * Asking here is what registers the gesture as a tap. It also does the job the API is named
-     * for: a genuine pocket touch still gets refused.
+     * Past that, two of those false events also make `CentralSurfacesImpl`'s belief listener
+     * call `StatusBarKeyguardViewManager.reset(isFalsingReset = true)`, which hides the
+     * alternate bouncer and fires `notifyDismissCancelled()`, dropping an already-parked launch.
+     *
+     * [leavesKeyguard] draws the penalty an unlock-and-launch deserves. An in-place control only
+     * needs counting, not charging for, so it takes none — but a bad history still refuses it,
+     * which is the point: it is the refusal that keeps the gesture off the unclassified path.
+     *
+     * A refusal is never final. `isFalseTap` runs its double-tap check before consulting the
+     * history, so tapping again goes through. AOSP answers one with `notification_tap_again` in
+     * the keyguard indication area; the lane suppresses that area, so the caller's REJECT haptic
+     * is the whole of the feedback this surface can give.
      */
-    private fun tapPassedFalsing(): Boolean = !falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)
+    override fun acceptKeyguardTap(leavesKeyguard: Boolean): Boolean =
+        !falsingManager.isFalseTap(
+            if (leavesKeyguard) FalsingManager.LOW_PENALTY else FalsingManager.NO_PENALTY
+        )
 
     /**
      * Battery usage, not the battery page: `ACTION_POWER_USAGE_SUMMARY` lands on Settings' battery
-     * screen, one level above the stats this card's button names. Dismisses the keyguard first —
-     * this is a real Settings activity, not an in-place toggle, so it cannot render behind the lock.
+     * screen, one level above the stats this card's button names.
+     *
+     * Started from a dismiss action rather than [ActivityStarter.startActivity] so it can ask for
+     * `afterKeyguardGone`: the plain-Intent entry points hardcode that to `willLaunchResolverActivity`,
+     * which is false for an explicit component, and Settings then draws while the lock screen is
+     * still on its way out.
      */
-    override fun openBatteryStats() {
-        if (!tapPassedFalsing()) return
+    override fun openBatteryStats(): Boolean {
+        if (!acceptKeyguardTap(leavesKeyguard = true)) return false
         val intent = Intent().apply {
             component = ComponentName(
                 "com.android.settings",
@@ -773,18 +791,28 @@ constructor(
             )
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        activityStarter.startActivity(intent, true /* dismissShade */)
+        activityStarter.dismissKeyguardThenExecute(
+            ActivityStarter.OnDismissAction {
+                context.startActivityAsUser(intent, UserHandle.CURRENT)
+                false
+            },
+            /* cancel = */ null,
+            /* afterKeyguardGone = */ true,
+        )
+        return true
     }
 
-    override fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification) {
-        val intent = event.sbn.notification?.contentIntent ?: return
-        if (!tapPassedFalsing()) return
+    override fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification): Boolean {
+        val intent = event.sbn.notification?.contentIntent ?: return false
+        if (!acceptKeyguardTap(leavesKeyguard = true)) return false
         activityStarter.startPendingIntentDismissingKeyguard(intent)
+        return true
     }
 
-    override fun launchDismissingKeyguard(intent: PendingIntent) {
-        if (!tapPassedFalsing()) return
+    override fun launchDismissingKeyguard(intent: PendingIntent): Boolean {
+        if (!acceptKeyguardTap(leavesKeyguard = true)) return false
         activityStarter.startPendingIntentDismissingKeyguard(intent)
+        return true
     }
 
     override fun setTorchLevel(level: Int) = repository.torch.setLevel(level)

@@ -54,7 +54,13 @@ interface IslandActions {
     fun onNotificationInteractionEnd(eventId: String)
     fun onNotificationAlertInteractionStart()
     fun onNotificationAlertInteractionEnd()
-    fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification)
-    fun launchDismissingKeyguard(intent: PendingIntent)
-    fun openBatteryStats()
+    fun launchNotificationDismissingKeyguard(event: IslandEvent.Notification): Boolean
+    fun launchDismissingKeyguard(intent: PendingIntent): Boolean
+    fun openBatteryStats(): Boolean
+
+    /**
+     * Classifies a tap on the keyguard and answers whether it may act. Every tappable thing on
+     * that surface has to call it, whether or not it can be refused — see the implementation.
+     */
+    fun acceptKeyguardTap(leavesKeyguard: Boolean): Boolean
 }

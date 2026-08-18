@@ -368,9 +368,8 @@ constructor(
 
     fun toggleTorch() = interactor.toggleTorch()
 
-    fun launchNotificationFromKeyguard(event: IslandEvent.Notification) {
+    fun launchNotificationFromKeyguard(event: IslandEvent.Notification): Boolean =
         interactor.launchNotificationDismissingKeyguard(event)
-    }
 
     fun handleAospChipTap(event: IslandEvent.AospChip, expandable: Expandable): Boolean {
         val active = event.active

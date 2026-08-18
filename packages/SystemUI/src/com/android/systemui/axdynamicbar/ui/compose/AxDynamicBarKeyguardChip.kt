@@ -61,6 +61,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -82,6 +83,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -107,6 +109,8 @@ import com.android.systemui.media.ax.ui.model.AxLockscreenMediaStyle
 import com.android.systemui.res.R
 import kotlinx.coroutines.delay
 import android.content.Context
+import android.view.View
+import android.view.HapticFeedbackConstants
 import android.graphics.drawable.Drawable
 import java.util.Calendar
 
@@ -234,13 +238,17 @@ fun AxDynamicBarKeyguardChip(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
         ) {
-            KeyguardChipLane(
-                inputs = laneInputs,
-                viewModel = viewModel,
-                batteryString = batteryString,
-                mediaStyle = lockscreenMediaStyle,
-                blurred = blurred,
-            )
+            CompositionLocalProvider(
+                LocalTapGate provides viewModel.interactor::acceptKeyguardTap
+            ) {
+                KeyguardChipLane(
+                    inputs = laneInputs,
+                    viewModel = viewModel,
+                    batteryString = batteryString,
+                    mediaStyle = lockscreenMediaStyle,
+                    blurred = blurred,
+                )
+            }
         }
     }
 }
@@ -317,7 +325,7 @@ private fun KeyguardSoloOccupant(
                 batteryString,
                 height,
                 blurred,
-                onClick = { viewModel.keyguardExpansion.expandBattery() },
+                onClick = gatedTap { viewModel.keyguardExpansion.expandBattery() },
             )
         is KeyguardLaneOccupant.Event -> {
             val event = occupant.event
@@ -372,6 +380,7 @@ private fun KeyguardChipRow(
     viewModel: AxDynamicBarChipViewModel,
 ) {
     val motionScheme = MaterialTheme.motionScheme
+    val view = LocalView.current
     Row(
         modifier = Modifier.animateContentSize(motionScheme.defaultSpatialSpec()),
         horizontalArrangement = Arrangement.spacedBy(SpaceMd),
@@ -384,14 +393,14 @@ private fun KeyguardChipRow(
                         item.info,
                         height,
                         blurred,
-                        onClick = { viewModel.keyguardExpansion.expandBattery() },
+                        onClick = gatedTap { viewModel.keyguardExpansion.expandBattery() },
                     )
                 is KeyguardLaneOccupant.Event ->
                     KeyguardEventChip(
                         event = item.event,
                         size = height,
                         blurred = blurred,
-                        onClick = { onLaneEventClick(viewModel, item.event, item.eventIndex) },
+                        onClick = { onLaneEventClick(viewModel, view, item.event, item.eventIndex) },
                     )
             }
         }
@@ -444,18 +453,35 @@ private fun KeyguardIndicationPill(
     }
 }
 
+/**
+ * Opening a card is a tap like any other, and it has to be classified.
+ *
+ * An unclassified one is booked false at 0.8, and two of those are enough for the falsing manager
+ * to refuse the next tap — which, on this surface, is the button inside the card this tap just
+ * opened. See `IslandActions.acceptKeyguardTap`. The launch path does its own classifying, so it
+ * is asked for its answer instead of being gated twice.
+ */
 private fun onLaneEventClick(
     viewModel: AxDynamicBarChipViewModel,
+    view: View,
     event: IslandEvent,
     eventIndex: Int,
 ) {
     when (event) {
-        is IslandEvent.Notification -> viewModel.launchNotificationFromKeyguard(event)
+        is IslandEvent.Notification ->
+            if (!viewModel.launchNotificationFromKeyguard(event)) view.rejectTap()
         is IslandEvent.AppSwitch,
         is IslandEvent.KeyguardIndication -> { }
-        else -> viewModel.keyguardExpansion.expandPinned(eventIndex)
+        else ->
+            if (viewModel.interactor.acceptKeyguardTap(leavesKeyguard = false)) {
+                viewModel.keyguardExpansion.expandPinned(eventIndex)
+            } else {
+                view.rejectTap()
+            }
     }
 }
+
+private fun View.rejectTap() = performHapticFeedback(HapticFeedbackConstants.REJECT)
 
 @Composable
 private fun KeyguardChipBody(
@@ -471,6 +497,7 @@ private fun KeyguardChipBody(
     mediaStyle: AxLockscreenMediaStyle = AxLockscreenMediaStyle.DEFAULT,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val motionScheme = MaterialTheme.motionScheme
 
     val isMedia = event is IslandEvent.Media
@@ -526,7 +553,7 @@ private fun KeyguardChipBody(
                         }
                     } else Modifier
                 )
-                .clickable { onLaneEventClick(viewModel, event, eventIndex) }
+                .clickable { onLaneEventClick(viewModel, view, event, eventIndex) }
                 .padding(start = SpaceSm, end = SpaceMd),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1337,7 +1364,7 @@ private fun ActionButton(
         ActionIcon.SKIP_NEXT -> Icons.Filled.SkipNext
     }
     Surface(
-        onClick = onClick,
+        onClick = gatedTap(onClick = onClick),
         modifier = Modifier.size(size),
         shape = CircleShape,
         color = bgColor,
