@@ -136,6 +136,13 @@ object AlphaColors {
     // The dark column is a tone-70-ish family and is legible on the dark bodies as it stands.
     // Do not "simplify" a pair back to one value: identical pairs are what made every accent
     // wash out in day mode, yellow worst of all at 1.2:1.
+    //
+    // **The two warm hues also rotate**, and they are the only pair that does. Tone 40 is below
+    // where yellow can stay yellow: held at its own hue it comes out olive. Yellow is turned
+    // toward red (45° -> 40°) so it darkens through amber instead, and orange has to follow
+    // (36° -> 28°) or the two collapse — at their original hues they sit dE 6.7 apart, which is
+    // one colour to the eye. Rotated they are dE 19, matching the dE 21 the dark pair already
+    // has. Move one of these two and you must re-check the other.
 
     val redDark = Color(0xFFEF5350)
     val redLight = Color(0xFFBC1411)
@@ -144,10 +151,10 @@ object AlphaColors {
     val pinkLight = Color(0xFFB9124B)
 
     val orangeDark = Color(0xFFFFA726)
-    val orangeLight = Color(0xFF895100)
+    val orangeLight = Color(0xFF984700)
 
     val yellowDark = Color(0xFFFFCA28)
-    val yellowLight = Color(0xFF775A00)
+    val yellowLight = Color(0xFF815600)
 
     val greenDark = Color(0xFF66BB6A)
     val greenLight = Color(0xFF2F6A32)
