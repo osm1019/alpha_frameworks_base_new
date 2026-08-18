@@ -16,18 +16,25 @@
 package com.android.systemui.pulse
 
 import android.content.Context
-import android.media.audiofx.Visualizer
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import com.android.systemui.audio.GlobalAudioSpectrum
 import java.lang.ref.WeakReference
 
+/**
+ * Pulse's consumer of the session-0 tap.
+ *
+ * Does not construct a [android.media.audiofx.Visualizer]. AudioFlinger will not create a second
+ * session-0 effect, so this [acquire]s [GlobalAudioSpectrum] and keeps its own refresh throttle
+ * and [PulseData] copy on the listener.
+ */
 class PulseAudioDataProcessor(private val context: Context) {
 
     companion object {
         private const val TAG = "PulseAudioProcessor"
     }
 
-    private var visualizer: Visualizer? = null
     private var dataListener: WeakReference<DataListener>? = null
     private val handler = Handler(Looper.getMainLooper())
     private var isProcessing = false
@@ -36,6 +43,12 @@ class PulseAudioDataProcessor(private val context: Context) {
     private var lastUpdateTime = 0L
     private var updateThrottle = 16L
     private var lastKnownRefreshRateHz: Float = 60f
+
+    private val fftListener =
+        GlobalAudioSpectrum.FftListener { fft ->
+            updateThrottle()
+            processFFTData(fft)
+        }
 
     interface DataListener {
         fun onDataUpdate(data: PulseData)
@@ -47,53 +60,20 @@ class PulseAudioDataProcessor(private val context: Context) {
 
     fun startCapture() {
         if (isProcessing) return
-
-        try {
-            visualizer = Visualizer(0).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1]
-                setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-                    override fun onWaveFormDataCapture(
-                        visualizer: Visualizer?,
-                        waveform: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                    }
-
-                    override fun onFftDataCapture(
-                        visualizer: Visualizer?,
-                        fft: ByteArray?,
-                        samplingRate: Int
-                    ) {
-                        if (fft != null && fft.isNotEmpty()) {
-                            updateThrottle()
-                            processFFTData(fft)
-                        }
-                    }
-                }, Visualizer.getMaxCaptureRate() / 2, false, true)
-
-                enabled = true
-            }
-
-            isProcessing = true
-        } catch (e: Exception) {
-            cleanup()
+        if (!GlobalAudioSpectrum.acquire()) {
+            Log.w(TAG, "session-0 tap refused")
+            return
         }
+        GlobalAudioSpectrum.addListener(fftListener)
+        isProcessing = true
     }
 
     fun stopCapture() {
         if (!isProcessing) return
-
-        try {
-            visualizer?.apply {
-                enabled = false
-                setDataCaptureListener(null, 0, false, false)
-                release()
-            }
-            visualizer = null
-            isProcessing = false
-            pulseData.reset()
-        } catch (e: Exception) {
-        }
+        GlobalAudioSpectrum.removeListener(fftListener)
+        GlobalAudioSpectrum.release()
+        isProcessing = false
+        pulseData.reset()
     }
 
     fun cleanup() {

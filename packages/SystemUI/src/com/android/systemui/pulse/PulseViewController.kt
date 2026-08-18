@@ -92,11 +92,12 @@ class PulseViewController @Inject constructor(
             pulseRunning = false
             return
         }
-        pulseRunning = isMediaPlaying 
+        // isScreenOff is true on AOD (onScreenTurnedOff fires when the display dozes). It means
+        // "the panel is genuinely dark", not "doze", so it only belongs on the lockscreen branch.
+        pulseRunning = isMediaPlaying
                 && !bouncerShowingOrKeyguardDismissing
                 && isCollapsed
-                && !isScreenOff
-                && ((keyguardShowing && !isDozing)
+                && ((keyguardShowing && !isDozing && !isScreenOff)
                 || (isDozing && ambientEnabled))
     }
 
