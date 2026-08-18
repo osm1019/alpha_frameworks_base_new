@@ -12,15 +12,10 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlin.math.abs
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -650,7 +645,7 @@ private fun KeyguardChipBody(
 }
 
 /**
- * Lockscreen media capsule content: spinning art, marquee meta, floating transport.
+ * Lockscreen media capsule content: static art, marquee meta, floating transport.
  *
  * Geometry is shared across styles. Only button fills + icon tints follow [mediaStyle]:
  * - **Waveform** (and Glass until its pass): today's look — accent play, tonal skip fills.
@@ -704,6 +699,18 @@ private fun RowScope.KeyguardMediaChipContent(
         stiffness = Spring.StiffnessMediumLow,
     )
 
+    val trackKey = remember(event.track, event.artist) { "${event.track}|${event.artist}" }
+    val artTurn = remember { Animatable(0f) }
+    var seenTrack by remember { mutableStateOf(false) }
+    LaunchedEffect(trackKey) {
+        if (!seenTrack) {
+            seenTrack = true
+            return@LaunchedEffect
+        }
+        artTurn.snapTo(0f)
+        artTurn.animateTo(360f, tween(450, easing = FastOutSlowInEasing))
+    }
+
     AnimatedContent(
         targetState = event.albumArt,
         transitionSpec = {
@@ -715,32 +722,15 @@ private fun RowScope.KeyguardMediaChipContent(
         },
         contentKey = { it?.hashCode() ?: 0 },
         label = "kg_media_icon",
+        modifier = Modifier.graphicsLayer { rotationZ = artTurn.value },
     ) { art ->
         if (art != null) {
-            val rotation: Float
-            if (event.isPlaying) {
-                val transition = rememberInfiniteTransition(label = "kg_media_art_roll")
-                val animatedRotation by transition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 360f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(8000, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                    label = "kg_media_art_rotation",
-                )
-                rotation = animatedRotation
-            } else {
-                rotation = 0f
-            }
-
             Image(
                 bitmap = art.toScaledBitmap(MediaChipIconSize),
                 contentDescription = null,
                 modifier = Modifier
                     .size(MediaChipIconSize)
-                    .clip(CircleShape)
-                    .graphicsLayer { rotationZ = rotation },
+                    .clip(CircleShape),
                 contentScale = ContentScale.Crop,
             )
         } else {

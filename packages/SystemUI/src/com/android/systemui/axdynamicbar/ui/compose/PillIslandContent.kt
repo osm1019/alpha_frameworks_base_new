@@ -9,6 +9,7 @@ import com.android.internal.R as InternalR
 import com.android.systemui.common.shared.model.Icon as SysUISharedIcon
 import com.android.systemui.common.ui.compose.Icon as SysUIIcon
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -344,42 +345,34 @@ private fun AnimatedTrophyIcon(color: Color) {
 }
 
 /**
- * Album art, rolling while the track plays.
- *
- * Takes its own [size] so a surface larger than the pill rasterises the art at the size it
- * draws it: a bitmap baked at 16dp and then magnified is soft, and the art is the media
- * chip's whole identity.
+ * Album art on the status-bar / cutout chip. No idle spin — that kept the shade dirty
+ * for the whole track. [turnKey] changing (track|artist) does one 360° turn.
  */
 @Composable
-internal fun PillAlbumArt(art: Drawable, size: Dp, spinning: Boolean) {
-    val rotation: Float
-    if (spinning) {
-        val transition = rememberInfiniteTransition(label = "media_art_roll")
-        val animatedRotation by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(8000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "media_art_rotation"
-        )
-        rotation = animatedRotation
-    } else {
-        rotation = 0f
+internal fun PillAlbumArt(art: Drawable, size: Dp, turnKey: Any) {
+    val turn = remember { Animatable(0f) }
+    var seen by remember { mutableStateOf(false) }
+    LaunchedEffect(turnKey) {
+        if (!seen) {
+            seen = true
+            return@LaunchedEffect
+        }
+        turn.snapTo(0f)
+        turn.animateTo(360f, tween(450, easing = FastOutSlowInEasing))
     }
-
     Image(
         bitmap = art.toScaledBitmap(size),
         contentDescription = null,
-        modifier = Modifier.size(size).clip(CircleShape).graphicsLayer { rotationZ = rotation },
+        modifier = Modifier.size(size).clip(CircleShape).graphicsLayer { rotationZ = turn.value },
         contentScale = ContentScale.Crop,
     )
 }
 
 @Composable
 private fun MediaPillIcon(event: IslandEvent.Media, animated: Boolean = true) {
-    event.albumArt?.let { art -> PillAlbumArt(art, 20.dp, spinning = animated && event.isPlaying) }
+    event.albumArt?.let { art ->
+        PillAlbumArt(art, 20.dp, turnKey = "${event.track}|${event.artist}")
+    }
         ?: Box(
             modifier =
                 Modifier.size(20.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = AlphaSubtle + 0.05f)),
