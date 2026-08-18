@@ -34,9 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.compose.modifiers.padding
@@ -256,6 +259,7 @@ internal fun <T> AxQsTileGrid(
     showLabels: Boolean,
     customShapeCells: Boolean,
     pagerState: PagerState,
+    onSideSwipe: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable (AxQsGridItem<T>) -> Unit,
     label: @Composable (AxQsGridItem<T>) -> Unit = {},
@@ -274,11 +278,24 @@ internal fun <T> AxQsTileGrid(
         val itemHeight = tileHeight + if (showLabels) AX_TILE_LABEL_HEIGHT else 0.dp
         val pageHeight = itemHeight * rows + spacing * (rows - 1)
         val pagerPadding = if (pageCount > 1) spacing else 0.dp
+        // The fling is where a page change is decided, so that is where the gesture gets offered
+        // to the falsing classifier. Without it the swipe is never classified at all, which the
+        // classifier scores as a false rather than as neutral.
+        val falsingConnection =
+            remember(onSideSwipe) {
+                object : NestedScrollConnection {
+                    override suspend fun onPreFling(available: Velocity): Velocity {
+                        onSideSwipe()
+                        return Velocity.Zero
+                    }
+                }
+            }
         HorizontalPager(
             state = pagerState,
             modifier =
                 Modifier.fillMaxWidth()
                     .height(pageHeight)
+                    .nestedScroll(falsingConnection)
                     .padding(horizontal = { -pagerPadding.roundToPx() }),
             contentPadding = PaddingValues(horizontal = pagerPadding),
             beyondViewportPageCount = 1,

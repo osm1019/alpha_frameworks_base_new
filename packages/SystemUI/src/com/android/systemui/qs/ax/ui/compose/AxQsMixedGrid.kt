@@ -283,6 +283,7 @@ internal fun ContentScope.AxQsMixedGrid(
                             rowHeight = rowHeight,
                             spacing = spacing,
                             customShapeCells = customShapeCells,
+                            onSideSwipe = viewModel::emitMotionEventForFalsingSwipeSide,
                             isFullyVisible = {
                                 viewModel.isQsVisibleAndAnyShadeExpanded && !viewModel.isEditing
                             },
@@ -337,6 +338,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         rowHeight = rowHeight,
                         spacing = spacing,
                         customShapeCells = customShapeCells,
+                        onSideSwipe = viewModel::emitMotionEventForFalsingSwipeSide,
                         editButtonProgress = { qsEntranceProgress },
                         modifier = Modifier.fillMaxSize(),
                         controlContent = controlContent,
@@ -358,6 +360,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         rowHeight = rowHeight,
                         spacing = spacing,
                         customShapeCells = customShapeCells,
+                        onSideSwipe = viewModel::emitMotionEventForFalsingSwipeSide,
                         editButtonProgress = { qsEntranceProgress },
                         scrollState = scrollState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = portraitPadding),

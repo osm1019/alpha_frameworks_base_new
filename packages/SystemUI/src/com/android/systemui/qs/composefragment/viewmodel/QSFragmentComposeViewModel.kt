@@ -557,6 +557,17 @@ constructor(
         falsingInteractor.isFalseTouch(Classifier.QS_SWIPE_NESTED)
     }
 
+    /**
+     * A sideways page swipe in the tile grid, offered to the falsing classifier.
+     *
+     * Asking is not optional: `BrightLineFalsingManager` books any gesture nobody classified as a
+     * false, and a swipe draws the heavier of its two penalties, so a couple of unreported page
+     * changes are enough to push belief past the threshold and have the shade thrown closed.
+     */
+    fun emitMotionEventForFalsingSwipeSide() {
+        falsingInteractor.isFalseTouch(Classifier.QS_SWIPE_SIDE)
+    }
+
     fun onQQSOpen() {
         uiEventLogger.log(QSEvent.QQS_PANEL_EXPANDED)
     }
