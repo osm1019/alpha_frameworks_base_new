@@ -168,13 +168,15 @@ fun ExpandedIslandContent(
             }
         } else {
             items(filteredEvents, key = { it.id }) { event ->
-                MagneticSwipeToDismiss(
-                    onDismiss = { interactor.dismissEvent(event) },
-                    modifier = Modifier.animateItem(),
-                ) {
-                    if (event is IslandEvent.Media) {
+                if (event is IslandEvent.Media) {
+                    Box(modifier = Modifier.animateItem()) {
                         MediaCard(event, interactor)
-                    } else {
+                    }
+                } else {
+                    MagneticSwipeToDismiss(
+                        onDismiss = { interactor.dismissEvent(event) },
+                        modifier = Modifier.animateItem(),
+                    ) {
                         PrimaryCard {
                             AnimatedContent(
                                 targetState = event,

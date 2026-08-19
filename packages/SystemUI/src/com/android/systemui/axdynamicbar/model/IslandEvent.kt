@@ -1,6 +1,7 @@
 package com.android.systemui.axdynamicbar.model
 
 import android.app.Notification
+import com.android.internal.logging.InstanceId
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.graphics.drawable.Drawable
@@ -101,6 +102,8 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
     }
 
     data class Media(
+        /** Remedia [InstanceId]. Island [id] stays `"media"` so the stack still has one occupant. */
+        val sessionKey: InstanceId,
         val track: String,
         val artist: String,
         val isPlaying: Boolean,

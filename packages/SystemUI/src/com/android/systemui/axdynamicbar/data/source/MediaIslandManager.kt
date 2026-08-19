@@ -61,6 +61,12 @@ constructor(
     private val _mediaEvent = MutableStateFlow<IslandEvent.Media?>(null)
     val mediaEvent: StateFlow<IslandEvent.Media?> = _mediaEvent.asStateFlow()
 
+    private val _mediaSessions = MutableStateFlow<List<IslandEvent.Media>>(emptyList())
+    val mediaSessions: StateFlow<List<IslandEvent.Media>> = _mediaSessions.asStateFlow()
+
+    private val _selectedSessionKey = MutableStateFlow<InstanceId?>(null)
+    val selectedSessionKey: StateFlow<InstanceId?> = _selectedSessionKey.asStateFlow()
+
     /** Package of the session on the island, so its own notifications do not alert twice. */
     var activeMediaPackage: String? = null
         private set
@@ -82,12 +88,35 @@ constructor(
     @Volatile private var transport: MediaButton? = null
     @Volatile private var clickIntent: PendingIntent? = null
 
+    /**
+     * True while an E/D card is showing the pager. Transport then follows the visible page
+     * (shared remedia `currentCarouselIndex`). Chips keep [selectPrimary] until a card binds —
+     * otherwise a QS-parked paused session would steal play from the playing chip.
+     */
+    @Volatile private var followSelection = false
+
     fun startListening() {
         if (listening) return
         listening = true
         collectJob =
             applicationScope.launch(context = backgroundDispatcher) {
-                snapshotFlow { selectPrimary() }.collect(::onPrimaryChanged)
+                snapshotFlow {
+                        val all = mediaRepository.currentMedia
+                        val displayable = all.filter { it.isDisplayable() }
+                        val selected =
+                            all.getOrNull(mediaRepository.currentCarouselIndex)
+                                ?.takeIf { it.isDisplayable() }
+                                ?: displayable.firstOrNull()
+                        Triple(selectPrimary(), displayable, selected)
+                    }
+                    .collect { (primary, displayable, selected) ->
+                        _mediaSessions.value = displayable.map { it.toIslandMedia() }
+                        _selectedSessionKey.value = selected?.instanceId
+                        onPrimaryChanged(primary)
+                        retargetTransport(
+                            if (followSelection) selected ?: primary else primary
+                        )
+                    }
             }
     }
 
@@ -97,10 +126,13 @@ constructor(
         collectJob?.cancel()
         collectJob = null
         _mediaEvent.value = null
+        _mediaSessions.value = emptyList()
+        _selectedSessionKey.value = null
         activeMediaPackage = null
         primaryKey = null
         transport = null
         clickIntent = null
+        followSelection = false
         dismissed = null
     }
 
@@ -110,7 +142,7 @@ constructor(
      */
     fun clear() {
         val event = _mediaEvent.value
-        dismissed = event?.let { DismissToken(primaryKey, it.track, it.artist) }
+        dismissed = event?.let { DismissToken(it.sessionKey, it.track, it.artist) }
         _mediaEvent.value = null
         activeMediaPackage = null
     }
@@ -143,11 +175,33 @@ constructor(
             return
         }
 
-        primaryKey = model.instanceId
-        transport = model.playbackStateActions
-        clickIntent = model.clickIntent
         activeMediaPackage = model.packageName.takeIf { event.isPlaying }
         _mediaEvent.value = event
+    }
+
+    /**
+     * Cards page remedia's list. The chip still follows [selectPrimary]; while a card is bound,
+     * transport follows the visible page so play/seek on a parked session hits that session.
+     */
+    fun selectSession(key: InstanceId) {
+        val index = mediaRepository.currentMedia.indexOfFirst { it.instanceId == key }
+        if (index < 0) return
+        followSelection = true
+        mediaRepository.storeCarouselIndex(index)
+        _selectedSessionKey.value = key
+        retargetTransport(mediaRepository.currentMedia.getOrNull(index))
+    }
+
+    /** Card gone: play on the chip hits [selectPrimary] again. Carousel index is left alone. */
+    fun releaseCardTransport() {
+        followSelection = false
+        retargetTransport(selectPrimary())
+    }
+
+    private fun retargetTransport(model: MediaDataModel?) {
+        primaryKey = model?.instanceId
+        transport = model?.playbackStateActions
+        clickIntent = model?.clickIntent
     }
 
     /**
@@ -176,6 +230,7 @@ constructor(
         val position = positionMs.coerceIn(0L, if (duration > 0L) duration else Long.MAX_VALUE)
         val progress = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
         return IslandEvent.Media(
+            sessionKey = instanceId,
             track = title,
             artist = subtitle,
             isPlaying = playing,
@@ -213,7 +268,8 @@ constructor(
 
     /** Everything the island renders apart from the moving parts of the seek bar. */
     private fun IslandEvent.Media.isSameExceptProgress(other: IslandEvent.Media): Boolean =
-        track == other.track &&
+        sessionKey == other.sessionKey &&
+            track == other.track &&
             artist == other.artist &&
             isPlaying == other.isPlaying &&
             albumArt === other.albumArt &&
@@ -225,11 +281,21 @@ constructor(
             customActions == other.customActions
 
     fun togglePlayPause() {
-        val playing = _mediaEvent.value?.isPlaying ?: return
         val action = transport?.playOrPause?.action ?: return
+        val key = primaryKey
+        val chip = _mediaEvent.value
+        val playing =
+            _mediaSessions.value.firstOrNull { it.sessionKey == key }?.isPlaying
+                ?: chip?.isPlaying
+                ?: return
         action.run()
-        // Optimistic flip so the button reacts before remedia republishes the session.
-        _mediaEvent.value = _mediaEvent.value?.copy(isPlaying = !playing)
+        _mediaSessions.value =
+            _mediaSessions.value.map {
+                if (it.sessionKey == key) it.copy(isPlaying = !playing) else it
+            }
+        if (chip?.sessionKey == key) {
+            _mediaEvent.value = chip.copy(isPlaying = !playing)
+        }
     }
 
     fun skipNext() {

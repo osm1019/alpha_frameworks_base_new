@@ -9,6 +9,7 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.UserHandle
 import android.provider.Settings.Global
+import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.data.IslandEventRepository
 import com.android.systemui.axdynamicbar.model.CutoutPlacementHint
 import com.android.systemui.axdynamicbar.model.IslandEvent
@@ -737,6 +738,14 @@ constructor(
     override fun openUrl(url: String) = repository.system.openUrl(url)
 
     override fun openMediaApp() = repository.media.openMediaApp()
+
+    override val mediaSessions = repository.media.mediaSessions
+
+    override val selectedMediaSessionKey = repository.media.selectedSessionKey
+
+    override fun selectMediaSession(key: InstanceId) = repository.media.selectSession(key)
+
+    override fun releaseMediaCardTransport() = repository.media.releaseCardTransport()
 
     override fun seekTo(position: Long) = repository.media.seekTo(position)
 

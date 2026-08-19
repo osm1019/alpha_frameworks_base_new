@@ -68,6 +68,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.FloatState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -295,7 +296,23 @@ private fun KeyguardMediaPanel(
     style: AxLockscreenMediaStyle,
     onCollapse: () -> Unit,
 ) {
-    KeyguardMediaCard(event, interactor, style, onCollapse)
+    val sessions by interactor.mediaSessions.collectAsStateWithLifecycle()
+    val selectedKey by interactor.selectedMediaSessionKey.collectAsStateWithLifecycle()
+    val pages = sessions.ifEmpty { listOf(event) }
+    val key = selectedKey ?: event.sessionKey
+    MediaSessionPager(
+        sessions = pages,
+        selectedKey = key,
+        onSelect = interactor::selectMediaSession,
+        onRelease = interactor::releaseMediaCardTransport,
+        modifier = Modifier.fillMaxSize(),
+        onEdgeDismiss = null,
+        fillHeight = true,
+        dotActive = AlphaColors.DbKeyguardCard.text,
+        dotInactive = AlphaColors.DbKeyguardCard.textHint,
+    ) { page ->
+        KeyguardMediaCard(page, interactor, style, onCollapse)
+    }
 }
 
 /**
@@ -703,7 +720,7 @@ private fun KeyguardPlayButton(
  * Position and scrub machinery for every expand-panel progress form.
  *
  * [content] only paints the track for the fraction it is handed; the box it draws into already
- * holds the dismiss-swipe lock for the duration of a touch (without it [MagneticSwipeToDismiss]
+ * holds the dismiss-swipe lock for the duration of a touch (without it the session pager
  * eats the drag) and carries tap and horizontal-drag seeking. The 16 ms ticker interpolates between
  * position updates, and pauses while a finger owns the bar.
  */

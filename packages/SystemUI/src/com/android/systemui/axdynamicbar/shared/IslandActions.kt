@@ -2,7 +2,9 @@ package com.android.systemui.axdynamicbar.shared
 
 import android.app.PendingIntent
 import android.net.Uri
+import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.model.IslandEvent
+import kotlinx.coroutines.flow.StateFlow
 
 val EVENT_TYPE_IDS: Map<Class<out IslandEvent>, String> =
     mapOf(
@@ -39,6 +41,10 @@ interface IslandActions {
     fun sendCustomAction(action: String)
     fun openMediaOutputSwitcher()
     fun openMediaApp()
+    val mediaSessions: StateFlow<List<IslandEvent.Media>>
+    val selectedMediaSessionKey: StateFlow<InstanceId?>
+    fun selectMediaSession(key: InstanceId)
+    fun releaseMediaCardTransport()
     fun disconnectBluetooth(address: String)
     fun setRingerMode(mode: Int)
     fun toggleTorch()

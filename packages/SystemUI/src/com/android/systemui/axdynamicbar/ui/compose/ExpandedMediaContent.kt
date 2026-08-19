@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -83,69 +84,88 @@ private val ControlIconSize = 20.dp
  */
 @Composable
 internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
-    val colors = rememberMediaColors(event)
-    val accent = colors.accent
+    val sessions by interactor.mediaSessions.collectAsStateWithLifecycle()
+    val selectedKey by interactor.selectedMediaSessionKey.collectAsStateWithLifecycle()
+    val pages = sessions.ifEmpty { listOf(event) }
+    val key = selectedKey ?: event.sessionKey
     val chrome = islandCardChrome()
 
-    Surface(
-        modifier = Modifier.fillMaxWidth()
-            .border(1.dp, chrome.border, ShapeCard)
-            .pointerInput(Unit) { detectTapGestures {} },
-        shape = ShapeCard,
-        color = chrome.body,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = SpaceXxl, vertical = SpaceLg),
-            verticalArrangement = Arrangement.spacedBy(SpaceMd),
+    MediaSessionPager(
+        sessions = pages,
+        selectedKey = key,
+        onSelect = interactor::selectMediaSession,
+        onRelease = interactor::releaseMediaCardTransport,
+        onEdgeDismiss = { interactor.dismissEvent(event) },
+        dotActive = AlphaColors.DbStackCard.text,
+        dotInactive = AlphaColors.DbStackCard.textHint,
+    ) { page ->
+        Surface(
+            modifier =
+                Modifier.fillMaxWidth()
+                    .border(1.dp, chrome.border, ShapeCard)
+                    .pointerInput(Unit) { detectTapGestures {} },
+            shape = ShapeCard,
+            color = chrome.body,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        interactor.openMediaApp()
-                        interactor.collapseIsland()
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SpaceLg),
-            ) {
-                MediaArtThumbnail(event, AlbumArtSize)
+            MediaCardBody(page, interactor)
+        }
+    }
+}
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(SpaceXxs),
-                ) {
+@Composable
+private fun MediaCardBody(event: IslandEvent.Media, interactor: IslandActions) {
+    val colors = rememberMediaColors(event)
+    val accent = colors.accent
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = SpaceXxl, vertical = SpaceLg),
+        verticalArrangement = Arrangement.spacedBy(SpaceMd),
+    ) {
+        Row(
+            modifier =
+                Modifier.fillMaxWidth().clickable {
+                    interactor.openMediaApp()
+                    interactor.collapseIsland()
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SpaceLg),
+        ) {
+            MediaArtThumbnail(event, AlbumArtSize)
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(SpaceXxs),
+            ) {
+                Text(
+                    event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) },
+                    color = OnCardText,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (event.artist.isNotEmpty()) {
                     Text(
-                        event.track.ifEmpty { stringResource(R.string.ax_dynamic_bar_now_playing) },
-                        color = OnCardText,
-                        style = MaterialTheme.typography.titleSmall,
+                        event.artist,
+                        color = SubtleGray,
+                        style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (event.artist.isNotEmpty()) {
-                        Text(
-                            event.artist,
-                            color = SubtleGray,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                event.appIcon?.let { icon ->
-                    Image(
-                        bitmap = icon.toScaledBitmap(SizeIconSm),
-                        contentDescription = null,
-                        modifier = Modifier.size(SizeIconSm).clip(ShapeXs),
-                        colorFilter = ColorFilter.tint(OnCardText),
-                    )
                 }
             }
-
-            if (event.duration > 0L) {
-                MediaTimeline(event, interactor)
+            event.appIcon?.let { icon ->
+                Image(
+                    bitmap = icon.toScaledBitmap(SizeIconSm),
+                    contentDescription = null,
+                    modifier = Modifier.size(SizeIconSm).clip(ShapeXs),
+                    colorFilter = ColorFilter.tint(OnCardText),
+                )
             }
-            MediaControls(event, interactor, accent)
         }
+
+        if (event.duration > 0L) {
+            MediaTimeline(event, interactor)
+        }
+        MediaControls(event, interactor, accent)
     }
 }
 
@@ -334,7 +354,7 @@ private fun MediaTimeline(
 
     val interactorRef = rememberUpdatedState(interactor)
 
-    // Read the dismiss swipe lock provided by MagneticSwipeToDismiss
+    // Read the dismiss swipe lock provided by MediaSessionPager
     val swipeLock = LocalDismissSwipeLock.current
 
     // Smooth frame-interpolated progress when playing, snaps when paused or scrubbing
