@@ -293,7 +293,7 @@ constructor(
             _mediaSessions.value.map {
                 if (it.sessionKey == key) it.copy(isPlaying = !playing) else it
             }
-        if (chip?.sessionKey == key) {
+        if (chip != null && chip.sessionKey == key) {
             _mediaEvent.value = chip.copy(isPlaying = !playing)
         }
     }
