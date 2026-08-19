@@ -20,9 +20,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,7 +79,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -306,7 +302,6 @@ private fun KeyguardMediaPanel(
         onSelect = interactor::selectMediaSession,
         onRelease = interactor::releaseMediaCardTransport,
         modifier = Modifier.fillMaxSize(),
-        onEdgeDismiss = null,
         fillHeight = true,
         dotActive = AlphaColors.DbKeyguardCard.text,
         dotInactive = AlphaColors.DbKeyguardCard.textHint,
@@ -719,10 +714,10 @@ private fun KeyguardPlayButton(
 /**
  * Position and scrub machinery for every expand-panel progress form.
  *
- * [content] only paints the track for the fraction it is handed; the box it draws into already
- * holds the dismiss-swipe lock for the duration of a touch (without it the session pager
- * eats the drag) and carries tap and horizontal-drag seeking. The 16 ms ticker interpolates between
- * position updates, and pauses while a finger owns the bar.
+ * [content] only paints the track for the fraction it is handed. The box consumes the pointer
+ * in the Initial pass so the session pager does not steal a scrub, then maps tap and drag to
+ * a fraction. The 16 ms ticker interpolates between position updates, and pauses while a
+ * finger owns the bar.
  */
 @Composable
 private fun KeyguardMediaScrubber(
@@ -743,7 +738,6 @@ private fun KeyguardMediaScrubber(
     // Nothing in this scope may read it, or the ticker recomposes the bar every frame.
     val displayFraction = remember { mutableFloatStateOf(serverFraction) }
     val interactorRef = rememberUpdatedState(interactor)
-    val swipeLock = LocalDismissSwipeLock.current
 
     LaunchedEffect(positionMs, durationMs, isPlaying) {
         if (isScrubbing) return@LaunchedEffect
@@ -766,47 +760,20 @@ private fun KeyguardMediaScrubber(
             modifier =
                 Modifier.fillMaxWidth()
                     .height(height)
-                    .pointerInput(swipeLock) {
-                        awaitEachGesture {
-                            awaitPointerEvent()
-                            swipeLock.value = true
-                            try {
-                                do {
-                                    val e = awaitPointerEvent()
-                                } while (e.changes.any { it.pressed })
-                            } finally {
-                                swipeLock.value = false
-                            }
-                        }
-                    }
-                    .pointerInput("tap", inset) {
-                        detectTapGestures { offset ->
-                            val f = fractionAt(offset.x, size.width, inset.toPx())
+                    .mediaScrubGesture(
+                        durationMs = durationMs,
+                        inset = inset,
+                        onScrub = { f ->
+                            isScrubbing = true
+                            displayFraction.floatValue = f
+                        },
+                        onFinished = { f ->
                             displayFraction.floatValue = f
                             interactorRef.value.seekTo((f * durationMs).toLong())
-                        }
-                    }
-                    .pointerInput("drag", inset) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                isScrubbing = true
-                                displayFraction.floatValue =
-                                    fractionAt(offset.x, size.width, inset.toPx())
-                            },
-                            onDragEnd = {
-                                interactorRef.value.seekTo(
-                                    (displayFraction.floatValue * durationMs).toLong()
-                                )
-                                isScrubbing = false
-                            },
-                            onDragCancel = { isScrubbing = false },
-                            onHorizontalDrag = { change, _ ->
-                                displayFraction.floatValue =
-                                    fractionAt(change.position.x, size.width, inset.toPx())
-                                change.consume()
-                            },
-                        )
-                    },
+                            isScrubbing = false
+                        },
+                        onCancel = { isScrubbing = false },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             content(displayFraction, isScrubbing)
@@ -816,15 +783,6 @@ private fun KeyguardMediaScrubber(
             ScrubTimes(displayFraction, durationMs)
         }
     }
-}
-
-/**
- * Where [x] falls along a track the canvas paints with [insetPx] of margin at each end, so the
- * finger and the drawing agree at both extremes.
- */
-private fun fractionAt(x: Float, width: Int, insetPx: Float): Float {
-    val usable = (width - insetPx * 2f).coerceAtLeast(1f)
-    return ((x - insetPx) / usable).coerceIn(0f, 1f)
 }
 
 /**
@@ -917,7 +875,7 @@ private fun KeyguardMediaLinearProgress(event: IslandEvent.Media, interactor: Is
 
 /**
  * Minimal expand progress: row of neutral dashes (B Minimal language), scrubbable with the same
- * dismiss-swipe lock as the waveform path. [showTimes] is off on the 104dp card (no room for a
+ * track gesture as the waveform path. [showTimes] is off on the 104dp card (no room for a
  * second time row under the dots).
  */
 @Composable

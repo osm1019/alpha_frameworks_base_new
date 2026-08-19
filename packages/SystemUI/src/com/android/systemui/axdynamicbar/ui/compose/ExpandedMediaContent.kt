@@ -5,9 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +47,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,15 +91,11 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
         selectedKey = key,
         onSelect = interactor::selectMediaSession,
         onRelease = interactor::releaseMediaCardTransport,
-        onEdgeDismiss = { interactor.dismissEvent(event) },
         dotActive = AlphaColors.DbStackCard.text,
         dotInactive = AlphaColors.DbStackCard.textHint,
     ) { page ->
         Surface(
-            modifier =
-                Modifier.fillMaxWidth()
-                    .border(1.dp, chrome.border, ShapeCard)
-                    .pointerInput(Unit) { detectTapGestures {} },
+            modifier = Modifier.fillMaxWidth().border(1.dp, chrome.border, ShapeCard),
             shape = ShapeCard,
             color = chrome.body,
         ) {
@@ -117,7 +109,9 @@ private fun MediaCardBody(event: IslandEvent.Media, interactor: IslandActions) {
     val colors = rememberMediaColors(event)
     val accent = colors.accent
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = SpaceXxl, vertical = SpaceLg),
+        modifier =
+            Modifier.fillMaxWidth()
+                .padding(start = SpaceXxl, end = SpaceXxl, top = SpaceXxl, bottom = SpaceLg),
         verticalArrangement = Arrangement.spacedBy(SpaceMd),
     ) {
         Row(
@@ -354,9 +348,6 @@ private fun MediaTimeline(
 
     val interactorRef = rememberUpdatedState(interactor)
 
-    // Read the dismiss swipe lock provided by MediaSessionPager
-    val swipeLock = LocalDismissSwipeLock.current
-
     // Smooth frame-interpolated progress when playing, snaps when paused or scrubbing
     LaunchedEffect(positionMs, durationMs, isPlaying) {
         if (isScrubbing) return@LaunchedEffect
@@ -398,48 +389,23 @@ private fun MediaTimeline(
         )
 
         Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .pointerInput(swipeLock) {
-                    awaitEachGesture {
-                        awaitPointerEvent() // DOWN
-                        swipeLock.value = true
-                        try {
-                            do {
-                                val event = awaitPointerEvent()
-                            } while (event.changes.any { it.pressed })
-                        } finally {
-                            swipeLock.value = false
-                        }
-                    }
-                }
-                .pointerInput("tap") {
-                    detectTapGestures { offset ->
-                        val fraction = progressAt(offset.x, size.width, thumbRadiusDp.toPx())
-                        displayFraction = fraction
-                        interactorRef.value.seekTo((fraction * durationMs).toLong())
-                    }
-                }
-                .pointerInput("drag") {
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
+            modifier =
+                Modifier.weight(1f)
+                    .fillMaxHeight()
+                    .mediaScrubGesture(
+                        durationMs = durationMs,
+                        inset = thumbRadiusDp,
+                        onScrub = { fraction ->
                             isScrubbing = true
-                            displayFraction =
-                                progressAt(offset.x, size.width, thumbRadiusDp.toPx())
+                            displayFraction = fraction
                         },
-                        onDragEnd = {
-                            interactorRef.value.seekTo((displayFraction * durationMs).toLong())
+                        onFinished = { fraction ->
+                            displayFraction = fraction
+                            interactorRef.value.seekTo((fraction * durationMs).toLong())
                             isScrubbing = false
                         },
-                        onDragCancel = { isScrubbing = false },
-                        onHorizontalDrag = { change, _ ->
-                            displayFraction =
-                                progressAt(change.position.x, size.width, thumbRadiusDp.toPx())
-                            change.consume()
-                        },
-                    )
-                },
+                        onCancel = { isScrubbing = false },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.fillMaxSize()) {
@@ -478,12 +444,6 @@ private fun MediaTimeline(
             modifier = Modifier.padding(start = SpaceMd),
         )
     }
-}
-
-/** Tap / drag x to progress, inset by the thumb radius so the mapping matches what is painted. */
-private fun progressAt(x: Float, width: Int, inset: Float): Float {
-    val usable = (width - inset * 2f).coerceAtLeast(1f)
-    return ((x - inset) / usable).coerceIn(0f, 1f)
 }
 
 @Composable
