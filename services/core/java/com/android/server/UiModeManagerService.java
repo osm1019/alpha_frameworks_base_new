@@ -764,11 +764,11 @@ final class UiModeManagerService extends SystemService {
 
     private void updateCustomTimeLocked() {
         if (mNightMode.get() != MODE_NIGHT_CUSTOM) return;
-        if (shouldApplyAutomaticChangesImmediately()) {
-            updateLocked(0, 0);
-        } else {
-            registerDeviceInactiveListenerLocked();
-        }
+        // Apply on the alarm / TIME_CHANGED. Waiting for SCREEN_OFF here
+        // drops short custom windows while the panel is still on.
+        resetNightModeOverrideLocked();
+        unregisterDeviceInactiveListenerLocked();
+        updateLocked(0, 0);
         scheduleNextCustomTimeListener();
     }
 
@@ -1841,7 +1841,9 @@ final class UiModeManagerService extends SystemService {
 
         synchronized (mLock) {
             resetNightModeOverrideLocked();
-            if (shouldApplyAutomaticChangesImmediately()) {
+            // Apply now if the new window already contains now; otherwise
+            // wait for SCREEN_OFF or the start alarm.
+            if (computeCustomNightMode() || shouldApplyAutomaticChangesImmediately()) {
                 unregisterDeviceInactiveListenerLocked();
                 updateLocked(0, 0);
             } else {
