@@ -700,8 +700,8 @@ object AlphaColors {
             @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
 
         /**
-         * Charging ring. Level-banded red / orange / green with baked-in alpha (0xCC).
-         * Pre-defined charging colours, not theme accents, not split per theme.
+         * Stack charging-icon fill. Cuts are `BatteryRedBelow` / `BatteryOrangeBelow`
+         * (`batteryLevelBand`). Pre-defined, not theme accents.
          */
         val chargeRingLow = Color(0xCCF44336)
         val chargeRingMid = Color(0xCCFF9800)

@@ -132,11 +132,13 @@ private fun CPRBatteryIcon(
     modifier: Modifier = Modifier,
 ) {
     val progress = (level ?: 0) / 100f
-    val fillColor = when {
-        progress < 0.30f -> AlphaColors.DbStackCard.chargeRingLow
-        progress < 0.60f -> AlphaColors.DbStackCard.chargeRingMid
-        else -> AlphaColors.DbStackCard.chargeRingHigh
-    }
+    val fillColor =
+        batteryLevelBand(
+            level ?: 0,
+            AlphaColors.DbStackCard.chargeRingLow,
+            AlphaColors.DbStackCard.chargeRingMid,
+            AlphaColors.DbStackCard.chargeRingHigh,
+        )
 
     val transition = rememberInfiniteTransition(label = "charging_pulse")
     val pulseMultiplier by transition.animateFloat(

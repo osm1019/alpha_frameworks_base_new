@@ -239,10 +239,18 @@ private const val ProgressLightnessSteps = 25
 /** Track is the chip's own content colour, already proven against this plate. */
 internal const val ProgressTrackAlpha = 0.3f
 
-/** Exclusive upper bound of the red charging band. Same cut as C / the stack icon. */
-private const val BatteryRedBelow = 30
-/** Exclusive upper bound of the orange charging band. Same cut as C / the stack icon. */
-private const val BatteryOrangeBelow = 60
+/** Exclusive upper bound of the red charging band. Every charging colour cut uses these. */
+internal const val BatteryRedBelow = 30
+/** Exclusive upper bound of the orange charging band. */
+internal const val BatteryOrangeBelow = 60
+
+/** Pick the charging band for [level]. Callers supply the three colours. */
+internal fun <T> batteryLevelBand(level: Int, red: T, orange: T, green: T): T =
+    when {
+        level < BatteryRedBelow -> red
+        level < BatteryOrangeBelow -> orange
+        else -> green
+    }
 
 /**
  * Content that stays legible on [body], picked from [first] and [second].
@@ -487,17 +495,12 @@ internal fun chipTintAccentFor(
     }
 
 /**
- * Level bands for charging. Red and orange are the whole point — a bolt already
- * says "charging", only the colour can say "nearly flat". Same cuts as the C pill
- * ([eventStyleFor] Charging) and the stack card icon (`< 30` / `< 60`).
+ * Event-palette charging colour. Red and orange are the whole point — a bolt already
+ * says "charging", only the colour can say "nearly flat".
  */
 @Composable
 internal fun batteryLevelColor(level: Int): Color =
-    when {
-        level < BatteryRedBelow -> RedAccent
-        level < BatteryOrangeBelow -> OrangeAccent
-        else -> GreenAccent
-    }
+    batteryLevelBand(level, RedAccent, OrangeAccent, GreenAccent)
 
 /**
  * Stroke colour for a lockscreen circle ring on a known [plate].
