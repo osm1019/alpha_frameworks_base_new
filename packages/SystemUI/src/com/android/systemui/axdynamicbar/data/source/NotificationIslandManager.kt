@@ -274,6 +274,13 @@ constructor(
         val notification = sbn.notification ?: return NotificationRoute.IGNORED
         val extras = notification.extras ?: return NotificationRoute.IGNORED
 
+        // A summary owns no event of its own, and the one the system synthesises for DeskClock
+        // inherits the timer channel — leaving this until the alert route let the clock branch
+        // below parse it as a hollow timer and overwrite the running one.
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            return NotificationRoute.IGNORED
+        }
+
         if (pkg in CLOCK_PACKAGES) {
             when (clockKind(sbn, extras)) {
                 ClockKind.STOPWATCH ->
@@ -354,9 +361,6 @@ constructor(
             return NotificationRoute.IGNORED
         }
         if (pkg == activeMediaPackageProvider?.invoke()) return NotificationRoute.IGNORED
-        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
-            return NotificationRoute.IGNORED
-        }
         return NotificationRoute.ALERT
     }
 
