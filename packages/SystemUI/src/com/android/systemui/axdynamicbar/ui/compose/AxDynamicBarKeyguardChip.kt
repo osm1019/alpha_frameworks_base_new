@@ -5,6 +5,7 @@ package com.android.systemui.axdynamicbar.ui.compose
 import com.android.systemui.statusbar.chips.ui.model.OngoingActivityChipModel
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -228,8 +229,12 @@ fun AxDynamicBarKeyguardChip(
                     initialScale = 0.9f,
                     animationSpec = tween(durationMillis = 200, delayMillis = 300),
                 ),
-            exit = fadeOut(motionScheme.fastEffectsSpec()) +
-                scaleOut(targetScale = 0.9f, animationSpec = motionScheme.fastSpatialSpec()),
+            // Leaves in the same frame occupancy flips. The keyguard section swaps the host view
+            // to card layout params right then, and this lane is BottomCenter inside it, so
+            // anything still animating out is dragged from the shortcut row up to the card's
+            // bottom edge — 16dp above the fingerprint. The enter delay above is the other half
+            // of the same collision, and the card growing in covers the pop.
+            exit = ExitTransition.None,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
