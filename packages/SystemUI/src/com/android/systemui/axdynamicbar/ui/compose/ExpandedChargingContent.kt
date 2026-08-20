@@ -63,7 +63,7 @@ import com.android.systemui.res.R
 
 @Composable
 internal fun ChargingExpanded(event: IslandEvent.Charging, interactor: IslandActions) {
-    val accent = if (event.isPowerSave) OrangeAccent else GreenAccent
+    val accent = if (event.isPowerSave) OrangeAccent else batteryLevelColor(event.level)
     // PrimaryCard is dense glass; OnCard* is light-on-glass so both day and night stay legible.
     val onCard = OnCardText
     val onCardSecondary = OnCardSecondary
@@ -236,7 +236,7 @@ private fun StatLine(label: String, value: String) {
 
 @Composable
 internal fun RowScope.CompactChargingRow(event: IslandEvent.Charging) {
-    val accent = if (event.isPowerSave) OrangeAccent else GreenAccent
+    val accent = if (event.isPowerSave) OrangeAccent else batteryLevelColor(event.level)
 
     Box(
         modifier = Modifier

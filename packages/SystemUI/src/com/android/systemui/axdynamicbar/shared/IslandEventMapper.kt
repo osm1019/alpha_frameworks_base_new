@@ -108,11 +108,7 @@ internal fun eventStyleFor(event: IslandEvent): EventStyle = when (event) {
         labelRes = R.string.ax_dynamic_bar_hotspot,
     )
     is IslandEvent.Charging -> EventStyle(
-        accent = when {
-            event.level < 30 -> RedAccent
-            event.level < 60 -> OrangeAccent
-            else -> GreenAccent
-        },
+        accent = batteryLevelColor(event.level),
         icon = Icons.Filled.BatteryChargingFull,
         labelRes = if (event.isWireless) R.string.ax_dynamic_bar_wireless_charging
         else R.string.ax_dynamic_bar_charging,

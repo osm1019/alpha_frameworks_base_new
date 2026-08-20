@@ -875,7 +875,7 @@ private fun KeyguardBatteryChip(
     onClick: () -> Unit,
 ) {
     val accent = when {
-        info.isCharging -> BatteryChargingColor
+        info.isCharging -> batteryLevelColor(info.level)
         info.isPowerSave -> BatteryPowerSaveColor
         else -> BatteryNeutralColor
     }

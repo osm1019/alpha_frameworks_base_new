@@ -239,8 +239,10 @@ private const val ProgressLightnessSteps = 25
 /** Track is the chip's own content colour, already proven against this plate. */
 internal const val ProgressTrackAlpha = 0.3f
 
-private const val BatteryLowLevel = 15
-private const val BatteryMidLevel = 30
+/** Exclusive upper bound of the red charging band. Same cut as C / the stack icon. */
+private const val BatteryRedBelow = 30
+/** Exclusive upper bound of the orange charging band. Same cut as C / the stack icon. */
+private const val BatteryOrangeBelow = 60
 
 /**
  * Content that stays legible on [body], picked from [first] and [second].
@@ -485,14 +487,15 @@ internal fun chipTintAccentFor(
     }
 
 /**
- * Level bands for the battery ring. Red and orange are the whole point of the
- * ring — a bolt already says "charging", only the sweep can say "nearly flat".
+ * Level bands for charging. Red and orange are the whole point — a bolt already
+ * says "charging", only the colour can say "nearly flat". Same cuts as the C pill
+ * ([eventStyleFor] Charging) and the stack card icon (`< 30` / `< 60`).
  */
 @Composable
 internal fun batteryLevelColor(level: Int): Color =
     when {
-        level <= BatteryLowLevel -> RedAccent
-        level <= BatteryMidLevel -> OrangeAccent
+        level < BatteryRedBelow -> RedAccent
+        level < BatteryOrangeBelow -> OrangeAccent
         else -> GreenAccent
     }
 
