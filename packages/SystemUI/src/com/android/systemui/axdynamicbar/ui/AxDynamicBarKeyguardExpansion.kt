@@ -58,29 +58,27 @@ constructor(
      * Context gate shared by both cards: on the keyguard, awake, with nothing else expanded over
      * it. Deliberately excludes [hasChip] — the battery card's occupant is a lane member, not a
      * stack event, so it can legitimately be the only thing on the lockscreen.
+     *
+     * Every input is a committed state, never a gesture fraction. Closing the card unmounts it,
+     * which drops the held event and leaves the keyguard section's host view in card layout params
+     * — so a gate that trips on drag progress destroys state a cancelled gesture then cannot give
+     * back. The card is a child of the keyguard root, and `KeyguardRootViewBinder` fades that whole
+     * view through the transition, so it already animates with the drag without being unmounted;
+     * see `LockscreenToPrimaryBouncerTransitionViewModel`, which does the same for the shortcuts
+     * either side of the lane. Teardown belongs to [isOnKeyguard] flipping once the swipe commits.
      */
-    private val canShowCard: StateFlow<Boolean> = run {
-        val contextAndDoze =
-            combine(
+    private val canShowCard: StateFlow<Boolean> =
+        combine(
                 interactor.isOnKeyguard,
                 interactor.isDozing,
                 interactor.dozeAmount.map { it > 0f }.distinctUntilChanged(),
-                interactor.qsExpansion.map { it > 0f }.distinctUntilChanged(),
                 interactor.isPanelExpanded,
-            ) { onKg, dozing, dozeAmt, qs, panelExp ->
-                onKg && !dozing && !dozeAmt && !qs && !panelExp
-            }
-        val shadeAndBouncer =
-            combine(
                 interactor.isBouncerShowing,
-                interactor.legacyShadeExpansion.map { it >= 0.95f }.distinctUntilChanged(),
-            ) { bouncer, shadeFull ->
-                !bouncer && shadeFull
+            ) { onKg, dozing, dozeAmt, panelExp, bouncer ->
+                onKg && !dozing && !dozeAmt && !panelExp && !bouncer
             }
-        combine(contextAndDoze, shadeAndBouncer) { a, b -> a && b }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, false)
-    }
 
     val canShow: StateFlow<Boolean> =
         combine(canShowCard, hasChip) { context, chip -> context && chip }
