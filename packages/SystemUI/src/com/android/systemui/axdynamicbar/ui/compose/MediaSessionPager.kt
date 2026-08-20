@@ -1,6 +1,7 @@
 package com.android.systemui.axdynamicbar.ui.compose
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,8 @@ import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.android.compose.gesture.effect.rememberOffsetOverscrollEffect
+import com.android.compose.gesture.overscrollToDismiss
 import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import kotlin.coroutines.cancellation.CancellationException
@@ -36,9 +39,15 @@ import kotlin.coroutines.cancellation.CancellationException
  * Same carousel as QS / lockscreen B: the pager owns dead-zone swipes, the track consumes its
  * own pointer so it can scrub. Dots sit as a centered header over the card.
  *
- * E (keyguard) and D (stack) both pass through here with no edge-dismiss. QS is not
- * swipe-dismissable; leftover overscroll on D was latching the dismiss effect into a
- * terminal dismissed state.
+ * The overscroll effect is [rememberOffsetOverscrollEffect], not the platform default. The
+ * default is the `EdgeEffect` stretch, which consumes pre-scroll delta to relax an existing
+ * stretch before the pager sees it — so a settle that leaves any stretch behind eats the next
+ * drag in the *opposite* direction, and paging back needs a nudge forward first. It is also
+ * what [overscrollToDismiss] reads, which is why stacking that on the stretch latched a
+ * dismiss out of a cancelled swipe.
+ *
+ * [onEdgeDismiss] is null where the card is not swipe-dismissable: the keyguard card never is,
+ * and the stack card only is while "Pin media player" is off.
  *
  * [onSelect] runs on bind and when the user pages, so island transport follows the visible
  * session. [onRelease] puts transport back on the chip's primary when the card goes away.
@@ -50,6 +59,7 @@ internal fun MediaSessionPager(
     onSelect: (InstanceId) -> Unit,
     onRelease: () -> Unit,
     modifier: Modifier = Modifier,
+    onEdgeDismiss: (() -> Unit)? = null,
     fillHeight: Boolean = false,
     dotActive: Color,
     dotInactive: Color,
@@ -58,7 +68,7 @@ internal fun MediaSessionPager(
     if (sessions.isEmpty()) return
     val keys = sessions.map { it.sessionKey }
     val currentIndex = keys.indexOf(selectedKey).let { if (it >= 0) it else 0 }
-    val pagerState = rememberPagerState(initialPage = currentIndex) { sessions.size }
+    val pagerState = rememberPagerState { sessions.size }
     val release = rememberUpdatedState(onRelease)
 
     LaunchedEffect(selectedKey) { onSelect(selectedKey) }
@@ -74,19 +84,33 @@ internal fun MediaSessionPager(
         if (key != selectedKey) onSelect(key)
     }
 
+    val overscroll = rememberOffsetOverscrollEffect()
+
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier =
-                Modifier.fillMaxWidth().then(if (fillHeight) Modifier.weight(1f) else Modifier)
+                Modifier.fillMaxWidth()
+                    .then(if (fillHeight) Modifier.weight(1f) else Modifier)
+                    .then(
+                        if (onEdgeDismiss != null) {
+                            Modifier.overscrollToDismiss(
+                                orientation = Orientation.Horizontal,
+                                onDismissed = onEdgeDismiss,
+                            )
+                        } else Modifier
+                    )
         ) {
             HorizontalPager(
                 state = pagerState,
                 modifier =
                     Modifier.fillMaxWidth().then(if (fillHeight) Modifier.fillMaxSize() else Modifier),
-                userScrollEnabled = pagerState.pageCount > 1,
+                // One session still scrolls when the card can be dismissed: with scrolling
+                // off the pager consumes nothing, so there is no overscroll to dismiss on.
+                userScrollEnabled = pagerState.pageCount > 1 || onEdgeDismiss != null,
                 pageSpacing = 8.dp,
-                beyondViewportPageCount = 0,
+                beyondViewportPageCount = 1,
                 key = { page -> sessions[page].sessionKey },
+                overscrollEffect = overscroll,
             ) { page ->
                 content(sessions[page])
             }

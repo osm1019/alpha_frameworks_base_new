@@ -24,7 +24,8 @@ data class IslandUiState(
 
 /**
  * Status bar notification keys that are already represented in the Dynamic Bar chip / alert card.
- * Used to suppress duplicate tray icons and redundant heads-up for the same [StatusBarNotification].
+ * Used to suppress duplicate tray icons and a second heads-up for a key the island is already
+ * showing. First-post routing lives in HeadsUpCoordinator, not here.
  */
 fun IslandUiState.mirroredStatusBarNotificationKeys(): Set<String> {
     if (!shouldShow) return emptySet()

@@ -460,6 +460,7 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
     val isOnKeyguard by viewModel.isOnKeyguard.collectAsStateWithLifecycle()
     val notifAlert = uiState.notificationAlert
     val compactNotifs by viewModel.interactor.settings.compactNotifications.collectAsStateWithLifecycle()
+    val isMediaPinned by viewModel.interactor.settings.isMediaPinned.collectAsStateWithLifecycle()
     val isCutoutMode by viewModel.interactor.isCutoutDisplayEnabled.collectAsStateWithLifecycle()
     val placementHint by viewModel.cutoutPlacementHint.collectAsStateWithLifecycle()
 
@@ -572,6 +573,7 @@ private fun OverlayContent(viewModel: AxDynamicBarChipViewModel, statusBarHeight
                         onCollapse = { viewModel.collapsePanel() },
                         pinnedEventId = if (showAllEvents) null else state.event.id,
                         stackSize = state.allEvents.size,
+                        mediaDismissable = !isMediaPinned,
                         onExpandAll = if (!showAllEvents && state.allEvents.size > 1) {
                             { viewModel.expandAll() }
                         } else null,

@@ -70,6 +70,11 @@ fun ExpandedIslandContent(
     expandedFilter: String? = null,
     pinnedEventId: String? = null,
     stackSize: Int = events.size,
+    /**
+     * Whether the media card offers swipe-to-dismiss. Off while Settings' "Pin media player" is
+     * on — a pinned card is one the user asked to keep. The keyguard card is never dismissable.
+     */
+    mediaDismissable: Boolean = false,
     onExpandAll: (() -> Unit)? = null,
     hapticsViewModelFactory: SliderHapticsViewModel.Factory,
     modifier: Modifier = Modifier,
@@ -170,7 +175,7 @@ fun ExpandedIslandContent(
             items(filteredEvents, key = { it.id }) { event ->
                 if (event is IslandEvent.Media) {
                     Box(modifier = Modifier.animateItem()) {
-                        MediaCard(event, interactor)
+                        MediaCard(event, interactor, mediaDismissable)
                     }
                 } else {
                     MagneticSwipeToDismiss(

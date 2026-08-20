@@ -197,411 +197,560 @@ constructor(
                 if (!listening) return
                 val pkg = sbn.packageName ?: return
                 val extras = sbn.notification?.extras ?: return
-
-                if (pkg in CLOCK_PACKAGES) {
-                    val channelId = sbn.notification?.channelId?.lowercase() ?: ""
-                    val actionLabels =
-                        sbn.notification?.actions?.map { it.title?.toString()?.lowercase() ?: "" }
-                            ?: emptyList()
-                    val actionIntents =
-                        sbn.notification?.actions?.map { actionIntentString(it) ?: "" }
-                            ?: emptyList()
-                    val hasStopwatchIntent = actionIntents.any {
-                        it == DeskClockActions.START_STOPWATCH ||
-                            it == DeskClockActions.PAUSE_STOPWATCH ||
-                            it == DeskClockActions.RESET_STOPWATCH ||
-                            it == DeskClockActions.LAP_STOPWATCH ||
-                            it == DeskClockActions.SHOW_STOPWATCH
+                when (classify(sbn)) {
+                    NotificationRoute.STOPWATCH -> {
+                        val (labels, intents) = clockActionLists(sbn)
+                        handleStopwatch(sbn, extras, labels, intents)
                     }
-                    val hasTimerIntent = actionIntents.any {
-                        it == DeskClockActions.START_TIMER ||
-                            it == DeskClockActions.PAUSE_TIMER ||
-                            it == DeskClockActions.RESET_TIMER ||
-                            it == DeskClockActions.ADD_MINUTE_TIMER ||
-                            it == DeskClockActions.SHOW_TIMER
+                    NotificationRoute.TIMER -> {
+                        val (labels, intents) = clockActionLists(sbn)
+                        handleTimer(sbn, extras, labels, intents)
                     }
-                    val hasLap = actionLabels.any { it.contains("lap") }
-                    val isCountDown = extras.getBoolean("android.chronometerCountDown", false)
+                    NotificationRoute.ALARM -> handleAlarm(sbn, extras)
+                    NotificationRoute.CALL -> handleCallNotification(sbn, extras)
+                    NotificationRoute.AUDIO_RECORDING ->
+                        handleAudioRecording(sbn, extras, pkg)
+                    NotificationRoute.AUDIO_RECORDING_SAVED ->
+                        handleAudioRecordingSaved(sbn, extras)
+                    NotificationRoute.NOW_PLAYING -> handleNowPlaying(sbn, extras)
+                    NotificationRoute.SPORTS -> handleSportsPosted(sbn, extras, pkg)
+                    NotificationRoute.MEDIA -> {
+                        _promotedOngoingEvents.value =
+                            _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
+                    }
+                    NotificationRoute.PROMOTED -> handlePromotedOngoing(sbn, extras, pkg)
+                    NotificationRoute.ALERT -> emitGenericAlert(sbn, extras, pkg)
+                    NotificationRoute.IGNORED -> {
+                        if (!sbn.isOngoing) {
+                            _promotedOngoingEvents.value =
+                                _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
+                        }
+                    }
+                }
+            }
+        }
 
-                    val isStopwatch = hasStopwatchIntent || channelId.contains("stopwatch") || hasLap
-                    val isTimer = !isStopwatch && (
-                        hasTimerIntent ||
-                            channelId.contains("timer") ||
-                            channelId.contains("firing") ||
-                            isCountDown ||
-                            actionLabels.any { it.contains("+1") || it.contains("add") }
+    /**
+     * True if this SBN is a generic notification alert — the only type the heads-up pipeline
+     * may steal. Same [classify] the posted handler uses; dedup is not part of the route.
+     */
+    fun wouldConsumeAsNotificationAlert(sbn: StatusBarNotification): Boolean {
+        if (!listening) return false
+        return classify(sbn) == NotificationRoute.ALERT
+    }
+
+    /**
+     * Build the island alert event from [sbn] with no dedup. Used when the pipeline has already
+     * spent the peek on this key — the card must be drawable even if [emitGenericAlert] would
+     * drop a second post of the same key.
+     */
+    fun buildNotificationAlert(sbn: StatusBarNotification): IslandEvent.Notification? {
+        val pkg = sbn.packageName ?: return null
+        val extras = sbn.notification?.extras ?: return null
+        return buildNotificationAlert(sbn, extras, pkg)
+    }
+
+    private enum class NotificationRoute {
+        STOPWATCH,
+        TIMER,
+        ALARM,
+        CALL,
+        AUDIO_RECORDING,
+        AUDIO_RECORDING_SAVED,
+        NOW_PLAYING,
+        SPORTS,
+        MEDIA,
+        PROMOTED,
+        ALERT,
+        IGNORED,
+    }
+
+    /**
+     * Side-effect-free route for an SBN. [onNotificationPosted] and
+     * [wouldConsumeAsNotificationAlert] both call this — do not fork the chain.
+     */
+    private fun classify(sbn: StatusBarNotification): NotificationRoute {
+        val pkg = sbn.packageName ?: return NotificationRoute.IGNORED
+        val notification = sbn.notification ?: return NotificationRoute.IGNORED
+        val extras = notification.extras ?: return NotificationRoute.IGNORED
+
+        if (pkg in CLOCK_PACKAGES) {
+            when (clockKind(sbn, extras)) {
+                ClockKind.STOPWATCH ->
+                    return if ("stopwatch" !in disabledTypes) NotificationRoute.STOPWATCH
+                    else NotificationRoute.IGNORED
+                ClockKind.TIMER ->
+                    return if ("timer" !in disabledTypes) NotificationRoute.TIMER
+                    else NotificationRoute.IGNORED
+                ClockKind.NEITHER -> {}
+            }
+        }
+
+        val isAlarmCategory = notification.category == Notification.CATEGORY_ALARM
+        if ((isAlarmCategory || pkg in ALARM_PACKAGES) && sbn.isOngoing) {
+            return if ("alarm" !in disabledTypes) NotificationRoute.ALARM
+            else NotificationRoute.IGNORED
+        }
+
+        if (notification.category == Notification.CATEGORY_CALL && isCallStyle(extras)) {
+            return if ("call" !in disabledTypes) NotificationRoute.CALL
+            else NotificationRoute.IGNORED
+        }
+
+        val isMedia =
+            notification.category == Notification.CATEGORY_TRANSPORT ||
+                extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+
+        if (
+            sbn.isOngoing &&
+                !isMedia &&
+                "audio_recording" !in disabledTypes &&
+                isAudioRecordingNotification(sbn, pkg)
+        ) {
+            return NotificationRoute.AUDIO_RECORDING
+        }
+
+        if (pkg == recorderPackage && _audioRecordingEvent.value != null && !sbn.isOngoing) {
+            return NotificationRoute.AUDIO_RECORDING_SAVED
+        }
+
+        if (
+            pkg == NOW_PLAYING_PACKAGE &&
+                (notification.channelId ?: "").contains(NOW_PLAYING_CHANNEL)
+        ) {
+            return if ("now_playing" !in disabledTypes) NotificationRoute.NOW_PLAYING
+            else NotificationRoute.IGNORED
+        }
+
+        if (pkg in SUPPRESSED_PACKAGES) return NotificationRoute.IGNORED
+
+        if ("sports" !in disabledTypes && isSportsNotification(sbn, extras, pkg)) {
+            return NotificationRoute.SPORTS
+        }
+
+        if (isMedia && "media" !in disabledTypes) return NotificationRoute.MEDIA
+
+        val progress = progressOf(extras)
+        val transferInFlight =
+            progress.hasProgress &&
+                (sbn.isOngoing || progress.indeterminate || progress.raw < progress.max)
+
+        if (
+            sbn.isOngoing &&
+                isPromotable(sbn, extras) &&
+                "promoted_ongoing" !in disabledTypes
+        ) {
+            return NotificationRoute.PROMOTED
+        }
+        if (transferInFlight && "promoted_ongoing" !in disabledTypes) {
+            return NotificationRoute.PROMOTED
+        }
+        if (sbn.isOngoing) return NotificationRoute.IGNORED
+        if ("notification" in disabledTypes) return NotificationRoute.IGNORED
+        if (notification.category == Notification.CATEGORY_TRANSPORT) {
+            return NotificationRoute.IGNORED
+        }
+        if (notification.category == Notification.CATEGORY_SERVICE && !progress.hasProgress) {
+            return NotificationRoute.IGNORED
+        }
+        if (pkg == activeMediaPackageProvider?.invoke()) return NotificationRoute.IGNORED
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            return NotificationRoute.IGNORED
+        }
+        return NotificationRoute.ALERT
+    }
+
+    private enum class ClockKind { STOPWATCH, TIMER, NEITHER }
+
+    private fun clockKind(sbn: StatusBarNotification, extras: Bundle): ClockKind {
+        val channelId = sbn.notification?.channelId?.lowercase() ?: ""
+        val (actionLabels, actionIntents) = clockActionLists(sbn)
+        val hasStopwatchIntent =
+            actionIntents.any {
+                it == DeskClockActions.START_STOPWATCH ||
+                    it == DeskClockActions.PAUSE_STOPWATCH ||
+                    it == DeskClockActions.RESET_STOPWATCH ||
+                    it == DeskClockActions.LAP_STOPWATCH ||
+                    it == DeskClockActions.SHOW_STOPWATCH
+            }
+        val hasTimerIntent =
+            actionIntents.any {
+                it == DeskClockActions.START_TIMER ||
+                    it == DeskClockActions.PAUSE_TIMER ||
+                    it == DeskClockActions.RESET_TIMER ||
+                    it == DeskClockActions.ADD_MINUTE_TIMER ||
+                    it == DeskClockActions.SHOW_TIMER
+            }
+        val hasLap = actionLabels.any { it.contains("lap") }
+        val isCountDown = extras.getBoolean("android.chronometerCountDown", false)
+        val isStopwatch = hasStopwatchIntent || channelId.contains("stopwatch") || hasLap
+        val isTimer =
+            !isStopwatch &&
+                (hasTimerIntent ||
+                    channelId.contains("timer") ||
+                    channelId.contains("firing") ||
+                    isCountDown ||
+                    actionLabels.any { it.contains("+1") || it.contains("add") })
+        return when {
+            isStopwatch -> ClockKind.STOPWATCH
+            isTimer -> ClockKind.TIMER
+            else -> ClockKind.NEITHER
+        }
+    }
+
+    private fun clockActionLists(sbn: StatusBarNotification): Pair<List<String>, List<String>> {
+        val actions = sbn.notification?.actions ?: return emptyList<String>() to emptyList()
+        return actions.map { it.title?.toString()?.lowercase() ?: "" } to
+            actions.map { actionIntentString(it) ?: "" }
+    }
+
+    private fun isCallStyle(extras: Bundle): Boolean =
+        extras.containsKey(Notification.EXTRA_ANSWER_INTENT) ||
+            extras.containsKey(Notification.EXTRA_DECLINE_INTENT) ||
+            extras.containsKey(Notification.EXTRA_HANG_UP_INTENT)
+
+    private fun isAudioRecordingNotification(sbn: StatusBarNotification, pkg: String): Boolean {
+        val allActions = sbn.notification?.actions ?: return false
+        val actionIntentMap = allActions.associateWith { actionIntentString(it) }
+        val iconResMap =
+            allActions.associateWith { actionIconResName(it, pkg)?.lowercase() }
+        val recActions =
+            allActions.filter { a ->
+                val intent = actionIntentMap[a]
+                val icon = iconResMap[a] ?: ""
+                when {
+                    intent == "STOP" || intent == "PAUSE" || intent == "RESUME" -> true
+                    icon.matchesMaterial(MaterialIconSet.Stop) -> true
+                    icon.matchesMaterial(MaterialIconSet.Pause) -> true
+                    icon.matchesMaterial(MaterialIconSet.Play) -> true
+                    else -> {
+                        val lbl = a.title?.toString()?.lowercase() ?: ""
+                        lbl.contains("stop") ||
+                            lbl.contains("pause") ||
+                            lbl.contains("resume")
+                    }
+                }
+            }
+        val hasStop =
+            recActions.any { a ->
+                actionIntentMap[a] == "STOP" ||
+                    (iconResMap[a] ?: "").matchesMaterial(MaterialIconSet.Stop) ||
+                    (a.title?.toString()?.lowercase() ?: "").contains("stop")
+            }
+        return hasStop && recActions.size >= 2
+    }
+
+    private fun isSportsGroupKey(sbn: StatusBarNotification): Boolean {
+        val groupKey = sbn.groupKey ?: ""
+        return groupKey.contains("::sports", ignoreCase = true) ||
+            groupKey.contains("sport", ignoreCase = true) ||
+            groupKey.contains("score", ignoreCase = true)
+    }
+
+    private fun isSportsNotification(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        pkg: String,
+    ): Boolean {
+        if (pkg == GOOGLE_PACKAGE) {
+            return wouldCaptureSports(extras, forceCapture = isSportsGroupKey(sbn))
+        }
+        if (pkg in SPORTS_PACKAGES) {
+            return wouldCaptureSports(extras, forceCapture = true)
+        }
+        return false
+    }
+
+    private fun wouldCaptureSports(extras: Bundle, forceCapture: Boolean): Boolean {
+        val title = extras.getCharSequence("android.title")?.toString() ?: return false
+        val text = extras.getCharSequence("android.text")?.toString() ?: ""
+        val allFields = listOf(title.trim(), text.trim())
+        if (allFields.any { SCORE_PATTERN.find(it) != null }) return true
+        if (VS_PATTERN.find("$title $text") != null) return true
+        return forceCapture
+    }
+
+    private data class ProgressInfo(
+        val raw: Int,
+        val max: Int,
+        val indeterminate: Boolean,
+        val hasProgress: Boolean,
+    )
+
+    private fun progressOf(extras: Bundle): ProgressInfo {
+        val indeterminate = extras.getBoolean("android.progressIndeterminate", false)
+        val raw = extras.getInt("android.progress", -1)
+        val max = extras.getInt("android.progressMax", 0)
+        val hasProgress =
+            indeterminate || (extras.containsKey("android.progress") && max > 0 && raw >= 0)
+        return ProgressInfo(raw, max, indeterminate, hasProgress)
+    }
+
+    private fun handleSportsPosted(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        pkg: String,
+    ) {
+        if (pkg == GOOGLE_PACKAGE) {
+            handleSportsScore(sbn, extras, forceCapture = isSportsGroupKey(sbn))
+            return
+        }
+        handleSportsScore(sbn, extras, forceCapture = true)
+    }
+
+    private fun handleAudioRecording(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        pkg: String,
+    ) {
+        val allActions = sbn.notification?.actions ?: emptyArray()
+        val actionIntentMap = allActions.associateWith { actionIntentString(it) }
+        val iconResMap =
+            allActions.associateWith { actionIconResName(it, pkg)?.lowercase() }
+        val recActions =
+            allActions.filter { a ->
+                val intent = actionIntentMap[a]
+                val icon = iconResMap[a] ?: ""
+                when {
+                    intent == "STOP" || intent == "PAUSE" || intent == "RESUME" -> true
+                    icon.matchesMaterial(MaterialIconSet.Stop) -> true
+                    icon.matchesMaterial(MaterialIconSet.Pause) -> true
+                    icon.matchesMaterial(MaterialIconSet.Play) -> true
+                    else -> {
+                        val lbl = a.title?.toString()?.lowercase() ?: ""
+                        lbl.contains("stop") ||
+                            lbl.contains("pause") ||
+                            lbl.contains("resume")
+                    }
+                }
+            }
+        val hasResumeAction = recActions.any { actionIntentMap[it] == "RESUME" }
+        val hasPauseAction = recActions.any { actionIntentMap[it] == "PAUSE" }
+        val isPaused =
+            when {
+                hasResumeAction -> true
+                hasPauseAction -> false
+                else ->
+                    recActions.any { a ->
+                        (iconResMap[a] ?: "").matchesMaterial(MaterialIconSet.Play) ||
+                            (a.title?.toString()?.lowercase() ?: "").contains("resume")
+                    }
+            }
+        val notifActions =
+            recActions.mapNotNull { a ->
+                a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
+            }
+        val existing = _audioRecordingEvent.value
+        val now = System.currentTimeMillis()
+        val parsedElapsedMs = parseRecorderElapsedMs(extras)
+        val startTime =
+            when {
+                parsedElapsedMs != null -> now - parsedElapsedMs
+                existing != null &&
+                    existing.state != RecordingState.SAVED &&
+                    recorderNotifKey == sbn.key -> existing.startTimeMs
+                sbn.notification?.extras?.getBoolean("android.showChronometer") == true ->
+                    sbn.notification.`when`
+                else -> now
+            }
+        accumulatedPauseMs = 0L
+        pauseStartMs = 0L
+        recorderPackage = pkg
+        recorderNotifKey = sbn.key
+        _audioRecordingEvent.value =
+            IslandEvent.AudioRecording(
+                appName = resolveAppName(pkg),
+                state = if (isPaused) RecordingState.PAUSED else RecordingState.RECORDING,
+                startTimeMs = startTime,
+                actions = notifActions,
+                pausedDurationMs = 0L,
+                contentIntent = sbn.notification?.contentIntent,
+            )
+    }
+
+    private fun handleAudioRecordingSaved(sbn: StatusBarNotification, extras: Bundle) {
+        val allActions = sbn.notification?.actions ?: emptyArray()
+        val notifActions =
+            allActions.mapNotNull { a ->
+                a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
+            }
+        val title = extras.getString("android.title") ?: ""
+        val existing = _audioRecordingEvent.value ?: return
+        recorderNotifKey = sbn.key
+        _audioRecordingEvent.value =
+            existing.copy(
+                appName = title.ifEmpty { existing.appName },
+                state = RecordingState.SAVED,
+                actions = notifActions,
+                contentIntent = sbn.notification?.contentIntent,
+            )
+    }
+
+    private fun emitGenericAlert(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        pkg: String,
+    ) {
+        val notif = sbn.notification
+        val isMessagingStyle =
+            notif != null && notif.isStyle(Notification.MessagingStyle::class.java)
+        val latestMessageTime: Long =
+            if (isMessagingStyle) {
+                val msgs =
+                    notif?.extras?.getParcelableArray(
+                        Notification.EXTRA_MESSAGES,
+                        Parcelable::class.java,
                     )
+                if (msgs != null && msgs.isNotEmpty()) {
+                    Notification.MessagingStyle.Message
+                        .getMessagesFromBundleArray(msgs)
+                        .maxOfOrNull { it.timestamp } ?: 0L
+                } else 0L
+            } else 0L
 
-                    if (isStopwatch && "stopwatch" !in disabledTypes) {
-                        handleStopwatch(sbn, extras, actionLabels, actionIntents)
-                        return
-                    }
-                    if (isTimer && "timer" !in disabledTypes) {
-                        handleTimer(sbn, extras, actionLabels, actionIntents)
-                        return
-                    }
-                    if (isStopwatch || isTimer) return
+        if (isMessagingStyle && latestMessageTime > 0L) {
+            val previous = seenMessagingTimestamps.put(sbn.key, latestMessageTime)
+            if (previous != null && previous == latestMessageTime) return
+        } else {
+            if (!seenNotificationKeys.add(sbn.key)) return
+        }
+
+        val event = buildNotificationAlert(sbn, extras, pkg) ?: return
+        applicationScope.launch { notificationFlow.emit(event) }
+        onNotificationPosted?.invoke(event)
+    }
+
+    private fun buildNotificationAlert(
+        sbn: StatusBarNotification,
+        extras: Bundle,
+        pkg: String,
+    ): IslandEvent.Notification? {
+        val progress = progressOf(extras)
+        val title = extras.getString("android.title")
+        val text =
+            extras.getCharSequence("android.bigText")?.toString()?.takeIf { it.isNotEmpty() }
+                ?: extras.getString("android.text")
+        val notif = sbn.notification
+        val isMessagingStyle =
+            notif != null && notif.isStyle(Notification.MessagingStyle::class.java)
+        val groupKey = if (sbn.isGroup) sbn.groupKey else null
+
+        val icon =
+            try {
+                context.packageManager.getApplicationIcon(pkg)
+            } catch (_: Exception) {
+                null
+            }
+        val appName =
+            try {
+                context.packageManager
+                    .getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0))
+                    .toString()
+            } catch (_: Exception) {
+                pkg
+            }
+
+        val allNotifActions = sbn.notification?.actions ?: emptyArray()
+        val actions =
+            allNotifActions
+                .filter { a -> a.remoteInputs.isNullOrEmpty() && a.actionIntent != null }
+                .take(2)
+                .mapNotNull { a ->
+                    a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
+                }
+        val replyAction =
+            allNotifActions
+                .firstOrNull { a ->
+                    !a.remoteInputs.isNullOrEmpty() && a.actionIntent != null
+                }
+                ?.let { a ->
+                    val remoteInput = a.remoteInputs!!.first()
+                    IslandEvent.ReplyAction(
+                        label = a.title ?: remoteInput.label ?: "Reply",
+                        action = a,
+                        remoteInput = remoteInput,
+                    )
                 }
 
-                val isAlarmCategory = sbn.notification?.category == Notification.CATEGORY_ALARM
-                if ((isAlarmCategory || pkg in ALARM_PACKAGES) && sbn.isOngoing) {
-                    if ("alarm" !in disabledTypes) handleAlarm(sbn, extras)
-                    return
-                }
-
-                if (sbn.notification?.category == Notification.CATEGORY_CALL) {
-                    val isCallStyle =
-                        extras.containsKey(Notification.EXTRA_ANSWER_INTENT) ||
-                            extras.containsKey(Notification.EXTRA_DECLINE_INTENT) ||
-                            extras.containsKey(Notification.EXTRA_HANG_UP_INTENT)
-                    if (isCallStyle) {
-                        if ("call" !in disabledTypes) handleCallNotification(sbn, extras)
-                        return
-                    }
-                }
-
-                val allActions = sbn.notification?.actions ?: emptyArray()
-                val isMedia = sbn.notification?.category == Notification.CATEGORY_TRANSPORT ||
-                    sbn.notification?.extras?.containsKey(
-                        Notification.EXTRA_MEDIA_SESSION
-                    ) == true
-                if (sbn.isOngoing && !isMedia && "audio_recording" !in disabledTypes) {
-                    val actionIntentMap = allActions.associateWith { actionIntentString(it) }
-                    val iconResMap = allActions.associateWith { actionIconResName(it, pkg)?.lowercase() }
-                    val recActions = allActions.filter { a ->
-                        val intent = actionIntentMap[a]
-                        val icon = iconResMap[a] ?: ""
-                        when {
-                            intent == "STOP" || intent == "PAUSE" || intent == "RESUME" -> true
-                            icon.matchesMaterial(MaterialIconSet.Stop) -> true
-                            icon.matchesMaterial(MaterialIconSet.Pause) -> true
-                            icon.matchesMaterial(MaterialIconSet.Play) -> true
-                            else -> {
-                                val lbl = a.title?.toString()?.lowercase() ?: ""
-                                lbl.contains("stop") || lbl.contains("pause") || lbl.contains("resume")
-                            }
-                        }
-                    }
-                    val hasStop = recActions.any { a ->
-                        actionIntentMap[a] == "STOP" ||
-                            (iconResMap[a] ?: "").matchesMaterial(MaterialIconSet.Stop) ||
-                            (a.title?.toString()?.lowercase() ?: "").contains("stop")
-                    }
-                    if (hasStop && recActions.size >= 2) {
-                        val hasResumeAction = recActions.any { actionIntentMap[it] == "RESUME" }
-                        val hasPauseAction = recActions.any { actionIntentMap[it] == "PAUSE" }
-                        val isPaused = when {
-                            hasResumeAction -> true
-                            hasPauseAction -> false
-                            else -> recActions.any { a ->
-                                (iconResMap[a] ?: "").matchesMaterial(MaterialIconSet.Play) ||
-                                    (a.title?.toString()?.lowercase() ?: "").contains("resume")
-                            }
-                        }
-                        val notifActions =
-                            recActions.mapNotNull { a ->
-                                a.title?.let {
-                                    IslandEvent.NotificationAction(label = it, action = a)
-                                }
-                            }
-                        val appName = resolveAppName(pkg)
-                        val existing = _audioRecordingEvent.value
-                        val now = System.currentTimeMillis()
-                        val parsedElapsedMs = parseRecorderElapsedMs(extras)
-
-                        val startTime = when {
-                            parsedElapsedMs != null -> now - parsedElapsedMs
-                            existing != null && existing.state != RecordingState.SAVED &&
-                                recorderNotifKey == sbn.key -> existing.startTimeMs
-                            sbn.notification?.extras?.getBoolean("android.showChronometer") == true ->
-                                sbn.notification.`when`
-                            else -> now
-                        }
-
-                        accumulatedPauseMs = 0L
-                        pauseStartMs = 0L
-
-                        recorderPackage = pkg
-                        recorderNotifKey = sbn.key
-                        _audioRecordingEvent.value =
-                            IslandEvent.AudioRecording(
-                                appName = appName,
-                                state =
-                                    if (isPaused) RecordingState.PAUSED
-                                    else RecordingState.RECORDING,
-                                startTimeMs = startTime,
-                                actions = notifActions,
-                                pausedDurationMs = 0L,
-                                contentIntent = sbn.notification?.contentIntent,
-                            )
-                        return
-                    }
-                }
-
-                if (
-                    pkg == recorderPackage && _audioRecordingEvent.value != null && !sbn.isOngoing
-                ) {
-                    val notifActions =
-                        allActions.mapNotNull { a ->
-                            a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
-                        }
-                    val title = extras.getString("android.title") ?: ""
-                    val existing = _audioRecordingEvent.value ?: return
-                    recorderNotifKey = sbn.key
-                    _audioRecordingEvent.value =
-                        existing.copy(
-                            appName = title.ifEmpty { existing.appName },
-                            state = RecordingState.SAVED,
-                            actions = notifActions,
-                            contentIntent = sbn.notification?.contentIntent,
-                        )
-                    return
-                }
-
-                if (pkg == NOW_PLAYING_PACKAGE) {
-                    val channel = sbn.notification?.channelId ?: ""
-                    if (channel.contains(NOW_PLAYING_CHANNEL)) {
-                        if ("now_playing" !in disabledTypes) handleNowPlaying(sbn, extras)
-                        return
-                    }
-                }
-
-                if (pkg in SUPPRESSED_PACKAGES) return
-
-                if ("sports" !in disabledTypes) {
-                    if (pkg == GOOGLE_PACKAGE) {
-                        val groupKey = sbn.groupKey ?: ""
-                        val isSportsGroup = groupKey.contains("::sports", ignoreCase = true)
-                            || groupKey.contains("sport", ignoreCase = true)
-                            || groupKey.contains("score", ignoreCase = true)
-                        // Also try pattern-based detection as fallback in case Google changes
-                        // their group key format — forceCapture=false means it only succeeds
-                        // if SCORE_PATTERN or VS_PATTERN actually match the notification text.
-                        if (isSportsGroup && handleSportsScore(sbn, extras, forceCapture = true)) return
-                        if (!isSportsGroup && handleSportsScore(sbn, extras, forceCapture = false)) return
-                    }
-                    if (pkg in SPORTS_PACKAGES && handleSportsScore(sbn, extras, forceCapture = true)) return
-                }
-
-                // A playing session already has its own media card, so the app's transport
-                // notification would sit beside it in the stack saying the same thing. The
-                // alert path below already drops these; the promoted-ongoing path runs first
-                // and did not.
-                //
-                // Keyed on the notification carrying a media session rather than on the active
-                // media package: the package is right for alerts, but here it would also drop a
-                // real transfer — a download posted by the app that happens to be playing.
-                // The session token is intrinsic to the post, so this also does not depend on
-                // whether the media source or the notification lands first.
-                //
-                // Only when the media chip is actually enabled: with it turned off there is no
-                // card to duplicate, and the notification is the only thing left to show.
-                if (isMedia && "media" !in disabledTypes) {
-                    _promotedOngoingEvents.value =
-                        _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
-                    return
-                }
-
-                if (sbn.isOngoing && isPromotable(sbn, extras)) {
-                    if ("promoted_ongoing" !in disabledTypes) {
-                        handlePromotedOngoing(sbn, extras, pkg)
-                        return
-                    }
-                }
-
-                val indeterminate = extras.getBoolean("android.progressIndeterminate", false)
-                val progressRaw = extras.getInt("android.progress", -1)
-                val progressMax = extras.getInt("android.progressMax", 0)
-                val hasProgress =
-                    indeterminate ||
-                        (extras.containsKey("android.progress") &&
-                            progressMax > 0 &&
-                            progressRaw >= 0)
-
-                // A transfer in flight is a chip whether or not the app flagged it ongoing. A
-                // finished bar on a non-ongoing post is a result, so that stays an alert.
-                val transferInFlight =
-                    hasProgress && (sbn.isOngoing || indeterminate || progressRaw < progressMax)
-                if (transferInFlight) {
-                    if ("promoted_ongoing" !in disabledTypes) {
-                        handlePromotedOngoing(sbn, extras, pkg)
-                        return
-                    }
-                }
-                if (!sbn.isOngoing) {
-                    _promotedOngoingEvents.value =
-                        _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
-                }
-                if (sbn.isOngoing) return
-                if ("notification" in disabledTypes) return
-                val category = sbn.notification?.category
-                if (category == Notification.CATEGORY_TRANSPORT) return
-                if (category == Notification.CATEGORY_SERVICE && !hasProgress) return
-                if (sbn.packageName == activeMediaPackageProvider?.invoke()) return
-
-                val notifFlags = sbn.notification?.flags ?: 0
-                if (notifFlags and Notification.FLAG_GROUP_SUMMARY != 0) return
-                val groupKey = if (sbn.isGroup) sbn.groupKey else null
-
-                val title = extras.getString("android.title")
-                val text =
-                    extras.getCharSequence("android.bigText")?.toString()?.takeIf {
-                        it.isNotEmpty()
-                    } ?: extras.getString("android.text")
-
-                val notif = sbn.notification
-                val isMessagingStyle =
-                    notif != null && notif.isStyle(Notification.MessagingStyle::class.java)
-                val latestMessageTime: Long =
-                    if (isMessagingStyle) {
-                        val msgs =
-                            notif?.extras?.getParcelableArray(
-                                Notification.EXTRA_MESSAGES,
-                                Parcelable::class.java,
-                            )
-                        if (msgs != null && msgs.isNotEmpty()) {
-                            Notification.MessagingStyle.Message
-                                .getMessagesFromBundleArray(msgs)
-                                .maxOfOrNull { it.timestamp } ?: 0L
-                        } else 0L
-                    } else 0L
-
-                if (isMessagingStyle && latestMessageTime > 0L) {
-                    val previous = seenMessagingTimestamps.put(sbn.key, latestMessageTime)
-                    if (previous != null && previous == latestMessageTime) return
-                } else {
-                    if (!seenNotificationKeys.add(sbn.key)) return
-                }
-
-                val icon =
+        var senderIcon: Drawable? = null
+        var senderName: String? = null
+        var latestMessageText: String? = null
+        var isConversation = false
+        var isGroupConversation = false
+        var conversationTitle: String? = null
+        if (notif != null && isMessagingStyle && notif.extras != null) {
+            isConversation = true
+            isGroupConversation =
+                notif.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false)
+            conversationTitle =
+                notif.extras
+                    .getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
+                    ?.toString()
+                    ?.takeIf { it.isNotEmpty() }
+            val messagesArray =
+                notif.extras.getParcelableArray(
+                    Notification.EXTRA_MESSAGES,
+                    Parcelable::class.java,
+                )
+            if (messagesArray != null && messagesArray.isNotEmpty()) {
+                val messages =
+                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(
+                        messagesArray
+                    )
+                val lastMessage = messages.maxByOrNull { it.timestamp }
+                val sender = lastMessage?.senderPerson
+                senderName = sender?.name?.toString()
+                latestMessageText = lastMessage?.text?.toString()
+                senderIcon =
                     try {
-                        context.packageManager.getApplicationIcon(pkg)
+                        sender?.icon?.loadDrawable(context)
                     } catch (_: Exception) {
                         null
                     }
-                val appName =
+            }
+            if (senderIcon == null) {
+                senderIcon =
                     try {
-                        context.packageManager
-                            .getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0))
-                            .toString()
+                        notif.extras
+                            .getParcelable(
+                                Notification.EXTRA_CONVERSATION_ICON,
+                                Icon::class.java,
+                            )
+                            ?.loadDrawable(context)
                     } catch (_: Exception) {
-                        pkg
+                        null
                     }
-
-                val allNotifActions = sbn.notification?.actions ?: emptyArray()
-
-                val actions =
-                    allNotifActions
-                        .filter { a -> a.remoteInputs.isNullOrEmpty() && a.actionIntent != null }
-                        .take(2)
-                        .mapNotNull { a ->
-                            a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
-                        }
-
-                val replyAction =
-                    allNotifActions
-                        .firstOrNull { a ->
-                            !a.remoteInputs.isNullOrEmpty() && a.actionIntent != null
-                        }
-                        ?.let { a ->
-                            val remoteInput = a.remoteInputs!!.first()
-                            IslandEvent.ReplyAction(
-                                label = a.title ?: remoteInput.label ?: "Reply",
-                                action = a,
-                                remoteInput = remoteInput,
-                            )
-                        }
-
-                var senderIcon: Drawable? = null
-                var senderName: String? = null
-                var latestMessageText: String? = null
-                var isConversation = false
-                var isGroupConversation = false
-                var conversationTitle: String? = null
-                if (
-                    notif != null &&
-                        isMessagingStyle &&
-                        notif.extras != null
-                ) {
-                    isConversation = true
-                    isGroupConversation = notif.extras.getBoolean(
-                        Notification.EXTRA_IS_GROUP_CONVERSATION, false
-                    )
-                    conversationTitle = notif.extras.getCharSequence(
-                        Notification.EXTRA_CONVERSATION_TITLE
-                    )?.toString()?.takeIf { it.isNotEmpty() }
-                    val messagesArray =
-                        notif.extras.getParcelableArray(
-                            Notification.EXTRA_MESSAGES,
-                            Parcelable::class.java,
-                        )
-                    if (messagesArray != null && messagesArray.isNotEmpty()) {
-                        val messages =
-                            Notification.MessagingStyle.Message.getMessagesFromBundleArray(
-                                messagesArray
-                            )
-                        val lastMessage = messages.maxByOrNull { it.timestamp }
-                        val sender = lastMessage?.senderPerson
-                        senderName = sender?.name?.toString()
-                        latestMessageText = lastMessage?.text?.toString()
-                        senderIcon =
-                            try {
-                                sender?.icon?.loadDrawable(context)
-                            } catch (_: Exception) {
-                                null
-                            }
+            }
+            if (senderIcon == null) {
+                senderIcon =
+                    try {
+                        notif.getLargeIcon()?.loadDrawable(context)
+                    } catch (_: Exception) {
+                        null
                     }
-
-                    if (senderIcon == null) {
-                        senderIcon =
-                            try {
-                                notif.extras
-                                    .getParcelable(
-                                        Notification.EXTRA_CONVERSATION_ICON,
-                                        Icon::class.java,
-                                    )
-                                    ?.loadDrawable(context)
-                            } catch (_: Exception) {
-                                null
-                            }
-                    }
-
-                    if (senderIcon == null) {
-                        senderIcon =
-                            try {
-                                notif.getLargeIcon()?.loadDrawable(context)
-                            } catch (_: Exception) {
-                                null
-                            }
-                    }
-                }
-
-                val notificationImage = extractNotificationImage(extras, sbn)
-
-                val event =
-                    IslandEvent.Notification(
-                        sbn = sbn,
-                        title = title,
-                        text = latestMessageText ?: text,
-                        appIcon = icon,
-                        appName = appName,
-                        progress = if (hasProgress && !indeterminate) progressRaw else -1,
-                        progressMax = progressMax.coerceAtLeast(1),
-                        isProgressIndeterminate = indeterminate,
-                        actions = actions,
-                        replyAction = replyAction,
-                        isConversation = isConversation,
-                        isGroupConversation = isGroupConversation,
-                        conversationTitle = conversationTitle,
-                        senderIcon = senderIcon,
-                        senderName = senderName,
-                        groupKey = groupKey,
-                        notificationImage = notificationImage,
-                    )
-                applicationScope.launch { notificationFlow.emit(event) }
-                onNotificationPosted?.invoke(event)
             }
         }
+
+        return IslandEvent.Notification(
+            sbn = sbn,
+            title = title,
+            text = latestMessageText ?: text,
+            appIcon = icon,
+            appName = appName,
+            progress = if (progress.hasProgress && !progress.indeterminate) progress.raw else -1,
+            progressMax = progress.max.coerceAtLeast(1),
+            isProgressIndeterminate = progress.indeterminate,
+            actions = actions,
+            replyAction = replyAction,
+            isConversation = isConversation,
+            isGroupConversation = isGroupConversation,
+            conversationTitle = conversationTitle,
+            senderIcon = senderIcon,
+            senderName = senderName,
+            groupKey = groupKey,
+            notificationImage = extractNotificationImage(extras, sbn),
+        )
+    }
 
     fun startListening() {
         if (listening) return

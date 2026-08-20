@@ -79,7 +79,11 @@ private val ControlIconSize = 20.dp
  * control) while the shell, shape and padding stay whatever the rest of the stack uses.
  */
 @Composable
-internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
+internal fun MediaCard(
+    event: IslandEvent.Media,
+    interactor: IslandActions,
+    dismissable: Boolean = false,
+) {
     val sessions by interactor.mediaSessions.collectAsStateWithLifecycle()
     val selectedKey by interactor.selectedMediaSessionKey.collectAsStateWithLifecycle()
     val pages = sessions.ifEmpty { listOf(event) }
@@ -91,6 +95,9 @@ internal fun MediaCard(event: IslandEvent.Media, interactor: IslandActions) {
         selectedKey = key,
         onSelect = interactor::selectMediaSession,
         onRelease = interactor::releaseMediaCardTransport,
+        // Overscroll past an end dismisses the island's media card only; remedia keeps the
+        // session, so QS and the lockscreen player are untouched.
+        onEdgeDismiss = if (dismissable) ({ interactor.dismissEvent(event) }) else null,
         dotActive = AlphaColors.DbStackCard.text,
         dotInactive = AlphaColors.DbStackCard.textHint,
     ) { page ->

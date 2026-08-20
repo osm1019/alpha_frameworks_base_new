@@ -4,6 +4,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.UserHandle
 import android.provider.Settings.Global
+import android.provider.Settings.Secure
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.axdynamicbar.shared.EVENT_TYPE_IDS
 import com.android.systemui.dagger.SysUISingleton
@@ -90,6 +91,15 @@ class AxDynamicBarSettings @Inject constructor(
     private val _disabledEventTypes = MutableStateFlow<Set<String>>(emptySet())
     val disabledEventTypes: StateFlow<Set<String>> = _disabledEventTypes.asStateFlow()
 
+    /**
+     * Settings' "Pin media player" (`Settings.Secure.MEDIA_CONTROLS_RESUME`).
+     *
+     * Read here for what the name says rather than what AOSP uses it for: a pinned card is one
+     * the user has asked to keep, so the stack card refuses swipe-to-dismiss while it is on.
+     */
+    private val _isMediaPinned = MutableStateFlow(true)
+    val isMediaPinned: StateFlow<Boolean> = _isMediaPinned.asStateFlow()
+
     init {
         refresh()
     }
@@ -158,6 +168,12 @@ class AxDynamicBarSettings @Inject constructor(
             false,
             settingsObserver,
         )
+        secureSettings.registerContentObserverForUserSync(
+            Secure.MEDIA_CONTROLS_RESUME,
+            false,
+            settingsObserver,
+            UserHandle.USER_ALL,
+        )
     }
 
     fun destroy() {
@@ -195,6 +211,12 @@ class AxDynamicBarSettings @Inject constructor(
             systemSettings.getIntForUser(KEY_RING_STROKE_DP10, DEF_RING_STROKE_DP10, UserHandle.USER_CURRENT) / 10f
         _isHeadsUpEnabled.value =
             globalSettings.getInt(Global.HEADS_UP_NOTIFICATIONS_ENABLED, 1) == 1
+        _isMediaPinned.value =
+            secureSettings.getIntForUser(
+                Secure.MEDIA_CONTROLS_RESUME,
+                1,
+                UserHandle.USER_CURRENT,
+            ) == 1
 
         val json = secureSettings.getStringForUser(KEY_EVENTS, UserHandle.USER_CURRENT) ?: ""
         _disabledEventTypes.value =

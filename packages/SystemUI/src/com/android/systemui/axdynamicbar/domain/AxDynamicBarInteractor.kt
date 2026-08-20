@@ -5,10 +5,8 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.net.Uri
 import android.os.UserHandle
-import android.provider.Settings.Global
 import com.android.internal.logging.InstanceId
 import com.android.systemui.axdynamicbar.data.IslandEventRepository
 import com.android.systemui.axdynamicbar.model.CutoutPlacementHint
@@ -30,10 +28,9 @@ import com.android.systemui.statusbar.KeyguardIndicationController
 import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.statusbar.chips.screenrecord.domain.interactor.ScreenRecordChipInteractor
 import com.android.systemui.statusbar.data.repository.StatusBarModeRepositoryStore
+import com.android.systemui.statusbar.notification.collection.NotificationEntry
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.KeyguardStateController
-import com.android.systemui.statusbar.policy.ZenModeController
-import com.android.systemui.util.settings.GlobalSettings
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -76,9 +73,6 @@ constructor(
     private val indicationController: KeyguardIndicationController,
     private val shadeInteractor: ShadeInteractor,
     private val shadeRepository: ShadeRepository,
-    private val zenModeController: ZenModeController,
-    private val globalSettings: GlobalSettings,
-    private val audioManager: AudioManager,
     private val screenRecordChipInteractor: ScreenRecordChipInteractor,
     private val configurationController: ConfigurationController,
     private val statusBarModeRepository: StatusBarModeRepositoryStore,
@@ -100,6 +94,12 @@ constructor(
 
     /** Keys of progress notifications already announced as an alert card, cleared on removal. */
     private val alertedProgressKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * SBN keys the heads-up pipeline already decided should interrupt, and handed to the island
+     * instead of binding an AOSP peek. Cleared on show, dismiss, or removal.
+     */
+    private val pendingRedirectKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     override var onFocusableRequested: ((Boolean) -> Unit)? = null
 
@@ -145,12 +145,40 @@ constructor(
 
     /**
      * True if a heads-up for this status bar notification key would duplicate what is already shown
-     * in the Dynamic Bar (pinned chip or notification alert).
+     * in the Dynamic Bar (pinned chip or notification alert). Used for *updates* after the island
+     * is already showing that SBN. First posts are redirected in HeadsUpCoordinator after AOSP
+     * decides the peek — see [shouldRedirectPeekToDynamicBar].
      */
     fun shouldSuppressHeadsUpForMirroredNotification(sbnKey: String): Boolean {
         if (!settings.isEnabled.value) return false
         return sbnKey in _uiState.value.mirroredStatusBarNotificationKeys()
     }
+
+    /**
+     * After AOSP has decided this entry should peek, steal the banner if Dynamic Bar notification
+     * events are on and the island can actually draw the card. Do not steal on keyguard / doze /
+     * open shade — those would drop the interrupt.
+     */
+    fun shouldRedirectPeekToDynamicBar(entry: NotificationEntry): Boolean {
+        if (!settings.isNotificationEventsActive()) return false
+        if (!canRenderNotificationAlert()) return false
+        return repository.notification.wouldConsumeAsNotificationAlert(entry.sbn)
+    }
+
+    /**
+     * Pipeline has suppressed the AOSP peek for [entry] and spent the interrupt. Build and show
+     * the island card from the SBN itself so island-side dedup cannot drop it.
+     */
+    fun onPeekRedirected(entry: NotificationEntry) {
+        val key = entry.sbn.key
+        pendingRedirectKeys.add(key)
+        val event = repository.notification.buildNotificationAlert(entry.sbn) ?: return
+        repository.notification.coalesceNotification(event)
+        showNotificationAlert(event)
+    }
+
+    private fun canRenderNotificationAlert(): Boolean =
+        !panelBlocking && !statusBlocking && !_isOnKeyguard.value
 
     val suppressedSlots: Flow<Set<String>> = combine(settings.isEnabled, _uiState, _isPanelExpanded) { isEnabled, state, isPanelExpanded ->
         if (!isEnabled || (!state.shouldShow && !isPanelExpanded)) {
@@ -320,13 +348,20 @@ constructor(
         applicationScope.launch {
             repository.notification.notificationFlow.collect { notification ->
                 repository.notification.coalesceNotification(notification)
-                showNotificationAlert(notification)
+                val key = notification.sbn.key
+                if (
+                    key in pendingRedirectKeys ||
+                        _uiState.value.notificationAlert?.sbn?.key == key
+                ) {
+                    showNotificationAlert(notification)
+                }
             }
         }
 
         applicationScope.launch {
             repository.notification.notificationRemovedFlow.collect { key ->
                 alertedProgressKeys.remove(key)
+                pendingRedirectKeys.remove(key)
                 val alert = _uiState.value.notificationAlert ?: return@collect
                 if (alert.sbn.key == key) dismissNotificationAlert()
             }
@@ -419,20 +454,28 @@ constructor(
                     autoDismissJobs.clear()
                     dismissedEventIds.clear()
                     alertedProgressKeys.clear()
+                    pendingRedirectKeys.clear()
                     repository.clearAllIndicationEvents()
                 }
             }
         }
 
         applicationScope.launch {
-            settings.disabledEventTypes.collect {
+            settings.disabledEventTypes.collect { disabled ->
                 repository.refreshListeners()
+                if ("notification" in disabled) {
+                    pendingRedirectKeys.clear()
+                    dismissNotificationAlert()
+                }
             }
         }
 
         applicationScope.launch {
             settings.isHeadsUpEnabled.collect { enabled ->
-                if (!enabled) dismissNotificationAlert()
+                if (!enabled) {
+                    pendingRedirectKeys.clear()
+                    dismissNotificationAlert()
+                }
             }
         }
 
@@ -667,39 +710,36 @@ constructor(
         notifAlertJob?.cancel()
         notifAlertJob = null
         val current = _uiState.value
+        current.notificationAlert?.sbn?.key?.let { pendingRedirectKeys.remove(it) }
         if (current.notificationAlert != null) {
             _uiState.value = current.copy(notificationAlert = null)
         }
     }
 
-    private fun shouldSuppressForDndOrRinger(notification: IslandEvent.Notification): Boolean {
-        if (notification.isActiveCall()) return false
-        if (!settings.isHeadsUpEnabled.value) return true
-        val category = notification.sbn.notification?.category
-        if (category == Notification.CATEGORY_CALL || category == Notification.CATEGORY_ALARM) return false
-        val zenMode = zenModeController.zen
-        if (zenMode == Global.ZEN_MODE_NO_INTERRUPTIONS ||
-            zenMode == Global.ZEN_MODE_ALARMS) return true
-        val ringerMode = audioManager.ringerMode
-        return ringerMode == AudioManager.RINGER_MODE_SILENT
-    }
-
     private fun showNotificationAlert(
         notification: IslandEvent.Notification,
     ) {
-        if (panelBlocking || statusBlocking || _isOnKeyguard.value) return
-        if (shouldSuppressForDndOrRinger(notification)) return
+        val key = notification.sbn.key
+        // The pipeline already spent the peek on this key. Do not refuse it: island dedup,
+        // an active call card, a prior progress announce, or a shade opening between steal
+        // and show would otherwise drop the interrupt entirely.
+        val committed = pendingRedirectKeys.remove(key)
+        if (!committed && !canRenderNotificationAlert()) return
         val current = _uiState.value
         val existingAlert = current.notificationAlert
-        if (existingAlert != null &&
-            existingAlert.isActiveCall() &&
-            !notification.isActiveCall()
-        ) return
+        if (
+            !committed &&
+                existingAlert != null &&
+                existingAlert.isActiveCall() &&
+                !notification.isActiveCall()
+        ) {
+            return
+        }
 
         val hasProgress = notification.progress >= 0 || notification.isProgressIndeterminate
-        val isSameKey = existingAlert != null && existingAlert.sbn.key == notification.sbn.key
+        val isSameKey = existingAlert != null && existingAlert.sbn.key == key
 
-        if (isSameKey && hasProgress) {
+        if (!committed && isSameKey && hasProgress) {
             // Refresh the card's contents as the transfer advances, but leave the running
             // dismissal timer alone so a steady stream of progress updates can't pin the card.
             _uiState.value = current.copy(notificationAlert = notification)
@@ -708,7 +748,8 @@ constructor(
 
         // A transfer is announced once. Later updates arriving after the card has been dismissed
         // must not pop it back up — the progress keeps showing on the chip.
-        if (hasProgress && !alertedProgressKeys.add(notification.sbn.key)) return
+        if (!committed && hasProgress && !alertedProgressKeys.add(key)) return
+        if (committed && hasProgress) alertedProgressKeys.add(key)
 
         notifAlertJob?.cancel()
         _uiState.value = current.copy(notificationAlert = notification)
