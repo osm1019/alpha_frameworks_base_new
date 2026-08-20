@@ -160,8 +160,13 @@ constructor(
         // opened for ends, so the next charging session — or the next event — would find the
         // intent still set and reopen a card the user never asked for.
         hasChargingSession.onEach { if (!it) _batteryIntent.value = false }.launchIn(applicationScope)
-        hasChip.onEach { if (!it) _intent.value = false }.launchIn(applicationScope)
 
+        // The event card's equivalent keys off the held event, never [hasChip]. hasChip folds in
+        // `uiState.shouldShow`, which `updateChipVisibility()` drops to HIDDEN from `panelBlocking`
+        // — the same `expansion > 0` that [canShowCard] no longer reads, so clearing the intent
+        // here collapsed the card on the first pixel of a QS pull and left a cancelled pull with
+        // nothing to give back. An emptied stack still clears it: a held id cannot outlive its
+        // event.
         combine(_heldEventId, interactor.uiState) { id, ui ->
                 id != null && ui.events.none { it.id == id }
             }
