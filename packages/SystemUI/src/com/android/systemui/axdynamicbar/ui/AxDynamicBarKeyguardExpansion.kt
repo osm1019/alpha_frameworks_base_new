@@ -55,28 +55,15 @@ constructor(
         chargingEventSource.chargingEvent.map { it != null }.distinctUntilChanged()
 
     /**
-     * Context gate shared by both cards: on the keyguard, awake, with nothing else expanded over
-     * it. Deliberately excludes [hasChip] — the battery card's occupant is a lane member, not a
-     * stack event, so it can legitimately be the only thing on the lockscreen.
+     * Whether the card may be *drawn*: on the keyguard and not on AOD.
      *
-     * Every input is a committed state, never a gesture fraction. Closing the card unmounts it,
-     * which drops the held event and leaves the keyguard section's host view in card layout params
-     * — so a gate that trips on drag progress destroys state a cancelled gesture then cannot give
-     * back. The card is a child of the keyguard root, and `KeyguardRootViewBinder` fades that whole
-     * view through the transition, so it already animates with the drag without being unmounted;
-     * see `LockscreenToPrimaryBouncerTransitionViewModel`, which does the same for the shortcuts
-     * either side of the lane. Teardown belongs to [isOnKeyguard] flipping once the swipe commits.
+     * QS, QQS and the bouncer are other windows. They must not live here. `isPanelExpanded` is
+     * `expansion > 0` from the first pixel of a shade/QS drag (`onShadeOrQsExpanded`), which is
+     * why the two-phase pull unmounted the card while the keyguard was still on screen.
+     * [hasChip] is excluded — the battery occupant is a lane member, not a stack event.
      */
     private val canShowCard: StateFlow<Boolean> =
-        combine(
-                interactor.isOnKeyguard,
-                interactor.isDozing,
-                interactor.dozeAmount.map { it > 0f }.distinctUntilChanged(),
-                interactor.isPanelExpanded,
-                interactor.isBouncerShowing,
-            ) { onKg, dozing, dozeAmt, panelExp, bouncer ->
-                onKg && !dozing && !dozeAmt && !panelExp && !bouncer
-            }
+        combine(interactor.isOnKeyguard, interactor.isDozing) { onKg, dozing -> onKg && !dozing }
             .distinctUntilChanged()
             .stateIn(applicationScope, SharingStarted.Eagerly, false)
 
@@ -109,16 +96,24 @@ constructor(
             .stateIn(applicationScope, SharingStarted.Lazily, false)
 
     /**
-     * Either card is up.
+     * The user asked for a card. Independent of overlays and of AOD: QS/QQS/bouncer must not
+     * clear this, and hiding the card on doze must not either.
      *
-     * What the keyguard section acts on: swapping the host view to expanded layout params and
-     * hiding the notification stack / masking the clock are properties of *a card being open*,
-     * not of which one. Keep [isExpanded] for anything that renders the event card itself.
+     * The keyguard section's layout params and the lane's visibility follow this, not
+     * [isExpanded]. Drawing can stop (doze) while occupancy stays, so a wake still has a card
+     * and the lane cannot spawn inside the card box.
      */
-    val isAnyExpanded: StateFlow<Boolean> =
-        combine(isExpanded, isBatteryExpanded) { event, battery -> event || battery }
+    val isOccupied: StateFlow<Boolean> =
+        combine(_intent, _batteryIntent, interactor.isOnKeyguard) { event, battery, onKg ->
+                onKg && (event || battery)
+            }
             .distinctUntilChanged()
-            .stateIn(applicationScope, SharingStarted.Lazily, false)
+            .stateIn(applicationScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Either card is *occupied* — layout and lane. Keep [isExpanded] for the event card body.
+     */
+    val isAnyExpanded: StateFlow<Boolean> = isOccupied
 
     private val _collapseSettled = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val collapseSettled: SharedFlow<Unit> = _collapseSettled.asSharedFlow()
@@ -144,6 +139,7 @@ constructor(
             .stateIn(applicationScope, SharingStarted.Eagerly, null)
 
     fun notifyCollapseSettled() {
+        if (_intent.value || _batteryIntent.value) return
         releaseLanePin()
         clearHold()
         _collapseSettled.tryEmit(Unit)

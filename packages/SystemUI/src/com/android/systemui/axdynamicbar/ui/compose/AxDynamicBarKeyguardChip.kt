@@ -152,6 +152,7 @@ fun AxDynamicBarKeyguardChip(
     val isKeyguardEnabled by viewModel.isKeyguardEnabled.collectAsStateWithLifecycle()
     val isKeyguardExpanded by viewModel.isKeyguardExpanded.collectAsStateWithLifecycle()
     val isEventExpanded by viewModel.isEventExpanded.collectAsStateWithLifecycle()
+    val isOccupied by viewModel.keyguardExpansion.isOccupied.collectAsStateWithLifecycle()
     val heldEvent by viewModel.keyguardExpansion.heldEvent.collectAsStateWithLifecycle()
     val lockscreenMediaStyle by viewModel.lockscreenMediaStyle.collectAsStateWithLifecycle()
     val batteryString by viewModel.batteryString.collectAsStateWithLifecycle()
@@ -167,8 +168,8 @@ fun AxDynamicBarKeyguardChip(
 
         val expandedVisibleState = remember { MutableTransitionState(false) }
         expandedVisibleState.targetState = isEventExpanded && heldEvent != null
-        LaunchedEffect(expandedVisibleState.isIdle, expandedVisibleState.currentState) {
-            if (expandedVisibleState.isIdle && !expandedVisibleState.currentState) {
+        LaunchedEffect(expandedVisibleState.isIdle, expandedVisibleState.currentState, isOccupied) {
+            if (expandedVisibleState.isIdle && !expandedVisibleState.currentState && !isOccupied) {
                 viewModel.keyguardExpansion.notifyCollapseSettled()
             }
         }
@@ -194,8 +195,8 @@ fun AxDynamicBarKeyguardChip(
 
         val batteryVisibleState = remember { MutableTransitionState(false) }
         batteryVisibleState.targetState = isBatteryExpanded && chargingEvent != null
-        LaunchedEffect(batteryVisibleState.isIdle, batteryVisibleState.currentState) {
-            if (batteryVisibleState.isIdle && !batteryVisibleState.currentState) {
+        LaunchedEffect(batteryVisibleState.isIdle, batteryVisibleState.currentState, isOccupied) {
+            if (batteryVisibleState.isIdle && !batteryVisibleState.currentState && !isOccupied) {
                 viewModel.keyguardExpansion.notifyCollapseSettled()
             }
         }
