@@ -295,7 +295,10 @@ constructor(
         ensureMainThread { hideOverlayInternal() }
     }
 
+    private var overlayWantsIme = false
+
     private fun hideOverlayInternal() {
+        overlayWantsIme = false
         shrinkRunnable?.let { mainHandler.removeCallbacks(it) }
         shrinkRunnable = null
         overlayView?.let { view ->
@@ -346,19 +349,29 @@ constructor(
             (CUTOUT_WM_HORIZONTAL_GUARD_DP * density).roundToInt().coerceAtLeast(40)
 
         if (expanded || hasAlert) {
-            params.flags = if (expanded) {
-                params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv() or
-                    WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-            } else {
-                // Notification alert: keep NOT_FOCUSABLE so we don't steal focus from the app
-                // (which would dismiss the keyboard and block IME re-appearance).
-                params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            }
+            // Alert stays not-focusable until inline reply asks for IME. Geometry updates
+            // must not put FLAG_NOT_FOCUSABLE back while that request is live — that is
+            // what made reply look frozen (field on screen, window cannot take the keyboard).
+            val wantsFocus = expanded || overlayWantsIme
+            params.flags =
+                if (wantsFocus) {
+                    params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                } else {
+                    params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                }
             if (expanded) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
                 params.setBlurBehindRadius(20)
             } else {
                 params.setBlurBehindRadius(0)
             }
+            params.softInputMode =
+                if (overlayWantsIme) {
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN or
+                        WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+                } else {
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
+                }
             params.width = WindowManager.LayoutParams.MATCH_PARENT
             params.height = if (expanded) WindowManager.LayoutParams.MATCH_PARENT
                             else WindowManager.LayoutParams.WRAP_CONTENT
@@ -438,14 +451,13 @@ constructor(
     }
 
     private fun setOverlayFocusable(focusable: Boolean) = ensureMainThread {
-        val view = overlayView ?: return@ensureMainThread
-        val params = view.layoutParams as? WindowManager.LayoutParams ?: return@ensureMainThread
-        if (focusable) {
-            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-        } else {
-            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-        }
-        windowManager.updateViewLayout(view, params)
+        overlayWantsIme = focusable
+        updateOverlayWindow(
+            expanded = viewModel.isExpanded.value,
+            hasAlert = viewModel.interactor.uiState.value.notificationAlert != null,
+            cutoutRect = viewModel.interactor.cutoutRectPx.value,
+            hint = viewModel.cutoutPlacementHint.value,
+        )
     }
 }
 
