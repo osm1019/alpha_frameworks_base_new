@@ -117,8 +117,12 @@ class PeekDisabledSuppressor(
 }
 
 /**
- * Suppresses heads-up "peek" only when this notification is already mirrored in Dynamic Bar
+ * Suppresses heads-up "peek" when this notification is already mirrored in Dynamic Bar
  * (same [android.service.notification.StatusBarNotification] key as the pinned chip / alert).
+ *
+ * First posts of generic alerts are not covered here — [HeadsUpCoordinator] redirects those
+ * after AOSP has already decided the entry should interrupt. This filter only blocks a second
+ * peek for a key the island is already showing (promoted / sports / live alert).
  */
 class PeekMirroredInDynamicBarSuppressor(
     private val interactor: AxDynamicBarInteractor,

@@ -57,6 +57,7 @@ import com.android.systemui.statusbar.notification.interruption.NotificationInte
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderWrapper.DecisionImpl
 import com.android.systemui.statusbar.notification.interruption.NotificationInterruptStateProviderWrapper.FullScreenIntentDecisionImpl
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionDecisionLogger
+import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
 import com.android.systemui.statusbar.notification.interruption.VisualInterruptionDecisionProvider
 import com.android.systemui.statusbar.notification.promoted.PromotedNotificationUi
 import com.android.systemui.statusbar.notification.row.mockNotificationActionClickManager
@@ -125,6 +126,8 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
     private val launchFullScreenIntentProvider: LaunchFullScreenIntentProvider =
         mock(LaunchFullScreenIntentProvider::class.java)
     private val flags: NotifPipelineFlags = mock(NotifPipelineFlags::class.java)
+    private val axDynamicBarInteractor: AxDynamicBarInteractor =
+        mock(AxDynamicBarInteractor::class.java)
 
     private lateinit var entry: NotificationEntry
     private lateinit var groupSummary: NotificationEntry
@@ -157,6 +160,7 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
                 flags,
                 statusBarNotificationChipsInteractor,
                 kosmos.statusBarChipsUiEventLogger,
+                axDynamicBarInteractor,
                 headerController,
                 executor,
             )
@@ -377,6 +381,32 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
 
         // THEN only promote mEntry
         assertTrue(notifPromoter.shouldPromoteToTopLevel(entry))
+    }
+
+    @Test
+    fun testRedirectsPeekToDynamicBar_skipsAospHeadsUp() {
+        setShouldHeadsUp(entry, true)
+        whenever(axDynamicBarInteractor.shouldRedirectPeekToDynamicBar(entry)).thenReturn(true)
+
+        collectionListener.onEntryAdded(entry)
+        beforeTransformGroupsListener.onBeforeTransformGroups(listOf(entry))
+        beforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(entry))
+
+        verify(headsUpViewBinder, never()).bindHeadsUpView(eq(entry), any(), any())
+        verify(axDynamicBarInteractor).onPeekRedirected(entry)
+    }
+
+    @Test
+    fun testDoesNotRedirectPeekWhenDynamicBarDeclines() {
+        setShouldHeadsUp(entry, true)
+        whenever(axDynamicBarInteractor.shouldRedirectPeekToDynamicBar(entry)).thenReturn(false)
+
+        collectionListener.onEntryAdded(entry)
+        beforeTransformGroupsListener.onBeforeTransformGroups(listOf(entry))
+        beforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(entry))
+
+        verify(headsUpViewBinder).bindHeadsUpView(eq(entry), eq(false), any())
+        verify(axDynamicBarInteractor, never()).onPeekRedirected(any())
     }
 
     @Test
@@ -644,6 +674,25 @@ class HeadsUpCoordinatorTest : SysuiTestCase() {
 
         // In addition make sure we have explicitly marked the summary as having interrupted due
         // to the alert being transferred
+        assertTrue(groupSummary.hasInterrupted())
+    }
+
+    @Test
+    fun testTransferChildRedirectedToDynamicBar_skipsAospHeadsUp() {
+        setShouldHeadsUp(groupSummary)
+        whenever(notifPipeline.allNotifs).thenReturn(listOf(groupSummary, groupSibling1))
+        whenever(axDynamicBarInteractor.shouldRedirectPeekToDynamicBar(groupSibling1))
+            .thenReturn(true)
+
+        collectionListener.onEntryAdded(groupSummary)
+        collectionListener.onEntryAdded(groupSibling1)
+        beforeTransformGroupsListener.onBeforeTransformGroups(listOf(groupSibling1))
+        beforeFinalizeFilterListener.onBeforeFinalizeFilter(listOf(groupSibling1))
+
+        verify(headsUpViewBinder, never()).bindHeadsUpView(any(), any(), any())
+        verify(headsUpManager, never()).showNotification(groupSummary)
+        verify(headsUpManager, never()).showNotification(groupSibling1)
+        verify(axDynamicBarInteractor).onPeekRedirected(groupSibling1)
         assertTrue(groupSummary.hasInterrupted())
     }
 

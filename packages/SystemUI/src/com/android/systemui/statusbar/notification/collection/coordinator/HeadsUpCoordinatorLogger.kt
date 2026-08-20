@@ -30,6 +30,15 @@ class HeadsUpCoordinatorLogger(private val buffer: LogBuffer, private val verbos
         @NotificationHeadsUpLog buffer: LogBuffer
     ) : this(buffer, Log.isLoggable(TAG, Log.VERBOSE))
 
+    fun logPeekRedirectedToDynamicBar(key: String) {
+        buffer.log(
+            TAG,
+            LogLevel.INFO,
+            { str1 = key },
+            { "redirected peek to Dynamic Bar: $str1" },
+        )
+    }
+
     fun logPostedEntryWillEvaluate(posted: HeadsUpCoordinator.PostedEntry, reason: String) {
         if (!verbose) return
         buffer.log(

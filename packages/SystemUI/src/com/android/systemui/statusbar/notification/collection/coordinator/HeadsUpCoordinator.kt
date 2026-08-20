@@ -22,6 +22,7 @@ import android.util.ArrayMap
 import android.util.ArraySet
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Flags.notificationSkipSilentUpdates
+import com.android.systemui.axdynamicbar.domain.AxDynamicBarInteractor
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.statusbar.NotificationRemoteInputManager
@@ -98,6 +99,7 @@ constructor(
     private val mFlags: NotifPipelineFlags,
     private val statusBarNotificationChipsInteractor: StatusBarNotificationChipsInteractor,
     private val statusBarChipsUiEventLogger: StatusBarChipsUiEventLogger,
+    private val axDynamicBarInteractor: AxDynamicBarInteractor,
     @IncomingHeader private val mIncomingHeaderController: NodeController,
     @Main private val mExecutor: DelayableExecutor,
 ) : Coordinator {
@@ -487,6 +489,15 @@ constructor(
     }
 
     private fun handlePostedEntry(posted: PostedEntry, hunMutator: HunMutator, scenario: String) {
+        if (
+            posted.shouldHeadsUpEver &&
+                axDynamicBarInteractor.shouldRedirectPeekToDynamicBar(posted.entry)
+        ) {
+            mLogger.logPeekRedirectedToDynamicBar(posted.key)
+            posted.shouldHeadsUpEver = false
+            axDynamicBarInteractor.onPeekRedirected(posted.entry)
+        }
+
         mLogger.logPostedEntryWillEvaluate(posted, scenario)
 
         if (posted.wasAdded) {
