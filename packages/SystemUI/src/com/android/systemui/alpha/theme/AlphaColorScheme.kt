@@ -686,9 +686,18 @@ object AlphaColors {
         val progressTrail: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
         val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
 
-        val actionButton: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
-        val actionButtonText: Color
-            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimary
+        /**
+         * Controls on a card that is itself glass over wallpaper.
+         *
+         * A filled `primary` lands as an opaque brick on the pane — the button stops belonging to
+         * the card and starts sitting on top of it. A scrim of the card's own text colour lets the
+         * material through instead, so the control reads as cut from the card. Day takes less than
+         * night: a dark scrim on a pale pane bites harder than a light one on a dark pane.
+         */
+        val actionButton: Color
+            @Composable @ReadOnlyComposable
+            get() = onSurface.copy(alpha = if (isDarkTheme) 0.12f else 0.08f)
+        val actionButtonText: Color @Composable @ReadOnlyComposable get() = text
         val destructiveButton: Color
             @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.errorContainer
         val destructiveButtonText: Color
