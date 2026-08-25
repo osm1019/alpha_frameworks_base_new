@@ -20079,6 +20079,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                     // Exclusions
                     if (proc.isPersistent()) return;
+                    // Only activity-less processes survive the filter below, which is where
+                    // platform components sit; this reclaim is aimed at user apps.
+                    if (UserHandle.getAppId(proc.uid) < Process.FIRST_APPLICATION_UID) return;
                     if (proc.userId != currentUser) return;
                     if (state <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) return;
                     if (state == ActivityManager.PROCESS_STATE_HOME) return;
