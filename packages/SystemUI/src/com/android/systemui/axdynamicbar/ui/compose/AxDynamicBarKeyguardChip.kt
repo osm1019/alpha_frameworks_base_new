@@ -837,7 +837,11 @@ private fun RowScope.KeyguardMediaChipContent(
     )
     Spacer(Modifier.width(SpaceXxs))
     Surface(
-        onClick = { viewModel.togglePlayPause() },
+        // Gated like every other tap here. This one is hand-rolled rather than an ActionButton
+        // because it needs its own fill and border, and it lost the gate that ActionButton
+        // applies internally. An ungated tap is booked false at 0.8, and two of those refuse
+        // the next tap on this surface — which is the tap that opens the card.
+        onClick = gatedTap { viewModel.togglePlayPause() },
         modifier = Modifier.size(MediaActionSize),
         shape = CircleShape,
         color = playBg,
