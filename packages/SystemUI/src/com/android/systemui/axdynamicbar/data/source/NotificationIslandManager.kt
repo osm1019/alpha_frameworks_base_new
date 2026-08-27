@@ -1268,12 +1268,33 @@ constructor(
                 .trim()
         }
 
-        val allText = "$title · $text"
-        val league = allText.split("·", "•", "|")
+        // Google's recap carries no shortCriticalText but does date the match — the trailing
+        // "· Thu, Aug 27". That date is the only context a finished game has left, and it belongs
+        // in the slot a running game fills with its clock. The two cannot contend: a live game
+        // ships shortCriticalText, which is read first and wins. A segment naming either team is
+        // the scoreline, not a detail.
+        if (statusDetail.isEmpty()) {
+            statusDetail = text.split("·", "•", "|")
+                .map { it.trim() }
+                .firstOrNull { part ->
+                    part.length in 3..24 &&
+                        part.any { it.isDigit() } &&
+                        (team1Name.isBlank() ||
+                            !part.contains(team1Name, ignoreCase = true)) &&
+                        (team2Name.isBlank() ||
+                            !part.contains(team2Name, ignoreCase = true))
+                } ?: ""
+        }
+
+        // The competition, when the notification names one. Only [text] is mined: Google puts prose
+        // in the title of a sports notification — "Watch match recap" — and the title is the first
+        // segment, so including it meant the header of every Google scoreboard announced a league
+        // that does not exist. A segment carrying a digit is a scoreline or a date, not a league.
+        val league = text.split("·", "•", "|")
             .map { it.trim() }
             .firstOrNull { part ->
                 part.length in 2..30 &&
-                    !part.any { it.isDigit() } &&
+                    part.none { it.isDigit() } &&
                     part != team1Name && part != team2Name
             } ?: ""
 

@@ -5,6 +5,8 @@ import android.media.AudioManager
 import android.os.SystemClock
 import androidx.compose.ui.platform.LocalContext
 import java.text.NumberFormat
+import androidx.compose.ui.text.TextStyle
+import com.android.axion.quicklook.SportsShape
 import com.android.internal.R as InternalR
 import com.android.systemui.common.shared.model.Icon as SysUISharedIcon
 import com.android.systemui.common.ui.compose.Icon as SysUIIcon
@@ -300,7 +302,7 @@ private fun BlinkingDotIcon(color: Color, isAnimating: Boolean = true) {
 
 
 @Composable
-private fun AnimatedTrophyIcon(color: Color) {
+internal fun AnimatedTrophyIcon(color: Color) {
     val transition = rememberInfiniteTransition(label = "trophy")
     val shimmer by transition.animateFloat(
         initialValue = 0.6f,
@@ -861,27 +863,44 @@ private fun SportsPillIcon(event: IslandEvent.Sports) {
 @Composable
 private fun SportsText(event: IslandEvent.Sports, modifier: Modifier, overrideColor: Color? = null) {
     val color = overrideColor ?: accentColorFor(event)
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (event.team2Name.isNotEmpty()) {
-            SportsTeamLabel(event.team1Name, event.team1Icon, color)
+
+    // The pill asks the same question as the chip and the expanded card, so all three
+    // agree about what a scoreboard is. Anything else — live-stats snapshots, matchup
+    // previews, third-party notification titles — takes the single-line path rather than
+    // showing "54 min, 2 sh…" against "See more st…".
+    val t1 = event.team1Name
+    val t2 = event.team2Name
+    val s1 = event.score1
+    val s2 = event.score2
+    val t1Clean = SportsShape.isLikelyTeamName(t1)
+    val t2Clean = SportsShape.isLikelyTeamName(t2)
+
+    if (SportsShape.isScoreboard(t1, t2, s1, s2)) {
+        // Badge · score · badge. Every part is bounded, so nothing here can overflow.
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            SportsTeamLabel(t1, event.team1Icon, color)
             Spacer(Modifier.width(SpaceXs))
             Text(
-                if (event.score1.isNotEmpty()) "${event.score1} - ${event.score2}"
+                if (s1.isNotEmpty() && s2.isNotEmpty()) "$s1 - $s2"
                 else stringResource(R.string.ax_dynamic_bar_sports_vs),
                 color = color,
                 style = PillAccent,
                 maxLines = 1,
             )
             Spacer(Modifier.width(SpaceXs))
-            SportsTeamLabel(event.team2Name, event.team2Icon, color)
-        } else {
-            val fallback = when {
-                event.team1Name.isNotEmpty() -> event.team1Name
-                event.score1.isNotEmpty() -> "${event.score1}-${event.score2}"
-                else -> stringResource(R.string.ax_dynamic_bar_sports_live_event)
-            }
-            Text(fallback, color = color, style = PillAccent, maxLines = 1)
+            SportsTeamLabel(t2, event.team2Icon, color)
         }
+    } else {
+        // Prose, and prose does not fit a pill. It scrolls, like every other event's text —
+        // truncating with take() only guaranteed a stump of a sentence that never resolved.
+        val fallback = when {
+            t1Clean && t2Clean -> "$t1 vs $t2"
+            event.statusDetail.isNotBlank() -> event.statusDetail
+            t1Clean -> t1
+            event.league.isNotBlank() -> event.league
+            else -> stringResource(R.string.ax_dynamic_bar_sports_live_event)
+        }
+        MarqueeLabel(fallback, color, modifier, PillAccent)
     }
 }
 
@@ -1238,11 +1257,16 @@ private fun formatShortDelta(deltaMs: Long): String {
 }
 
 @Composable
-private fun MarqueeLabel(text: String, color: Color, modifier: Modifier = Modifier) {
+private fun MarqueeLabel(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    style: TextStyle = PillPrimary,
+) {
     Text(
         text,
         color = color,
-        style = PillPrimary,
+        style = style,
         maxLines = 1,
         overflow = TextOverflow.Clip,
         modifier = modifier.basicMarquee(iterations = 1),
