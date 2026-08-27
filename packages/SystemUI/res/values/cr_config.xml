@@ -47,6 +47,8 @@
     <integer name="config_chargingAnimFrameDurationMs">0</integer>
     <!-- Extra time to hold the last frame after the sheet finishes. -->
     <integer name="config_chargingAnimHoldMs">0</integer>
+    <!-- Use Oplus GLES charging ring (libnativeChargingRing) when the .so and textures are present. -->
+    <bool name="config_chargingAnimUseStockVfx">false</bool>
     <integer name="config_chargingAnimDimAlpha">120</integer>
     <integer name="config_chargingAnimLowBatteryThreshold">15</integer>
     <color name="config_chargingAnimPercentColor">#FFFFFFFF</color>

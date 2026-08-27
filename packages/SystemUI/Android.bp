@@ -1127,6 +1127,7 @@ android_app {
         "SystemUI-application",
     ],
     resource_dirs: [],
+    asset_dirs: ["assets"],
 
     use_resource_processor: true,
     platform_apis: true,

@@ -47,6 +47,18 @@
     low battery alert.  "percentage" is the percentage of battery remaining. "time" is the amount
      of time remaining before the phone runs out of battery [CHAR LIMIT=none]-->
 
+    <!-- ColorOS ChargeLevelAndLogoView tips_text: shown above the battery number
+         while DeviceSettings is capping SuperVOOC/VOOC current. Hidden at 100%
+         and on USB/AC. [CHAR LIMIT=40] -->
+    <string name="charging_vfx_long_press_to_speed">Touch and hold to boost speed</string>
+    <!-- DeviceSettings night-mode cap: replaces SUPERVOOC wordmark and watt pill. [CHAR LIMIT=20] -->
+    <string name="charging_vfx_night_mode">Night mode</string>
+    <!-- Bolt + source row when the adapter is not VOOC/SuperVOOC. [CHAR LIMIT=12] -->
+    <string name="charging_vfx_source_usb">USB</string>
+    <string name="charging_vfx_source_vooc">VOOC</string>
+    <string name="charging_vfx_source_wireless">Wireless</string>
+    <string name="charging_vfx_source_dock">Dock</string>
+
     <!-- Same as battery_low_percent_format, with a notice about battery saver if on. [CHAR LIMIT=none]-->
 
     <!-- A message that appears when a USB charger is plugged in and the device does not

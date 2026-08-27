@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 12R os15_charge_icon_super_vooc: 22x40dp bolt next to SUPERVOOC. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="40dp"
+    android:viewportWidth="22"
+    android:viewportHeight="40">
+    <path
+        android:fillColor="#ffffffff"
+        android:fillType="evenOdd"
+        android:pathData="M2.83 17.86L19.57 2.84c0.25-0.23 0.65 0.1 0.48 0.4l-5.83 10.35h5.93c0.26 0 0.42 0.3 0.26 0.5l-5.9 7.5h4.85c0.28 0 0.43 0.36 0.22 0.55L2.84 37.15c-0.25 0.23-0.65-0.1-0.48-0.4l5.96-10.58h-5.1c-0.25 0-0.41-0.3-0.26-0.5l5.45-7.27H3.05c-0.28 0-0.43-0.36-0.22-0.54Z" />
+</vector>

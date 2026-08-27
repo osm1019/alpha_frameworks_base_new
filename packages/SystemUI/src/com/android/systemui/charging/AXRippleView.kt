@@ -276,6 +276,22 @@ class AXRippleView @JvmOverloads constructor(
 
     fun rippleInProgress(): Boolean = animator.isRunning
 
+    fun cancelRipple() {
+        holdEndRunnable?.let { removeCallbacks(it) }
+        holdEndRunnable = null
+        if (animator.isRunning) {
+            animator.cancel()
+        } else {
+            releaseRes()
+        }
+        if (darkOverlayAnimator.isRunning) {
+            darkOverlayAnimator.cancel()
+        }
+        if (darkOverlayReverseAnimator.isRunning) {
+            darkOverlayReverseAnimator.cancel()
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val min = MathUtils.min(width, height).toFloat()
