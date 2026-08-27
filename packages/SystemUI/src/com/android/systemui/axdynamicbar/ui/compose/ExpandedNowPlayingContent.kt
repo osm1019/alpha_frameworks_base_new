@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
@@ -43,6 +42,7 @@ import com.android.systemui.axdynamicbar.shared.MintAccent
 import com.android.systemui.axdynamicbar.shared.OnActionText
 import com.android.systemui.axdynamicbar.shared.OnCardSecondary
 import com.android.systemui.axdynamicbar.shared.OnCardText
+import com.android.systemui.axdynamicbar.shared.ShapeXs
 import com.android.systemui.axdynamicbar.shared.SpaceLg
 import com.android.systemui.axdynamicbar.shared.sendWithBal
 import com.android.systemui.axdynamicbar.shared.toScaledBitmap
@@ -56,13 +56,19 @@ internal fun NowPlayingExpanded(event: IslandEvent.NowPlaying, interactor: Islan
         icon = { glyph ->
             event.albumArt?.let { art ->
                 Image(
-                    bitmap = art.toScaledBitmap(40.dp),
+                    bitmap = art.toScaledBitmap(44.dp),
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)),
+                    modifier = Modifier.size(44.dp).clip(ShapeXs),
                     contentScale = ContentScale.Crop,
                 )
-            } ?: Icon(Icons.Filled.MusicNote, null, tint = glyph, modifier = Modifier.size(30.dp))
+            } ?: Icon(
+                Icons.Filled.MusicNote,
+                null,
+                tint = glyph,
+                modifier = Modifier.size(30.dp),
+            )
         },
+        iconBackground = event.albumArt == null,
         title = {
             Text(
                 event.songTitle,

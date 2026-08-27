@@ -23,8 +23,10 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
@@ -85,7 +87,11 @@ internal fun eventStyleFor(event: IslandEvent): EventStyle = when (event) {
     )
     is IslandEvent.NowPlaying -> EventStyle(
         accent = MintAccent,
-        icon = Icons.Filled.MusicNote,
+        icon = when (event.status) {
+            IslandEvent.NowPlayingStatus.UNKNOWN -> Icons.Filled.Help
+            IslandEvent.NowPlayingStatus.FAILED -> Icons.Filled.Error
+            else -> Icons.Filled.MusicNote
+        },
         labelRes = R.string.ax_dynamic_bar_now_playing,
     )
     is IslandEvent.Sports -> EventStyle(

@@ -51,7 +51,13 @@ class QuickLookClient @Inject constructor(
         fun onClockDataChanged(data: ClockData) {}
         fun onQLPlaybackStateChanged(play: Boolean) {}
         fun onQLMetadataChanged(track: String, artist: String, packageName: String) {}
-        fun onNowPlayingUpdate(nowPlayingText: String, tapAction: PendingIntent?) {}
+        fun onNowPlayingUpdate(
+            nowPlayingText: String,
+            artist: String?,
+            tapAction: PendingIntent?,
+            albumArtUri: String? = null,
+            status: String? = null,
+        ) {}
         fun onSportsUpdate(sports: List<SportsData>) {}
     }
 
@@ -66,7 +72,10 @@ class QuickLookClient @Inject constructor(
     private var cachedArtist: String = ""
     private var cachedMediaPackage: String = ""
     private var cachedNowPlaying: String = ""
+    private var cachedNowPlayingArtist: String? = null
     private var cachedNowPlayingAction: PendingIntent? = null
+    private var cachedNowPlayingAlbumArtUri: String? = null
+    private var cachedNowPlayingStatus: String? = null
     private var cachedSports: List<SportsData> = emptyList()
 
     private val callbacks = WeakListenerManager<Callback>()
@@ -121,7 +130,13 @@ class QuickLookClient @Inject constructor(
             callback.onQLMetadataChanged(cachedTrack, cachedArtist, cachedMediaPackage)
         }
         if (cachedNowPlaying.isNotEmpty()) {
-            callback.onNowPlayingUpdate(cachedNowPlaying, cachedNowPlayingAction)
+            callback.onNowPlayingUpdate(
+                cachedNowPlaying,
+                cachedNowPlayingArtist,
+                cachedNowPlayingAction,
+                cachedNowPlayingAlbumArtUri,
+                cachedNowPlayingStatus,
+            )
         }
         if (cachedSports.isNotEmpty()) {
             callback.onSportsUpdate(cachedSports)
@@ -190,10 +205,26 @@ class QuickLookClient @Inject constructor(
                     hasNowPlaying = true
                     val np = target.nowPlayingData ?: continue
                     val npAction = target.primaryAction?.pendingIntent
-                    if (np.title != cachedNowPlaying || npAction != cachedNowPlayingAction) {
+                    if (np.title != cachedNowPlaying ||
+                        np.artist != cachedNowPlayingArtist ||
+                        npAction != cachedNowPlayingAction ||
+                        np.albumArtUri != cachedNowPlayingAlbumArtUri ||
+                        np.status != cachedNowPlayingStatus
+                    ) {
                         cachedNowPlaying = np.title
+                        cachedNowPlayingArtist = np.artist
                         cachedNowPlayingAction = npAction
-                        callbacks.notify { it.onNowPlayingUpdate(np.title, npAction) }
+                        cachedNowPlayingAlbumArtUri = np.albumArtUri
+                        cachedNowPlayingStatus = np.status
+                        callbacks.notify {
+                            it.onNowPlayingUpdate(
+                                np.title,
+                                np.artist,
+                                npAction,
+                                np.albumArtUri,
+                                np.status,
+                            )
+                        }
                     }
                 }
                 QuickLookTarget.TYPE_SPORTS -> {
@@ -267,8 +298,11 @@ class QuickLookClient @Inject constructor(
         }
         if (!hasNowPlaying && cachedNowPlaying.isNotEmpty()) {
             cachedNowPlaying = ""
+            cachedNowPlayingArtist = null
             cachedNowPlayingAction = null
-            callbacks.notify { it.onNowPlayingUpdate("", null) }
+            cachedNowPlayingAlbumArtUri = null
+            cachedNowPlayingStatus = null
+            callbacks.notify { it.onNowPlayingUpdate("", null, null, null, null) }
         }
     }
 

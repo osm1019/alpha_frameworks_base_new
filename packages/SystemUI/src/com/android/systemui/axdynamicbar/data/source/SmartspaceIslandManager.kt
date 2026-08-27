@@ -17,14 +17,22 @@
 package com.android.systemui.axdynamicbar.data.source
 
 import android.app.PendingIntent
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.util.Log
 import com.android.axion.quicklook.SportsData
 import com.android.systemui.axdynamicbar.model.IslandEvent
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.quicklook.QuickLookClient
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +42,8 @@ class SmartspaceIslandManager
 @Inject
 constructor(
     private val quickLookClient: QuickLookClient,
+    @Application private val context: Context,
+    @Application private val applicationScope: CoroutineScope,
 ) {
     private val _sportsEvents = MutableStateFlow<List<IslandEvent.Sports>>(emptyList())
     val sportsEvents: StateFlow<List<IslandEvent.Sports>> = _sportsEvents.asStateFlow()
@@ -42,6 +52,8 @@ constructor(
     val nowPlayingEvent: StateFlow<IslandEvent.NowPlaying?> = _nowPlayingEvent.asStateFlow()
 
     private var listening = false
+    private var artJob: Job? = null
+    private var artGeneration = 0
 
     private val callback = object : QuickLookClient.Callback {
         override fun onSportsUpdate(sports: List<SportsData>) {
@@ -62,34 +74,104 @@ constructor(
             }
         }
 
-        override fun onNowPlayingUpdate(text: String, tapAction: PendingIntent?) {
+        override fun onNowPlayingUpdate(
+            text: String,
+            artistName: String?,
+            tapAction: PendingIntent?,
+            albumArtUri: String?,
+            status: String?,
+        ) {
             if (text.isBlank()) {
+                artJob?.cancel()
+                artGeneration++
                 _nowPlayingEvent.value = null
                 return
             }
-            val byMatch = Regex("""(.+?)\s+by\s+(.+)""", RegexOption.IGNORE_CASE).find(text)
-            val dashParts = if (byMatch == null) text.split(" - ", " – ", limit = 2) else null
             val songTitle: String
             val artist: String
-            when {
-                byMatch != null -> {
-                    songTitle = byMatch.groupValues[1].trim()
-                    artist = byMatch.groupValues[2].trim()
-                }
-                dashParts != null && dashParts.size == 2 -> {
-                    songTitle = dashParts[0].trim()
-                    artist = dashParts[1].trim()
-                }
-                else -> {
-                    songTitle = text
-                    artist = ""
+            if (!artistName.isNullOrBlank()) {
+                songTitle = text
+                artist = artistName
+            } else {
+                val byMatch =
+                    Regex("""(.+?)\s+by\s+(.+)""", RegexOption.IGNORE_CASE).find(text)
+                val dashParts =
+                    if (byMatch == null) text.split(" - ", " – ", limit = 2) else null
+                val bulletIdx = text.indexOf(" • ")
+                when {
+                    byMatch != null -> {
+                        songTitle = byMatch.groupValues[1].trim()
+                        artist = byMatch.groupValues[2].trim()
+                    }
+                    dashParts != null && dashParts.size == 2 -> {
+                        songTitle = dashParts[0].trim()
+                        artist = dashParts[1].trim()
+                    }
+                    bulletIdx > 0 -> {
+                        songTitle = text.substring(0, bulletIdx).trim()
+                        artist = text.substring(bulletIdx + 3).trim()
+                    }
+                    else -> {
+                        songTitle = text
+                        artist = ""
+                    }
                 }
             }
+            val kind = parseNowPlayingStatus(status, songTitle)
+            val previous = _nowPlayingEvent.value
+            val sameSong = previous != null &&
+                previous.songTitle == songTitle &&
+                previous.artist == artist &&
+                kind == IslandEvent.NowPlayingStatus.MATCH
+            val keepArt =
+                if (kind == IslandEvent.NowPlayingStatus.MATCH && sameSong) previous?.albumArt
+                else null
             _nowPlayingEvent.value = IslandEvent.NowPlaying(
                 songTitle = songTitle,
                 artist = artist,
                 key = "ql_now_playing",
+                albumArt = keepArt,
+                status = kind,
             )
+            if (kind != IslandEvent.NowPlayingStatus.MATCH) {
+                artJob?.cancel()
+                return
+            }
+            // Same-song re-SHOW with no new URI: keep the cover already resolved.
+            if (keepArt != null && albumArtUri.isNullOrBlank()) {
+                Log.d(TAG, "art: keeping resolved cover for $songTitle")
+                return
+            }
+            val generation = ++artGeneration
+            artJob?.cancel()
+            artJob = applicationScope.launch {
+                val art = withContext(Dispatchers.IO) {
+                    NowPlayingAlbumArt.load(context, albumArtUri, songTitle, artist)
+                }
+                if (generation != artGeneration) {
+                    Log.d(TAG, "art: superseded for $songTitle ($generation/$artGeneration)")
+                    return@launch
+                }
+                val current = _nowPlayingEvent.value
+                if (current == null) {
+                    Log.d(TAG, "art: no event left for $songTitle")
+                    return@launch
+                }
+                if (current.songTitle != songTitle ||
+                    current.artist != artist ||
+                    current.status != IslandEvent.NowPlayingStatus.MATCH
+                ) {
+                    Log.d(TAG, "art: event moved on, dropping cover for $songTitle " +
+                            "(now '${current.songTitle}'/'${current.artist}' ${current.status})")
+                    return@launch
+                }
+                if (art == null) {
+                    Log.d(TAG, "art: no cover resolved for $songTitle")
+                    return@launch
+                }
+                Log.i(TAG, "art: applied cover for $songTitle")
+                _nowPlayingEvent.value = current.copy(albumArt = art)
+            }
         }
     }
 
@@ -102,6 +184,8 @@ constructor(
     fun stopListening() {
         if (!listening) return
         listening = false
+        artJob?.cancel()
+        artGeneration++
         quickLookClient.removeCallback(callback)
         _sportsEvents.value = emptyList()
         _nowPlayingEvent.value = null
@@ -125,6 +209,28 @@ constructor(
         }
     }
 
+    private fun parseNowPlayingStatus(
+        status: String?,
+        title: String,
+    ): IslandEvent.NowPlayingStatus {
+        return when (status?.lowercase()) {
+            "identifying" -> IslandEvent.NowPlayingStatus.IDENTIFYING
+            "unknown" -> IslandEvent.NowPlayingStatus.UNKNOWN
+            "failed" -> IslandEvent.NowPlayingStatus.FAILED
+            "match" -> IslandEvent.NowPlayingStatus.MATCH
+            else -> {
+                val lower = title.trim().lowercase()
+                when {
+                    lower.startsWith("identifying") -> IslandEvent.NowPlayingStatus.IDENTIFYING
+                    lower == "unknown song" -> IslandEvent.NowPlayingStatus.UNKNOWN
+                    lower == "request failed" ||
+                        lower.startsWith("service busy") -> IslandEvent.NowPlayingStatus.FAILED
+                    else -> IslandEvent.NowPlayingStatus.MATCH
+                }
+            }
+        }
+    }
+
     private fun bytesToDrawable(bytes: ByteArray?): Drawable? {
         if (bytes == null || bytes.isEmpty()) return null
         return try {
@@ -133,5 +239,9 @@ constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private companion object {
+        const val TAG = "SmartspaceIslandManager"
     }
 }

@@ -4,6 +4,7 @@ import android.app.Notification
 import com.android.internal.logging.InstanceId
 import android.app.PendingIntent
 import android.app.RemoteInput
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.service.notification.StatusBarNotification
@@ -228,6 +229,8 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
 
     enum class GameStatus { PRE_GAME, LIVE, HALFTIME, FINAL }
 
+    enum class NowPlayingStatus { MATCH, IDENTIFYING, UNKNOWN, FAILED }
+
     data class NowPlaying(
         val songTitle: String,
         val artist: String,
@@ -237,9 +240,15 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         /** Album cover when available (notif largeIcon or metadata fallback). */
         val albumArt: Drawable? = null,
         val actions: List<NotificationAction> = emptyList(),
+        val status: NowPlayingStatus = NowPlayingStatus.MATCH,
     ) : IslandEvent(priority = 42, id = "now_playing") {
         override val behavior = EventBehavior(autoDismissMs = null)
-        override fun withoutDrawables() = copy(appIcon = null, albumArt = null)
+        // The cover resolves after this event is published, so collapsing it to null would make
+        // its arrival compare equal to its absence and the update would never be emitted. Stand
+        // it on a shared placeholder instead: presence still differs, identity no longer does.
+        override fun withoutDrawables() =
+            copy(appIcon = null, albumArt = albumArt?.let { DRAWABLE_PRESENT })
+        val isMatch: Boolean get() = status == NowPlayingStatus.MATCH
     }
 
     data class Timer(
@@ -381,6 +390,9 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
     }
 
     companion object {
+        /** Stands in for any non-null drawable so equality tracks presence, not identity. */
+        private val DRAWABLE_PRESENT: Drawable = ColorDrawable()
+
         internal val DEFAULT_BEHAVIOR = EventBehavior()
 
         val ONGOING_TYPES: Set<Class<out IslandEvent>> =

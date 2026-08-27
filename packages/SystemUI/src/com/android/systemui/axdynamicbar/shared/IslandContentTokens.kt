@@ -853,7 +853,7 @@ internal fun chipProgressFor(event: IslandEvent): Float? =
 internal fun iconKeyFor(event: IslandEvent): Any =
     when (event) {
         is IslandEvent.Media -> event.albumArt?.hashCode() ?: "media_default"
-        is IslandEvent.NowPlaying -> event.albumArt?.hashCode() ?: "now_playing_default"
+        is IslandEvent.NowPlaying -> "now_playing_${event.status}"
         is IslandEvent.Notification -> event.appIcon?.hashCode() ?: "notif_default"
         is IslandEvent.AppSwitch -> {
             val app = event.previousApp ?: event.recentApps.firstOrNull()
