@@ -240,7 +240,8 @@ public class SoundTriggerMiddlewareService extends ISoundTriggerMiddlewareServic
         @Override
         public void onStart() {
             final SoundTriggerInjection injection = new SoundTriggerInjection();
-            HalFactory[] factories = new HalFactory[]{new DefaultHalFactory(),
+            HalFactory[] factories = new HalFactory[]{
+                    new SoftwareMusicHalFactory(new DefaultHalFactory()),
                     new FakeHalFactory(injection)};
 
             publishBinderService(Context.SOUND_TRIGGER_MIDDLEWARE_SERVICE,

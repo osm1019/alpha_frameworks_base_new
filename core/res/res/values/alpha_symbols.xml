@@ -62,4 +62,7 @@
 
     <!-- Whether device has physical tri state switch -->
     <java-symbol type="bool" name="config_hasAlertSlider" />
+
+    <!-- Whether the device can recognise music in the background -->
+    <java-symbol type="bool" name="config_supportsBackgroundMusicRecognition" />
 </resources>
