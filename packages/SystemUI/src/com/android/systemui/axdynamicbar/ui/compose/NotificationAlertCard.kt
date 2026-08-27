@@ -201,6 +201,16 @@ fun NotificationAlertCard(
         onDispose { interactor.onNotificationAlertInteractionEnd() }
     }
 
+    // Typing is interaction, and the IME sends no pointer events to this card. Without this the
+    // only thing holding the dismissal timer off is a finger on the card, so the reply field
+    // opens, the finger lifts, and the card leaves ~4.5s later with a half-written message in
+    // it. Keyed on showReply: the false->true edge pins, true->false releases, and the initial
+    // composition does neither, leaving the timer showNotificationAlert() already started.
+    DisposableEffect(showReply) {
+        if (showReply) interactor.onNotificationAlertInteractionStart()
+        onDispose { if (showReply) interactor.onNotificationAlertInteractionEnd() }
+    }
+
     MagneticSwipeToDismiss(
         onDismiss = {
             if (showReply) interactor.onFocusableRequested?.invoke(false)

@@ -86,6 +86,9 @@ constructor(
 
     private val autoDismissJobs = ConcurrentHashMap<String, Job>()
     @Volatile private var notifAlertJob: Job? = null
+
+    /** How many things hold the alert card open. See [onNotificationAlertInteractionStart]. */
+    @Volatile private var notifAlertHolds = 0
     @Volatile private var transientPinJob: Job? = null
     @Volatile private var transientPinnedEventId: String? = null
     @Volatile private var lastOnKeyguard: Boolean? = null
@@ -691,15 +694,38 @@ constructor(
         scheduleAutoDismiss(event)
     }
 
+    /**
+     * Two independent things hold the card open — a finger on it, and an open reply field — and
+     * they overlap: a tap inside the card while replying would otherwise release the reply's
+     * hold when the finger lifts. Counted, so the timer only resumes once the last one lets go.
+     */
     override fun onNotificationAlertInteractionStart() {
+        notifAlertHolds++
+        cancelNotifAlertTimer()
+    }
+
+    override fun onNotificationAlertInteractionEnd() {
+        if (notifAlertHolds > 0) notifAlertHolds--
+        // Cancel before re-arming. Assigning over a live job leaves the old one running and
+        // unreachable: it still fires dismissNotificationAlert() on its own schedule, and
+        // nothing can stop it because the only reference to it was overwritten. Measured on
+        // astonc 2026-08-26: a card died on a coroutine armed two interactions earlier, 20ms
+        // off that coroutine's deadline, while notifAlertJob pointed at a timer with 1.2s left.
+        cancelNotifAlertTimer()
+        if (notifAlertHolds > 0) return
+        val current = _uiState.value
+        val alert = current.notificationAlert ?: return
+        if (alert.isActiveCall()) return
+        armNotifAlertTimer()
+    }
+
+    private fun cancelNotifAlertTimer() {
         notifAlertJob?.cancel()
         notifAlertJob = null
     }
 
-    override fun onNotificationAlertInteractionEnd() {
-        val current = _uiState.value
-        val alert = current.notificationAlert ?: return
-        if (alert.isActiveCall()) return
+    private fun armNotifAlertTimer() {
+        notifAlertJob?.cancel()
         notifAlertJob = applicationScope.launch {
             delay(NOTIF_ALERT_DURATION_MS)
             dismissNotificationAlert()
@@ -707,8 +733,8 @@ constructor(
     }
 
     fun dismissNotificationAlert() {
-        notifAlertJob?.cancel()
-        notifAlertJob = null
+        notifAlertHolds = 0
+        cancelNotifAlertTimer()
         val current = _uiState.value
         current.notificationAlert?.sbn?.key?.let { pendingRedirectKeys.remove(it) }
         if (current.notificationAlert != null) {
@@ -751,16 +777,13 @@ constructor(
         if (!committed && hasProgress && !alertedProgressKeys.add(key)) return
         if (committed && hasProgress) alertedProgressKeys.add(key)
 
-        notifAlertJob?.cancel()
+        cancelNotifAlertTimer()
         _uiState.value = current.copy(notificationAlert = notification)
 
-        val duration =
-            if (!notification.isActiveCall()) NOTIF_ALERT_DURATION_MS else null
-        if (duration != null) {
-            notifAlertJob = applicationScope.launch {
-                delay(duration)
-                dismissNotificationAlert()
-            }
+        // An app that re-posts while the card is held — Telegram does, on edits and read
+        // receipts — must not restart the clock underneath the hold.
+        if (!notification.isActiveCall() && notifAlertHolds == 0) {
+            armNotifAlertTimer()
         }
     }
 
