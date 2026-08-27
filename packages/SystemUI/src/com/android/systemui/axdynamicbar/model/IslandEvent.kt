@@ -229,8 +229,6 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
 
     enum class GameStatus { PRE_GAME, LIVE, HALFTIME, FINAL }
 
-    enum class NowPlayingStatus { MATCH, IDENTIFYING, UNKNOWN, FAILED }
-
     data class NowPlaying(
         val songTitle: String,
         val artist: String,
@@ -240,7 +238,16 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         /** Album cover when available (notif largeIcon or metadata fallback). */
         val albumArt: Drawable? = null,
         val actions: List<NotificationAction> = emptyList(),
-        val status: NowPlayingStatus = NowPlayingStatus.MATCH,
+        /** ASI's OPEN_INTENT for this match: its own result screen. */
+        val openIntent: PendingIntent? = null,
+        /** ASI's FAVORITING_INTENT: the same toggle as the heart in its History screen. */
+        val favoritingIntent: PendingIntent? = null,
+        val isFavorite: Boolean = false,
+        /**
+         * When this song was first recognised. Nothing expires a match any more, so the card can
+         * outlive the music by a long way; the time is what keeps a stale title honest.
+         */
+        val recognizedAtMillis: Long = 0L,
     ) : IslandEvent(priority = 42, id = "now_playing") {
         override val behavior = EventBehavior(autoDismissMs = null)
         // The cover resolves after this event is published, so collapsing it to null would make
@@ -248,7 +255,6 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         // it on a shared placeholder instead: presence still differs, identity no longer does.
         override fun withoutDrawables() =
             copy(appIcon = null, albumArt = albumArt?.let { DRAWABLE_PRESENT })
-        val isMatch: Boolean get() = status == NowPlayingStatus.MATCH
     }
 
     data class Timer(

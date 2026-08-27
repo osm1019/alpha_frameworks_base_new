@@ -509,7 +509,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, CoreSt
         }
         @Override
         public void onNowPlayingUpdate(String nowPlayingText, String artist,
-                android.app.PendingIntent tapAction, String albumArtUri, String status) {
+                android.app.PendingIntent tapAction, String albumArtUri, String status,
+                android.app.PendingIntent favoritingIntent, boolean isFavorite) {
             for (int i = 0; i < mCallbacks.size(); i++) {
                 KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
                 if (cb != null) {

@@ -684,7 +684,15 @@ internal fun ActionChip(
             if (icon != null) {
                 Icon(icon, null, tint = color, modifier = Modifier.size(SizeIconSm))
             }
-            Text(label, color = color, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            // An icon-only chip: without this the empty Text still claims the row's spacing.
+            if (label.isNotEmpty()) {
+                Text(
+                    label,
+                    color = color,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -853,7 +861,6 @@ internal fun chipProgressFor(event: IslandEvent): Float? =
 internal fun iconKeyFor(event: IslandEvent): Any =
     when (event) {
         is IslandEvent.Media -> event.albumArt?.hashCode() ?: "media_default"
-        is IslandEvent.NowPlaying -> "now_playing_${event.status}"
         is IslandEvent.Notification -> event.appIcon?.hashCode() ?: "notif_default"
         is IslandEvent.AppSwitch -> {
             val app = event.previousApp ?: event.recentApps.firstOrNull()

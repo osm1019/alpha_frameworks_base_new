@@ -1186,4 +1186,12 @@
 
     <!-- Indicates whether the tapping to open qs panel is supported -->
     <bool name="config_statusBarTapToExpandShade">false</bool>
+
+    <!-- Music apps preferred for the Now Playing card's Play button, most preferred first.
+         The first entry that is installed and resolves the search deep link is launched
+         directly; with none installed the link stays implicit and the user's default handles
+         it. Empty is fine. -->
+    <string-array name="config_nowPlayingSearchPackages" translatable="false">
+        <item>com.vivi.vivimusic</item>
+    </string-array>
 </resources>

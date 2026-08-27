@@ -57,6 +57,8 @@ class QuickLookClient @Inject constructor(
             tapAction: PendingIntent?,
             albumArtUri: String? = null,
             status: String? = null,
+            favoritingIntent: PendingIntent? = null,
+            isFavorite: Boolean = false,
         ) {}
         fun onSportsUpdate(sports: List<SportsData>) {}
     }
@@ -76,6 +78,8 @@ class QuickLookClient @Inject constructor(
     private var cachedNowPlayingAction: PendingIntent? = null
     private var cachedNowPlayingAlbumArtUri: String? = null
     private var cachedNowPlayingStatus: String? = null
+    private var cachedNowPlayingFavoriting: PendingIntent? = null
+    private var cachedNowPlayingIsFavorite: Boolean = false
     private var cachedSports: List<SportsData> = emptyList()
 
     private val callbacks = WeakListenerManager<Callback>()
@@ -136,6 +140,8 @@ class QuickLookClient @Inject constructor(
                 cachedNowPlayingAction,
                 cachedNowPlayingAlbumArtUri,
                 cachedNowPlayingStatus,
+                cachedNowPlayingFavoriting,
+                cachedNowPlayingIsFavorite,
             )
         }
         if (cachedSports.isNotEmpty()) {
@@ -205,17 +211,29 @@ class QuickLookClient @Inject constructor(
                     hasNowPlaying = true
                     val np = target.nowPlayingData ?: continue
                     val npAction = target.primaryAction?.pendingIntent
+                    // ASI sends this alongside OPEN_INTENT on every local match; it is the same
+                    // action as the heart in its own History screen. It rides the extras rather
+                    // than NowPlayingData, which carries only the favourited state.
+                    val npFavoriting = target.extras?.getParcelable(
+                        QuickLookTarget.EXTRA_NOW_PLAYING_FAVORITING_INTENT,
+                        PendingIntent::class.java,
+                    )
+                    val npIsFavorite = np.isFavorite || np.iconOverride == ICON_FAVORITED
                     if (np.title != cachedNowPlaying ||
                         np.artist != cachedNowPlayingArtist ||
                         npAction != cachedNowPlayingAction ||
                         np.albumArtUri != cachedNowPlayingAlbumArtUri ||
-                        np.status != cachedNowPlayingStatus
+                        np.status != cachedNowPlayingStatus ||
+                        npFavoriting != cachedNowPlayingFavoriting ||
+                        npIsFavorite != cachedNowPlayingIsFavorite
                     ) {
                         cachedNowPlaying = np.title
                         cachedNowPlayingArtist = np.artist
                         cachedNowPlayingAction = npAction
                         cachedNowPlayingAlbumArtUri = np.albumArtUri
                         cachedNowPlayingStatus = np.status
+                        cachedNowPlayingFavoriting = npFavoriting
+                        cachedNowPlayingIsFavorite = npIsFavorite
                         callbacks.notify {
                             it.onNowPlayingUpdate(
                                 np.title,
@@ -223,6 +241,8 @@ class QuickLookClient @Inject constructor(
                                 npAction,
                                 np.albumArtUri,
                                 np.status,
+                                npFavoriting,
+                                npIsFavorite,
                             )
                         }
                     }
@@ -302,7 +322,9 @@ class QuickLookClient @Inject constructor(
             cachedNowPlayingAction = null
             cachedNowPlayingAlbumArtUri = null
             cachedNowPlayingStatus = null
-            callbacks.notify { it.onNowPlayingUpdate("", null, null, null, null) }
+            cachedNowPlayingFavoriting = null
+            cachedNowPlayingIsFavorite = false
+            callbacks.notify { it.onNowPlayingUpdate("", null, null, null, null, null, false) }
         }
     }
 
@@ -348,6 +370,9 @@ class QuickLookClient @Inject constructor(
         private const val SERVICE_PACKAGE = "com.android.axion.quicklook"
         private const val REBIND_DELAY_MS = 5000L
         private const val MAX_REBIND_DELAY_MS = 30000L
+
+        /** ASI's ICON_OVERRIDE for an already-favourited result (`yts`: `i = z ? 8 : 0`). */
+        private const val ICON_FAVORITED = 8
     }
 }
 

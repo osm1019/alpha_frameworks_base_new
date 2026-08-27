@@ -109,8 +109,6 @@ constructor(
     private val _sportsEvents = MutableStateFlow<List<IslandEvent.Sports>>(emptyList())
     val sportsEvents: StateFlow<List<IslandEvent.Sports>> = _sportsEvents.asStateFlow()
 
-    private val _nowPlayingEvent = MutableStateFlow<IslandEvent.NowPlaying?>(null)
-    val nowPlayingEvent: StateFlow<IslandEvent.NowPlaying?> = _nowPlayingEvent.asStateFlow()
 
     private val _callEvents = MutableStateFlow<List<IslandEvent.Call>>(emptyList())
     val callEvents: StateFlow<List<IslandEvent.Call>> = _callEvents.asStateFlow()
@@ -183,9 +181,6 @@ constructor(
                 _sportsEvents.value =
                     _sportsEvents.value.filter { it.key != sbn.key }
 
-                if (_nowPlayingEvent.value?.key == sbn.key) {
-                    _nowPlayingEvent.value = null
-                }
 
                 _notificationEvents.value =
                     _notificationEvents.value.filter { it.sbn.key != sbn.key }
@@ -212,7 +207,6 @@ constructor(
                         handleAudioRecording(sbn, extras, pkg)
                     NotificationRoute.AUDIO_RECORDING_SAVED ->
                         handleAudioRecordingSaved(sbn, extras)
-                    NotificationRoute.NOW_PLAYING -> handleNowPlaying(sbn, extras)
                     NotificationRoute.SPORTS -> handleSportsPosted(sbn, extras, pkg)
                     NotificationRoute.MEDIA -> {
                         _promotedOngoingEvents.value =
@@ -257,7 +251,6 @@ constructor(
         CALL,
         AUDIO_RECORDING,
         AUDIO_RECORDING_SAVED,
-        NOW_PLAYING,
         SPORTS,
         MEDIA,
         PROMOTED,
@@ -321,12 +314,13 @@ constructor(
             return NotificationRoute.AUDIO_RECORDING_SAVED
         }
 
+        // ASI's own ambient-music notification. The card is built from its Smartspace
+        // broadcast, not from this, so the notification only has to stay off the bar.
         if (
             pkg == NOW_PLAYING_PACKAGE &&
                 (notification.channelId ?: "").contains(NOW_PLAYING_CHANNEL)
         ) {
-            return if ("now_playing" !in disabledTypes) NotificationRoute.NOW_PLAYING
-            else NotificationRoute.IGNORED
+            return NotificationRoute.IGNORED
         }
 
         if (pkg in SUPPRESSED_PACKAGES) return NotificationRoute.IGNORED
@@ -777,7 +771,6 @@ constructor(
         _notificationEvents.value = emptyList()
         _promotedOngoingEvents.value = emptyList()
         _sportsEvents.value = emptyList()
-        _nowPlayingEvent.value = null
         _audioRecordingEvent.value = null
         recorderPackage = null
         recorderNotifKey = null
@@ -1207,76 +1200,6 @@ constructor(
 
     fun clearSportsEvent(key: String) {
         _sportsEvents.value = _sportsEvents.value.filter { it.key != key }
-    }
-
-    fun clearNowPlaying() {
-        _nowPlayingEvent.value = null
-    }
-
-    private fun handleNowPlaying(sbn: StatusBarNotification, extras: Bundle) {
-        val title = extras.getCharSequence("android.title")?.toString() ?: return
-        val byMatch = Regex("""(.+?)\s+by\s+(.+)""", RegexOption.IGNORE_CASE).find(title)
-        val dashParts = if (byMatch == null) title.split(" - ", " – ", limit = 2) else null
-        val songTitle: String
-        val artist: String
-        when {
-            byMatch != null -> {
-                songTitle = byMatch.groupValues[1].trim()
-                artist = byMatch.groupValues[2].trim()
-            }
-            dashParts != null && dashParts.size == 2 -> {
-                songTitle = dashParts[0].trim()
-                artist = dashParts[1].trim()
-            }
-            else -> {
-                songTitle = title
-                artist = ""
-            }
-        }
-
-        val allActions = sbn.notification?.actions ?: emptyArray()
-        val notifActions = allActions.mapNotNull { a ->
-            a.title?.let { IslandEvent.NotificationAction(label = it, action = a) }
-        }
-        val appIcon = loadNotificationIcon(sbn, sbn.packageName)
-        // Prefer existing art on same-song re-post so we don't flash back to the note.
-        val previous = _nowPlayingEvent.value
-        val sameSong = previous != null
-            && previous.songTitle == songTitle
-            && previous.artist == artist
-        val largeIcon = try {
-            sbn.notification?.getLargeIcon()?.loadDrawable(context)
-        } catch (_: Exception) {
-            null
-        }
-        val albumArt = largeIcon
-            ?: if (sameSong) previous?.albumArt else null
-
-        val status = when {
-            songTitle.startsWith("Identifying", ignoreCase = true) ->
-                IslandEvent.NowPlayingStatus.IDENTIFYING
-            songTitle.equals("Unknown song", ignoreCase = true) ->
-                IslandEvent.NowPlayingStatus.UNKNOWN
-            songTitle.equals("Request failed", ignoreCase = true) ||
-                songTitle.startsWith("Service busy", ignoreCase = true) ->
-                IslandEvent.NowPlayingStatus.FAILED
-            NowPlayingAlbumArt.isStatusTitle(songTitle) ->
-                IslandEvent.NowPlayingStatus.UNKNOWN
-            else -> IslandEvent.NowPlayingStatus.MATCH
-        }
-        val albumArtForChip =
-            if (status == IslandEvent.NowPlayingStatus.MATCH) albumArt else null
-        _nowPlayingEvent.value = IslandEvent.NowPlaying(
-            songTitle = songTitle,
-            artist = artist,
-            key = sbn.key,
-            sbn = sbn,
-            appIcon = appIcon,
-            albumArt = albumArtForChip,
-            actions = notifActions,
-            status = status,
-        )
-
     }
 
     private fun handleSportsScore(

@@ -188,6 +188,10 @@
     <string name="ax_dynamic_bar_vpn_active">VPN Active</string>
     <string name="ax_dynamic_bar_screen_recording">Screen Recording</string>
     <string name="ax_dynamic_bar_now_playing">Now Playing</string>
+    <string name="ax_dynamic_bar_now_playing_info">Info</string>
+    <string name="ax_dynamic_bar_now_playing_history">History</string>
+    <string name="ax_dynamic_bar_now_playing_play">Play</string>
+    <string name="ax_dynamic_bar_now_playing_heard_at">Heard %1$s</string>
     <string name="ax_dynamic_bar_media_output">Media output</string>
     <string name="ax_dynamic_bar_sound_mode">Sound Mode</string>
     <string name="ax_dynamic_bar_silent">Silent</string>

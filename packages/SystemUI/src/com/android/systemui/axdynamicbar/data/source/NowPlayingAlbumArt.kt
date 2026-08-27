@@ -34,7 +34,8 @@ internal object NowPlayingAlbumArt {
     private const val PKG_ASI = "com.google.android.as"
     private const val PKG_NOW_PLAYING = "com.google.android.apps.pixel.nowplaying"
     private const val CHANNEL_AMBIENT_MUSIC = "ambientmusic"
-    private const val ART_MAX_PX = 128
+    /** The card cover is 92dp; at ~2.8 density that needs 256px to stay sharp. */
+    private const val ART_MAX_PX = 256
     private const val ITUNES_SEARCH_URL =
         "https://itunes.apple.com/search?term=%s&media=music&entity=song&limit=1"
     private const val CONNECT_MS = 4000
@@ -42,7 +43,7 @@ internal object NowPlayingAlbumArt {
     private const val USER_AGENT = "AlphaDroid-SystemUI-NowPlaying"
     private const val CACHE_DIR = "now_playing_art"
     private const val CACHE_MAX_FILES = 64
-    private const val CACHE_MAX_BYTES = 2L * 1024 * 1024
+    private const val CACHE_MAX_BYTES = 8L * 1024 * 1024
 
     fun load(
         context: Context,
@@ -70,7 +71,12 @@ internal object NowPlayingAlbumArt {
         return BitmapDrawable(context.resources, bitmap)
     }
 
-    fun isStatusTitle(title: String): Boolean {
+    /**
+     * The provider filters these out before a match is ever published, so this is a backstop
+     * rather than a path: it stops a status string being spent on a network lookup if that ever
+     * changes.
+     */
+    private fun isStatusTitle(title: String): Boolean {
         val lower = title.trim().lowercase()
         if (lower.isEmpty()) return true
         return lower == "unknown song" ||

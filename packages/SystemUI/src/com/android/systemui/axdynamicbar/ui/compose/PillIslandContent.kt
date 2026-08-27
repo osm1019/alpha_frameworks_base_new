@@ -108,7 +108,7 @@ internal fun PillEventIcon(
         is IslandEvent.Media -> MediaPillIcon(event)
         is IslandEvent.PromotedOngoing -> PromotedOngoingPillIcon(event, tint)
         is IslandEvent.Sports -> SportsPillIcon(event)
-        is IslandEvent.NowPlaying -> AnimatedNowPlayingIcon(tint ?: MintAccent)
+        is IslandEvent.NowPlaying -> AnimatedNowPlayingIcon(tint ?: accentColorFor(event))
         is IslandEvent.Bluetooth -> AnimatedBluetoothIcon(tint ?: BlueAccent)
         is IslandEvent.Hotspot -> AnimatedHotspotIcon(tint ?: TealAccent)
         is IslandEvent.Charging -> ChargingPillIcon(tint ?: GreenAccent)

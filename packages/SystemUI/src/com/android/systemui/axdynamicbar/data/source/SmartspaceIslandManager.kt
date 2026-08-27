@@ -80,6 +80,8 @@ constructor(
             tapAction: PendingIntent?,
             albumArtUri: String?,
             status: String?,
+            favoritingIntent: PendingIntent?,
+            isFavorite: Boolean,
         ) {
             if (text.isBlank()) {
                 artJob?.cancel()
@@ -117,26 +119,29 @@ constructor(
                     }
                 }
             }
-            val kind = parseNowPlayingStatus(status, songTitle)
             val previous = _nowPlayingEvent.value
             val sameSong = previous != null &&
                 previous.songTitle == songTitle &&
-                previous.artist == artist &&
-                kind == IslandEvent.NowPlayingStatus.MATCH
-            val keepArt =
-                if (kind == IslandEvent.NowPlayingStatus.MATCH && sameSong) previous?.albumArt
-                else null
+                previous.artist == artist
+            val keepArt = if (sameSong) previous?.albumArt else null
+            // ASI re-SHOWs an unchanged song about every two minutes. Stamping each one would
+            // walk the time forward and hide exactly the staleness it is there to show.
+            val recognizedAt =
+                if (sameSong && previous != null && previous.recognizedAtMillis > 0L) {
+                    previous.recognizedAtMillis
+                } else {
+                    System.currentTimeMillis()
+                }
             _nowPlayingEvent.value = IslandEvent.NowPlaying(
                 songTitle = songTitle,
                 artist = artist,
                 key = "ql_now_playing",
                 albumArt = keepArt,
-                status = kind,
+                openIntent = tapAction,
+                favoritingIntent = favoritingIntent,
+                isFavorite = isFavorite,
+                recognizedAtMillis = recognizedAt,
             )
-            if (kind != IslandEvent.NowPlayingStatus.MATCH) {
-                artJob?.cancel()
-                return
-            }
             // Same-song re-SHOW with no new URI: keep the cover already resolved.
             if (keepArt != null && albumArtUri.isNullOrBlank()) {
                 Log.d(TAG, "art: keeping resolved cover for $songTitle")
@@ -157,12 +162,9 @@ constructor(
                     Log.d(TAG, "art: no event left for $songTitle")
                     return@launch
                 }
-                if (current.songTitle != songTitle ||
-                    current.artist != artist ||
-                    current.status != IslandEvent.NowPlayingStatus.MATCH
-                ) {
+                if (current.songTitle != songTitle || current.artist != artist) {
                     Log.d(TAG, "art: event moved on, dropping cover for $songTitle " +
-                            "(now '${current.songTitle}'/'${current.artist}' ${current.status})")
+                            "(now '${current.songTitle}'/'${current.artist}')")
                     return@launch
                 }
                 if (art == null) {
@@ -206,28 +208,6 @@ constructor(
             combined.contains("pre") || combined.contains("upcoming") ||
                 combined.contains("tip") || combined.contains("kick") -> IslandEvent.GameStatus.PRE_GAME
             else -> IslandEvent.GameStatus.LIVE
-        }
-    }
-
-    private fun parseNowPlayingStatus(
-        status: String?,
-        title: String,
-    ): IslandEvent.NowPlayingStatus {
-        return when (status?.lowercase()) {
-            "identifying" -> IslandEvent.NowPlayingStatus.IDENTIFYING
-            "unknown" -> IslandEvent.NowPlayingStatus.UNKNOWN
-            "failed" -> IslandEvent.NowPlayingStatus.FAILED
-            "match" -> IslandEvent.NowPlayingStatus.MATCH
-            else -> {
-                val lower = title.trim().lowercase()
-                when {
-                    lower.startsWith("identifying") -> IslandEvent.NowPlayingStatus.IDENTIFYING
-                    lower == "unknown song" -> IslandEvent.NowPlayingStatus.UNKNOWN
-                    lower == "request failed" ||
-                        lower.startsWith("service busy") -> IslandEvent.NowPlayingStatus.FAILED
-                    else -> IslandEvent.NowPlayingStatus.MATCH
-                }
-            }
         }
     }
 
