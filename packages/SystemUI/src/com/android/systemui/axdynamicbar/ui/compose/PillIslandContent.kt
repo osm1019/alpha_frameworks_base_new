@@ -95,10 +95,10 @@ import java.lang.Math.toRadians
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
-private val PillBitmapIconSize = 16.dp
+internal val PillBitmapIconSize = 16.dp
 
 @Composable
-private fun PillBitmapIcon(
+internal fun PillBitmapIcon(
     drawable: Drawable,
     round: Boolean,
     size: Dp = PillBitmapIconSize,
@@ -261,11 +261,8 @@ private fun AospChipPillIcon(
                     }
                 }
                 if (drawable != null) {
-                    Image(
-                        bitmap = drawable.toScaledBitmap(SizeBadge),
-                        contentDescription = null,
-                        modifier = Modifier.size(SizeBadge),
-                    )
+                    // A launcher icon, not the chip's glyph: masked and sized like every other one.
+                    PillBitmapIcon(drawable = drawable, round = false)
                 }
             }
         }
@@ -766,7 +763,7 @@ private fun NotificationPillIcon(event: IslandEvent.Notification) {
             BadgedContactIcon(
                 mainIcon = it,
                 badgeIcon = event.appIcon!!,
-                mainSize = 16.dp,
+                mainSize = PillBitmapIconSize,
                 badgeSize = 9.dp,
                 isRound = true,
             )
@@ -897,7 +894,7 @@ private fun SportsText(event: IslandEvent.Sports, modifier: Modifier, overrideCo
 
 @Composable
 private fun SportsTeamLabel(name: String, icon: Drawable?, color: Color) {
-    val badgeSize = 14.dp
+    val badgeSize = SizeBadge
     if (icon != null) {
         PillBitmapIcon(drawable = icon, round = true, size = badgeSize, contentDescription = name)
     } else {

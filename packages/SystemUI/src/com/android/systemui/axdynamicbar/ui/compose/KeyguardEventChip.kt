@@ -22,7 +22,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,12 +48,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.alpha.theme.AlphaColors
 import com.android.systemui.axdynamicbar.model.IslandEvent
-import com.android.systemui.axdynamicbar.shared.ShapeXs
 import com.android.systemui.axdynamicbar.shared.SizeBadge
 import com.android.systemui.axdynamicbar.shared.SpaceLg
 import com.android.systemui.axdynamicbar.shared.chipAccentColorFor
@@ -62,7 +59,6 @@ import com.android.systemui.axdynamicbar.shared.chipProgressColorFor
 import com.android.systemui.axdynamicbar.shared.chipProgressFor
 import com.android.systemui.axdynamicbar.shared.dbLockscreenPillChrome
 import com.android.systemui.axdynamicbar.shared.ProgressTrackAlpha
-import com.android.systemui.axdynamicbar.shared.toScaledBitmap
 import com.android.systemui.media.ax.ui.compose.AxWaveform
 import kotlin.math.abs
 
@@ -183,7 +179,8 @@ private fun LaneMediaGlyph(playing: Boolean, tint: Color, size: Dp) {
  *
  * Vectors go through [ScaledPillEventIcon], which magnifies them without cost. Bitmaps do
  * not survive that — [PillEventIcon] rasters album art and app icons at 16dp, and the lane
- * draws them more than twice as large — so those are re-rastered here instead.
+ * draws them more than twice as large — so those go through [PillBitmapIcon] at the lane's
+ * own size, which also keeps the pill's mask rule.
  */
 @Composable
 private fun LaneEventIcon(event: IslandEvent, tint: Color, size: Dp) {
@@ -191,13 +188,7 @@ private fun LaneEventIcon(event: IslandEvent, tint: Color, size: Dp) {
     if (drawable == null) {
         ScaledPillEventIcon(event, tint, size)
     } else {
-        Image(
-            bitmap = drawable.toScaledBitmap(size),
-            contentDescription = null,
-            modifier =
-                Modifier.size(size).clip(if (pillIconIsRound(event)) CircleShape else ShapeXs),
-            contentScale = ContentScale.Crop,
-        )
+        PillBitmapIcon(drawable = drawable, round = pillIconIsRound(event), size = size)
     }
 }
 
