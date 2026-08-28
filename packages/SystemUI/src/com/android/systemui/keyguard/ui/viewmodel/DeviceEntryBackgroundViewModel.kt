@@ -78,7 +78,7 @@ constructor(
     private fun surfaceColor(): Int =
         ColorUtils.setAlphaComponent(
             Utils.getColorAttrDefaultColor(context, com.android.internal.R.attr.colorSurface),
-            AlphaColors.KeyguardFurniture.bodyAlpha255,
+            AlphaColors.KeyguardFurniture.bodyAlpha255(context),
         )
 
     val color: Flow<Int> =

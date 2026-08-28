@@ -16,6 +16,8 @@
 
 package com.android.systemui.alpha.theme
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.annotation.ColorRes
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.android.internal.R
 
 /**
@@ -224,11 +227,45 @@ object AlphaColors {
      * lane, not the same material, and it is not a pattern to build on. A17 rewrites the lockscreen
      * colour model properly; see `a17/alpha-rebase-plan.md` §11.
      *
-     * [DbLockscreenPill.bodyAlphaNoBlur]'s value, because that is the no-backdrop case.
+     * [DbLockscreenPill.bodyAlpha]'s value -- the *blurred* one. Matching the no-backdrop
+     * value was the first reading, and correct on paper, but it put the furniture at 0.90
+     * beside chips at 0.75 and the row read as two materials rather than one.
      */
     object KeyguardFurniture {
-        const val bodyAlpha = 0.90f
-        const val bodyAlpha255 = 230 // (0.90 * 255).roundToInt(), for the ARGB call sites
+
+        /**
+         * Shared with [DbLockscreenPill.bodyAlpha], which reads it: the furniture and the lane
+         * chips sit in one row, so one number decides how transparent that row is.
+         *
+         * It is the *blurred* chip value even though none of this furniture has a backdrop, and a
+         * backdrop behind the device entry icon is ruled out. Matching the no-blur value instead
+         * was the first attempt and left the furniture at 0.90 beside chips at 0.75 -- a tenth of
+         * the wallpaper reading through against a quarter, which is plainly two materials.
+         *
+         * **Branched, because the body under it is not.** It composites as `a*S + (1-a)*W` over
+         * the same wallpaper, but S is `surfaceContainerHigh`: near-black in dark, near-white in
+         * light. Dark forgives -- a dark plate over a bright wallpaper still reads as darker than
+         * what surrounds it. Light does not: a light plate at 0.75 over a bright wallpaper lands
+         * on the wallpaper's own luminance and the shape stops existing. Light therefore holds
+         * more back, for the same reason [DbLockscreenPill.tintAmount] is not one number either.
+         */
+        fun bodyAlpha(isNight: Boolean): Float = if (isNight) 0.75f else 0.88f
+
+        /** [bodyAlpha] for the call sites that set it on a [Context] rather than in a theme. */
+        @JvmStatic fun bodyAlpha(context: Context): Float = bodyAlpha(isNight(context))
+
+        /** [bodyAlpha] for the ARGB call sites. */
+        @JvmStatic
+        fun bodyAlpha255(context: Context): Int = (bodyAlpha(context) * 255).roundToInt()
+
+        /**
+         * The affordance binder, the device entry view model and the shelf all resolve outside a
+         * composition, so they cannot read the theme the way the objects in this file do.
+         */
+        @JvmStatic
+        fun isNight(context: Context): Boolean =
+            (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -378,9 +415,19 @@ object AlphaColors {
         /**
          * Same pairing as [DbStatusBarChip]: open when frost is behind the pill, denser when the
          * compositor refuses a blur region. Unlike that chip this body stays theme-following —
-         * the lane sits between the shortcut buttons (and near UDFPS), which follow the theme.
+         * the lane sits between the shortcut buttons (and near UDFPS), which follow the theme —
+         * and so, unlike that chip, the alpha follows it too. Held in [KeyguardFurniture] because
+         * the shortcuts, the device entry icon and the shelf have to land on the same value.
          */
-        const val bodyAlpha = 0.75f
+        val bodyAlpha: Float
+            @Composable @ReadOnlyComposable get() = KeyguardFurniture.bodyAlpha(isDarkTheme)
+
+        /**
+         * Unbranched, deliberately. This is the path taken when the compositor refuses a blur
+         * region, which no device we ship reaches, so a light value here would be a guess with
+         * nothing to check it against. It wants the same treatment as [bodyAlpha] the day it
+         * becomes reachable.
+         */
         const val bodyAlphaNoBlur = 0.90f
         val blurRadius = 12.dp
 

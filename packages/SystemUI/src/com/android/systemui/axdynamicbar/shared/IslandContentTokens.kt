@@ -351,9 +351,11 @@ internal fun dbLockscreenPillChrome(
     blurred: Boolean? = null,
 ): IslandGlassChrome {
     val pill = AlphaColors.DbLockscreenPill
+    // Read out here rather than inside `glass`: bodyAlpha follows the theme now, so it is a
+    // @Composable getter, and a local function cannot invoke one.
+    val bodyAlpha = if (blurred == true) pill.bodyAlpha else pill.bodyAlphaNoBlur
     fun glass(color: Color): Color =
-        if (blurred == null) color
-        else color.copy(alpha = if (blurred) pill.bodyAlpha else pill.bodyAlphaNoBlur)
+        if (blurred == null) color else color.copy(alpha = bodyAlpha)
     if (untinted) {
         return IslandGlassChrome(
             body = glass(pill.mediaBody),

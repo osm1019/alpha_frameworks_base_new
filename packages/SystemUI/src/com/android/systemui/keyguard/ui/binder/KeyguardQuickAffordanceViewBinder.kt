@@ -201,7 +201,7 @@ constructor(
                                 com.android.internal.R.color.materialColorSurfaceContainerHigh
                             }
                         ),
-                        AlphaColors.KeyguardFurniture.bodyAlpha255,
+                        AlphaColors.KeyguardFurniture.bodyAlpha255(view.context),
                     )
                 )
             } else {

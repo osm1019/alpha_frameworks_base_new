@@ -41,6 +41,7 @@ import androidx.annotation.NonNull;
 import com.android.app.animation.Interpolators;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.SystemBarUtils;
+import com.android.systemui.alpha.theme.AlphaColors.KeyguardFurniture;
 import com.android.systemui.animation.ShadeInterpolation;
 import com.android.systemui.res.R;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
@@ -72,9 +73,6 @@ import java.io.PrintWriter;
  * overflow icons that don't fit into the regular list anymore.
  */
 public class NotificationShelf extends ActivatableNotificationView {
-
-    /** Mirrors {@code AlphaColors.KeyguardFurniture.bodyAlpha}. */
-    private static final float KEYGUARD_BACKGROUND_ALPHA = 0.90f;
 
     private static final int TAG_CONTINUOUS_CLIPPING = R.id.continuous_clipping_tag;
     private static final String TAG = "NotificationShelf";
@@ -1098,7 +1096,8 @@ public class NotificationShelf extends ActivatableNotificationView {
      */
     public void setOnKeyguard(boolean onKeyguard) {
         if (mBackgroundNormal != null) {
-            mBackgroundNormal.setAlpha(onKeyguard ? KEYGUARD_BACKGROUND_ALPHA : 1f);
+            mBackgroundNormal.setAlpha(
+                    onKeyguard ? KeyguardFurniture.bodyAlpha(getContext()) : 1f);
         }
     }
 
