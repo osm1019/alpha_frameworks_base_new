@@ -183,13 +183,20 @@ internal fun <T> ContentScope.AxQS(
     scrollState: ScrollState,
     customShapeCells: Boolean,
     showDate: Boolean = true,
+    splitShade: Boolean = false,
     modifier: Modifier = Modifier,
     controlContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileContent: @Composable (AxQsGridItem<T>) -> Unit,
     tileLabel: @Composable (AxQsGridItem<T>) -> Unit,
 ) {
     val pagerState = rememberAxQsTilePagerState(tileItems, tileColumns, tileRows)
-    Column(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(spacing)) {
+    // Portrait can spend a full tile gap around the date row; the split shade is height-bound and
+    // pays for it in tile rows, so there it is halved.
+    val headerGap = if (splitShade) spacing / 2 else spacing
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(headerGap),
+    ) {
         AxQsDateHeader(
             toolbarViewModel = toolbarViewModel,
             shadeHeaderViewModel = shadeHeaderViewModel,
@@ -235,7 +242,7 @@ internal fun <T> ContentScope.AxQS(
                         )
                         AxQsPagerIndicator(
                             pagerState = pagerState,
-                            modifier = Modifier.fillMaxWidth().padding(top = spacing),
+                            modifier = Modifier.fillMaxWidth().padding(top = headerGap),
                         )
                     }
                 }

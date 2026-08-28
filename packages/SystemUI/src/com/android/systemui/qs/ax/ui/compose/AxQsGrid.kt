@@ -406,4 +406,18 @@ internal const val AX_QS_CONTROL_MAX_ROWS = 6
 internal const val AX_QS_TILE_MAX_ROWS = 3
 private const val AX_QS_SHARED_MAX_ROWS = 6
 
-private val AX_TILE_MAX_SIZE = 85.dp
+/**
+ * Largest a square cell may get before the grid gives up on squareness.
+ *
+ * This is the gate for the user's tile silhouette, not just a size limit: past it the cell keeps
+ * the full width but falls back to the AOSP row height, and the tile then fails the 1:1 test in
+ * AxLiveTile, so LocalQSTileShape is dropped and the state-animated default is stretched across a
+ * wide cell -- a pebble or a circle rendered as an ellipse.
+ *
+ * 85dp was measured against portrait, which lands at ~80dp on four columns. The split shade's pane
+ * is about a tenth wider than the portrait panel, so the same four columns come out at ~87dp and
+ * fell 2dp the wrong side of a limit that was not protecting anything at that size. Raised to keep
+ * the two orientations on one rule; three columns still exceeds it everywhere, which is the case
+ * the cap is actually for.
+ */
+private val AX_TILE_MAX_SIZE = 96.dp

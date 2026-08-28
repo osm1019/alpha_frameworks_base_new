@@ -315,7 +315,27 @@ object AxQuickSettingsLayoutDefaults {
     const val LANDSCAPE_SIDE_PADDING_FRACTION = AxQsLayoutPadding.LANDSCAPE_SIDE_FRACTION
     val LandscapeGridSpacing = 16.dp
     val LandscapeSplitGridSpacing = AxQsLayoutPadding.LANDSCAPE_SPLIT_GRID_SPACING_DP.dp
-    val LandscapeHeaderContentSpacing = 8.dp
+    val LandscapeHeaderContentSpacing = 4.dp
+
+    /**
+     * The landscape header reserves the status bar height, which on a punch-hole device is sized
+     * for a cutout that sits on the *side* once rotated -- 43dp of a 420dp-tall panel here. Its
+     * row is top-aligned, so everything past what the clock and status icons draw is dead space
+     * above the date row, and landscape is the orientation with no height to spare.
+     *
+     * Capped rather than replaced: a device whose status bar is already short keeps its own value,
+     * and the cap only bites where the reservation is cutout-driven. The header row and the grid's
+     * top padding both read this, so they cannot drift apart.
+     */
     val LandscapeHeaderHeight: Dp
-        @Composable get() = ShadeHeader.Dimensions.StatusBarHeight
+        @Composable
+        get() = ShadeHeader.Dimensions.StatusBarHeight.coerceAtMost(LandscapeHeaderMaxHeight)
+
+    /**
+     * Clock is 18sp (~25dp line) and the status icons about the same. The battery and privacy
+     * chips have no fixed height -- roughly 20dp of content inside [ShadeHeader.Dimensions
+     * .ChipPaddingVertical] top and bottom -- so this leaves them a few dp of margin rather than
+     * sitting on their intrinsic height, where a taller chip would be squashed by the constraint.
+     */
+    private val LandscapeHeaderMaxHeight = 32.dp
 }

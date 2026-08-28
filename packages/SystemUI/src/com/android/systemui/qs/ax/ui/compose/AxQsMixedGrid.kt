@@ -368,6 +368,7 @@ internal fun ContentScope.AxQsMixedGrid(
                         editButtonProgress = qsEntranceProgress,
                         scrollState = scrollState,
                         customShapeCells = customShapeCells,
+                        splitShade = true,
                         modifier =
                             Modifier.fillMaxSize()
                                 .padding(top = contentTopPadding)
