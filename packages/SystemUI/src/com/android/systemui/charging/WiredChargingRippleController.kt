@@ -586,10 +586,10 @@ class WiredChargingRippleController @Inject constructor(
         branding.setRatedWatts(0)
         branding.setStatusLabel(null)
         branding.setSourceLabel(
-            if (session.showVooc) {
-                context.getString(R.string.charging_vfx_source_vooc)
-            } else {
-                plugSourceLabel(session.plugged)
+            when {
+                session.showVooc -> context.getString(R.string.charging_vfx_source_vooc)
+                session.showPps -> context.getString(R.string.charging_vfx_source_pps)
+                else -> plugSourceLabel(session.plugged)
             }
         )
         Log.i(TAG, "vfx hud source vooc=" + session.showVooc
@@ -921,7 +921,11 @@ class WiredChargingRippleController @Inject constructor(
             || (!protocolVooc && hasVooc && watts > 0)
             || (!protocolVooc && hasVooc && oemCharger && isSvoocOverlay())
         val showVooc = !showSuperVooc && (protocolVooc || (dbVooc && !dbSuperVooc))
-        val handshakeReady = showSuperVooc || showVooc || oemCharger || dbVooc || watts > 0
+        // PD/PPS is a separate oplus path with its own node; without this it reads as USB.
+        // cool_down votes on the VOOC votable only, so a PPS session is never capped
+        // and never offers the boost tip.
+        val showPps = !showSuperVooc && !showVooc && readSysfsInt(PPS_CHG_ING) == 1
+        val handshakeReady = showSuperVooc || showVooc || showPps || oemCharger || dbVooc || watts > 0
         val hudWatts = if (showSuperVooc) {
             if (watts > 0) watts else 100
         } else {
@@ -932,6 +936,7 @@ class WiredChargingRippleController @Inject constructor(
             ratedWatts = hudWatts,
             showSuperVooc = showSuperVooc,
             showVooc = showVooc,
+            showPps = showPps,
             plugged = plugged,
             oemCharger = oemCharger,
             handshakeReady = handshakeReady,
@@ -1020,6 +1025,7 @@ class WiredChargingRippleController @Inject constructor(
         val ratedWatts: Int,
         val showSuperVooc: Boolean,
         val showVooc: Boolean,
+        val showPps: Boolean,
         val plugged: Int,
         val oemCharger: Boolean,
         val handshakeReady: Boolean,
@@ -1044,6 +1050,7 @@ class WiredChargingRippleController @Inject constructor(
         // Lap from long-press, capped by [VFX_NATIVE_MS] — does not rebase show time.
         private const val VFX_SPEED_UP_HOLD_MS = 14_000L
         private const val FAST_CHG_TYPE_USB = "/sys/class/oplus_chg/usb/fast_chg_type"
+        private const val PPS_CHG_ING = "/sys/class/oplus_chg/battery/ppschg_ing"
         private const val FAST_CHG_TYPE_BATT = "/sys/class/oplus_chg/battery/fast_chg_type"
         // AOSP / PNG windows pass touches through. The GLES path clears
         // FLAG_NOT_TOUCHABLE so a tap can cancel, then restores this.
