@@ -188,7 +188,12 @@ private fun LaneEventIcon(event: IslandEvent, tint: Color, size: Dp) {
     if (drawable == null) {
         ScaledPillEventIcon(event, tint, size)
     } else {
-        PillBitmapIcon(drawable = drawable, round = pillIconIsRound(event), size = size)
+        PillBitmapIcon(
+            drawable = drawable,
+            round = pillIconIsRound(event),
+            size = size,
+            tint = tint.takeIf { pillIconIsTemplate(event) },
+        )
     }
 }
 

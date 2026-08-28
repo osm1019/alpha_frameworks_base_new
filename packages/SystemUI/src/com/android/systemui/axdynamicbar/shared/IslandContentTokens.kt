@@ -248,6 +248,9 @@ private const val ProgressLightnessSteps = 25
 /** Track is the chip's own content colour, already proven against this plate. */
 internal const val ProgressTrackAlpha = 0.3f
 
+/** Steps taken walking a tinted body back toward its untinted base in [bodyCarrying]. */
+private const val BodyTintSteps = 10
+
 /** Exclusive upper bound of the red charging band. Every charging colour cut uses these. */
 internal const val BatteryRedBelow = 30
 /** Exclusive upper bound of the orange charging band. */
@@ -286,6 +289,29 @@ private fun contentColorOn(body: Color, first: Color, second: Color): Color {
             ColorUtils.calculateContrast(AlphaColors.contrastFloorDarkColor.toArgb(), bg)
     ) AlphaColors.contrastFloorLightColor
     else AlphaColors.contrastFloorDarkColor
+}
+
+/**
+ * [tinted] pulled back toward [base] until [content] clears [MinContentContrast] on it.
+ *
+ * The event palette is fixed hex and does not follow the theme, so tinting a body with a light
+ * accent lands it mid-range in dark mode, and a dark accent does the same in light mode. There
+ * [contentColorOn] flips to the inverse candidate for that one event, so a single lane chip draws
+ * a dark glyph while its neighbours draw light ones — which reads as that chip having faded, not
+ * as a colour someone chose.
+ *
+ * Moving the body rather than the glyph keeps every chip on one content colour, which is what lets
+ * the lane read as a row. The walk always terminates: [base] is the untinted surface, and a surface
+ * and its `on` role are a Material pair.
+ */
+private fun bodyCarrying(content: Color, tinted: Color, base: Color): Color {
+    val fg = content.toArgb()
+    repeat(BodyTintSteps) { step ->
+        val candidate = lerp(tinted, base, step.toFloat() / BodyTintSteps)
+        val bg = candidate.copy(alpha = 1f).toArgb()
+        if (ColorUtils.calculateContrast(fg, bg) >= MinContentContrast) return candidate
+    }
+    return base
 }
 
 /**
@@ -335,11 +361,11 @@ internal fun dbLockscreenPillChrome(
             content = pill.text,
         )
     }
-    val mixed = lerp(pill.body, accent.copy(alpha = 1f), pill.tintAmount)
+    val tinted = lerp(pill.body, accent.copy(alpha = 1f), pill.tintAmount)
     return IslandGlassChrome(
-        body = glass(mixed),
+        body = glass(bodyCarrying(pill.text, tinted, pill.body)),
         border = pill.rim,
-        content = contentColorOn(mixed, pill.text, pill.textInverse),
+        content = pill.text,
     )
 }
 

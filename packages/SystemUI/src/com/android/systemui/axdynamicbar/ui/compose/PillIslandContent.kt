@@ -2,6 +2,7 @@ package com.android.systemui.axdynamicbar.ui.compose
 
 import android.graphics.drawable.Drawable
 import android.media.AudioManager
+import android.service.notification.StatusBarNotification
 import android.os.SystemClock
 import androidx.compose.ui.platform.LocalContext
 import java.text.NumberFormat
@@ -68,6 +69,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
@@ -103,12 +105,14 @@ internal fun PillBitmapIcon(
     round: Boolean,
     size: Dp = PillBitmapIconSize,
     contentDescription: String? = null,
+    tint: Color? = null,
 ) {
     Image(
         bitmap = drawable.toScaledBitmap(size),
         contentDescription = contentDescription,
         modifier = Modifier.size(size).clip(if (round) CircleShape else ShapeXs),
         contentScale = ContentScale.Crop,
+        colorFilter = tint?.let { ColorFilter.tint(it) },
     )
 }
 
@@ -180,6 +184,38 @@ internal fun pillIconIsRound(event: IslandEvent): Boolean =
         else -> false
     }
 
+/**
+ * Whether [pillIconDrawable] resolved to the notification's **small** icon.
+ *
+ * A small icon is a template by platform contract: apps ship a flat white glyph and expect whoever
+ * draws it to tint it. Blitting one untinted is why a finished Firefox download rendered as a white
+ * arrow that disappeared into a light-theme chip. Album art, large icons, sender photos and
+ * launcher icons are pictures and must be drawn exactly as they are.
+ *
+ * Only two events can land here. `PromotedOngoing` and `Sports` read their icon through
+ * `loadNotificationIcon`, which takes the small icon first; `Call`, `Notification` and `AppSwitch`
+ * call `getApplicationIcon` directly and so always hold a launcher icon, which must never be
+ * tinted. `Sports` prefers team badges and only falls through to the app when it has none.
+ *
+ * `loadNotificationIcon` drops to the launcher icon only when the small icon fails to load, so the
+ * small icon's presence is the test. Should that rare load fail, this tints a launcher icon —
+ * wrong, but visible, which is the better way to be wrong.
+ */
+internal fun pillIconIsTemplate(event: IslandEvent): Boolean =
+    when (event) {
+        is IslandEvent.PromotedOngoing -> hasSmallIcon(event.sbn)
+        is IslandEvent.Sports ->
+            event.team1Icon == null && event.team2Icon == null && hasSmallIcon(event.sbn)
+        else -> false
+    }
+
+private fun hasSmallIcon(sbn: StatusBarNotification?): Boolean =
+    try {
+        sbn?.notification?.smallIcon != null
+    } catch (_: Exception) {
+        false
+    }
+
 @Composable
 private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
     when (event) {
@@ -189,7 +225,11 @@ private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
         is IslandEvent.AospChip -> AospChipPillIcon(event, tint, animated = false)
         is IslandEvent.PromotedOngoing ->
             if (event.appIcon != null) {
-                PillBitmapIcon(drawable = event.appIcon, round = false)
+                PillBitmapIcon(
+                    drawable = event.appIcon,
+                    round = false,
+                    tint = tint.takeIf { pillIconIsTemplate(event) },
+                )
             } else {
                 Icon(
                     Icons.Filled.Notifications,
@@ -523,28 +563,81 @@ private fun AnimatedClipboardIcon(color: Color) {
         val w = size.width
         val h = size.height
         val sw = SizeStrokeThin.dp.toPx()
+        val boardLeft = w * 0.2f
+        val boardTop = h * 0.2f
+        val boardWidth = w * 0.6f
+        val boardHeight = h * 0.66f
+        val boardRadius = CornerRadius(w * 0.12f)
+        val clipLeft = w * 0.34f
+        val clipTop = h * 0.08f
+        val clipWidth = w * 0.32f
+        val clipHeight = h * 0.18f
+        val clipRadius = CornerRadius(w * 0.09f)
+
         drawRoundRect(
-            color = color.copy(alpha = 0.6f),
-            topLeft = Offset(w * 0.18f, h * 0.2f),
-            size = Size(w * 0.64f, h * 0.72f),
-            cornerRadius = CornerRadius(w * 0.08f),
-            style = Stroke(sw),
+            color = color.copy(alpha = AlphaIconBg),
+            topLeft = Offset(boardLeft, boardTop),
+            size = Size(boardWidth, boardHeight),
+            cornerRadius = boardRadius,
         )
         drawRoundRect(
             color = color,
-            topLeft = Offset(w * 0.3f, h * 0.1f),
-            size = Size(w * 0.4f, h * 0.15f),
-            cornerRadius = CornerRadius(w * 0.06f),
+            topLeft = Offset(boardLeft, boardTop),
+            size = Size(boardWidth, boardHeight),
+            cornerRadius = boardRadius,
+            style = Stroke(sw),
         )
-        val lineAlpha = 1f
-        val lineY1 = h * 0.48f
-        val lineY2 = h * 0.62f
-        val lineY3 = h * 0.76f
-        val lineLeft = w * 0.3f
-        val lineRight = w * 0.7f
-        drawLine(color.copy(alpha = lineAlpha), Offset(lineLeft, lineY1), Offset(lineRight, lineY1), sw, StrokeCap.Round)
-        drawLine(color.copy(alpha = lineAlpha * 0.7f), Offset(lineLeft, lineY2), Offset(lineRight * 0.85f, lineY2), sw, StrokeCap.Round)
-        drawLine(color.copy(alpha = lineAlpha * 0.4f), Offset(lineLeft, lineY3), Offset(lineRight * 0.6f, lineY3), sw, StrokeCap.Round)
+        drawRoundRect(
+            color = color.copy(alpha = AlphaIconBg),
+            topLeft = Offset(clipLeft, clipTop),
+            size = Size(clipWidth, clipHeight),
+            cornerRadius = clipRadius,
+        )
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(clipLeft, clipTop),
+            size = Size(clipWidth, clipHeight),
+            cornerRadius = clipRadius,
+            style = Stroke(sw),
+        )
+
+        val markCenterX = w * 0.34f
+        val markCenterY = h * 0.56f
+        drawCircle(
+            color = color.copy(alpha = 0.16f),
+            radius = w * 0.09f,
+            center = Offset(markCenterX, markCenterY),
+        )
+        drawLine(
+            color,
+            Offset(markCenterX - w * 0.04f, markCenterY),
+            Offset(markCenterX - w * 0.01f, markCenterY + h * 0.04f),
+            sw,
+            StrokeCap.Round,
+        )
+        drawLine(
+            color,
+            Offset(markCenterX - w * 0.01f, markCenterY + h * 0.04f),
+            Offset(markCenterX + w * 0.06f, markCenterY - h * 0.04f),
+            sw,
+            StrokeCap.Round,
+        )
+
+        val lineLeft = w * 0.47f
+        drawLine(
+            color,
+            Offset(lineLeft, h * 0.46f),
+            Offset(w * 0.72f, h * 0.46f),
+            sw,
+            StrokeCap.Round,
+        )
+        drawLine(
+            color.copy(alpha = 0.72f),
+            Offset(lineLeft, h * 0.61f),
+            Offset(w * 0.67f, h * 0.61f),
+            sw,
+            StrokeCap.Round,
+        )
     }
 }
 
@@ -633,7 +726,6 @@ private fun AnimatedHourglassIcon(color: Color, isAnimating: Boolean = true) {
     } else {
         angle = 0f
     }
-    val drawColor = if (isAnimating) color else color.copy(alpha = AlphaTertiary)
     val hgPath = remember { Path() }
     Canvas(modifier = Modifier.size(SizeBadge)) {
         rotate(angle) {
@@ -647,10 +739,10 @@ private fun AnimatedHourglassIcon(color: Color, isAnimating: Boolean = true) {
             hgPath.lineTo(w * 0.2f, h * 0.9f)
             hgPath.lineTo(w * 0.45f, h * 0.45f)
             hgPath.close()
-            drawPath(hgPath, drawColor, style = Stroke(SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round))
+            drawPath(hgPath, color, style = Stroke(SizeStrokeThin.dp.toPx(), cap = StrokeCap.Round))
 
             drawCircle(
-                drawColor.copy(alpha = AlphaTertiary),
+                color.copy(alpha = AlphaTertiary),
                 radius = w * 0.08f,
                 center = Offset(w / 2, h * 0.72f),
             )
@@ -678,27 +770,26 @@ private fun AnimatedTickIcon(color: Color, isRunning: Boolean) {
     } else {
         angle = 0f 
     }
-    val drawColor = if (isRunning) color else color.copy(alpha = AlphaTertiary)
     Canvas(modifier = Modifier.size(SizeBadge)) {
         val cx = size.width / 2
         val cy = size.height / 2
         val r = size.minDimension / 2 * 0.85f
 
         drawCircle(
-            drawColor.copy(alpha = AlphaDisabled),
+            color.copy(alpha = AlphaDisabled),
             radius = r,
             style = Stroke(SizeStrokeThin.dp.toPx()),
         )
 
         val rad = toRadians(angle.toDouble() - 90.0)
         drawLine(
-            drawColor,
+            color,
             Offset(cx, cy),
             Offset(cx + (r * 0.7f * cos(rad)).toFloat(), cy + (r * 0.7f * sin(rad)).toFloat()),
             strokeWidth = SizeStrokeThin.dp.toPx(),
             cap = StrokeCap.Round,
         )
-        drawCircle(drawColor, radius = SizeStrokeThin.dp.toPx(), center = Offset(cx, cy))
+        drawCircle(color, radius = SizeStrokeThin.dp.toPx(), center = Offset(cx, cy))
     }
 }
 
@@ -781,7 +872,11 @@ private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Co
     if (DownloadShape.isDownloadLike(event)) {
         AnimatedDownloadIcon(color)
     } else if (event.appIcon != null) {
-        PillBitmapIcon(drawable = event.appIcon, round = false)
+        PillBitmapIcon(
+            drawable = event.appIcon,
+            round = false,
+            tint = tint.takeIf { pillIconIsTemplate(event) },
+        )
     } else if (hasProgress) {
         AnimatedDownloadIcon(color)
     } else {
@@ -796,26 +891,32 @@ private const val DownloadTrayRatio = 0.143f
 internal fun AnimatedDownloadIcon(color: Color, glyphSize: Dp = SizeBadge) {
     Canvas(modifier = Modifier.size(glyphSize)) {
         val cx = size.width / 2f
-        val cy = size.height / 2f
         // Proportional, not a fixed dp: the same glyph is drawn at badge size on the pill and at
         // button size on the transfer card, and a 1.6dp stroke reads as a hairline at 48dp.
         val sw = size.width * DownloadStrokeRatio
-        val arrowOffset = 0f
-
-        val trayY = size.height * 0.82f
-        val trayHalf = size.width * 0.32f
+        val trayTop = size.height * 0.7f
         val trayDepth = size.height * DownloadTrayRatio
-        drawLine(color, Offset(cx - trayHalf, trayY), Offset(cx - trayHalf, trayY + trayDepth), sw, StrokeCap.Round)
-        drawLine(color, Offset(cx - trayHalf, trayY + trayDepth), Offset(cx + trayHalf, trayY + trayDepth), sw, StrokeCap.Round)
-        drawLine(color, Offset(cx + trayHalf, trayY + trayDepth), Offset(cx + trayHalf, trayY), sw, StrokeCap.Round)
+        val trayHalf = size.width * 0.28f
+        val trayRadius = CornerRadius(size.width * 0.08f)
 
-        val arrowTop = size.height * 0.12f + arrowOffset
-        val arrowBottom = size.height * 0.62f + arrowOffset
+        drawRoundRect(
+            color = color.copy(alpha = AlphaIconBg),
+            topLeft = Offset(cx - trayHalf, trayTop),
+            size = Size(trayHalf * 2f, trayDepth),
+            cornerRadius = trayRadius,
+        )
+        drawLine(color, Offset(cx - trayHalf, trayTop), Offset(cx - trayHalf, trayTop + trayDepth), sw, StrokeCap.Round)
+        drawLine(color, Offset(cx - trayHalf, trayTop + trayDepth), Offset(cx + trayHalf, trayTop + trayDepth), sw, StrokeCap.Round)
+        drawLine(color, Offset(cx + trayHalf, trayTop + trayDepth), Offset(cx + trayHalf, trayTop), sw, StrokeCap.Round)
+
+        val arrowTop = size.height * 0.14f
+        val arrowBottom = size.height * 0.5f
         drawLine(color, Offset(cx, arrowTop), Offset(cx, arrowBottom), sw, StrokeCap.Round)
 
-        val headSize = size.width * 0.22f
-        drawLine(color, Offset(cx - headSize, arrowBottom - headSize), Offset(cx, arrowBottom), sw, StrokeCap.Round)
-        drawLine(color, Offset(cx + headSize, arrowBottom - headSize), Offset(cx, arrowBottom), sw, StrokeCap.Round)
+        val headY = size.height * 0.62f
+        val headHalf = size.width * 0.18f
+        drawLine(color, Offset(cx - headHalf, arrowBottom), Offset(cx, headY), sw, StrokeCap.Round)
+        drawLine(color, Offset(cx + headHalf, arrowBottom), Offset(cx, headY), sw, StrokeCap.Round)
     }
 }
 
@@ -911,7 +1012,7 @@ private fun SportsTeamLabel(name: String, icon: Drawable?, color: Color) {
 private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch, tint: Color? = null) {
     val app = event.previousApp ?: event.recentApps.firstOrNull()
     app?.appIcon?.let { PillBitmapIcon(drawable = it, round = false) }
-        ?: AnimatedRecentsIcon(tint ?: SubtleGray)
+        ?: AnimatedRecentsIcon(tint ?: OnCardText)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -1252,9 +1353,11 @@ private fun MarqueeLabel(
 
 @Composable
 private fun AudioRecordingPillIcon(event: IslandEvent.AudioRecording, tint: Color? = null) {
+    // Paused is a state colour, not a dimmed one: SubtleGray carries the stack's secondary-text
+    // alpha, which reads as the glyph having faded out. MicOff already says paused.
     val color = tint ?: when (event.state) {
         RecordingState.RECORDING -> RedAccent
-        RecordingState.PAUSED -> SubtleGray
+        RecordingState.PAUSED -> OnCardText
         RecordingState.SAVED -> GreenAccent
     }
     val vector = when (event.state) {
@@ -1339,7 +1442,7 @@ private fun BtText(event: IslandEvent.Bluetooth, modifier: Modifier, overrideCol
 @Composable
 private fun TimerText(event: IslandEvent.Timer, modifier: Modifier, overrideColor: Color? = null) {
     if (event.endTimeMs > 0L) {
-        val color = overrideColor ?: if (event.isPaused) SubtleGray else BlueAccent
+        val color = overrideColor ?: BlueAccent
         if (event.isPaused) {
             Text(stringResource(R.string.ax_dynamic_bar_paused), color = color, style = PillMono, modifier = modifier)
         } else {
@@ -1362,7 +1465,7 @@ private fun TimerText(event: IslandEvent.Timer, modifier: Modifier, overrideColo
 
 @Composable
 private fun StopwatchText(event: IslandEvent.Stopwatch, modifier: Modifier, overrideColor: Color? = null) {
-    val color = overrideColor ?: if (event.isRunning) MintAccent else SubtleGray
+    val color = overrideColor ?: MintAccent
     if (!event.isRunning) {
         Text(stringResource(R.string.ax_dynamic_bar_paused), color = color, style = PillMono, modifier = modifier)
     } else {

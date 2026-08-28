@@ -365,7 +365,15 @@ object AlphaColors {
         /** Media takes the body untinted — see the class note. */
         val mediaBody: Color @Composable @ReadOnlyComposable get() = surfaceContainerHigh
 
-        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.62f
+        /**
+         * Light is deliberately *lower* than dark, which looks backwards until you try it. The
+         * event palette's light variants are all dark, low-luminance colours, so lerping a light
+         * body toward one mostly darkens it instead of colouring it — at 0.62 blue, mint and green
+         * all landed within two luminance points of each other as muddy mid-grey discs. The hue
+         * they were supposed to carry is carried by the ring instead, which is solved against the
+         * body by `progressColorOn`.
+         */
+        val tintAmount: Float @Composable @ReadOnlyComposable get() = if (isDarkTheme) 0.45f else 0.35f
 
         /**
          * Same pairing as [DbStatusBarChip]: open when frost is behind the pill, denser when the
@@ -386,11 +394,12 @@ object AlphaColors {
 
         val rimWidth = 1.dp
 
+        /**
+         * The single content colour for every lane chip and the pill. The tinted body is banded to
+         * carry it (`bodyCarrying`) rather than the glyph being re-picked per event, so no chip can
+         * end up dark while the ones beside it are light.
+         */
         val text: Color @Composable @ReadOnlyComposable get() = onSurface
-
-        /** Second candidate when the tinted body is too light for [text] — see `contentColorOn`. */
-        val textInverse: Color
-            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.inverseOnSurface
 
         val textSecondary: Color
             @Composable @ReadOnlyComposable
