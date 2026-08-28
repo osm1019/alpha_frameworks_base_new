@@ -201,12 +201,21 @@ sealed class IslandEvent(open val priority: Int, val id: String) : Comparable<Is
         val text: String = "",
         val appName: String = "",
         val appIcon: Drawable? = null,
+        /** The notification's own largeIcon — a video thumbnail or cover, when the app ships one. */
+        val largeIcon: Drawable? = null,
         val sbn: StatusBarNotification,
         val actions: List<NotificationAction> = emptyList(),
         val progress: Float = -1f,
         val isIndeterminate: Boolean = false,
+        /**
+         * Decided once, when the event is built, and then carried. A transfer stops *looking* like
+         * one at both ends of its life — it starts indeterminate and ends with no counters at all —
+         * so re-deriving this per post would hand the card back to the app's views exactly at the
+         * start and the finish.
+         */
+        val isTransfer: Boolean = false,
     ) : IslandEvent(priority = 95, id = "promoted_${sbn.key}") {
-        override fun withoutDrawables() = copy(appIcon = null)
+        override fun withoutDrawables() = copy(appIcon = null, largeIcon = null)
     }
 
     data class Sports(

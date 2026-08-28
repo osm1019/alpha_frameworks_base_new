@@ -39,20 +39,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Snooze
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -92,7 +86,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.cos
@@ -1227,7 +1220,7 @@ private fun KeyguardEventActions(
             val filled = index == 0
             ExpressivePillButton(
                 label = notifAction.label.toString(),
-                icon = keyguardActionIcon(kind),
+                icon = actionIcon(kind),
                 contentColor = if (filled) colors.onAccent else colors.accent,
                 backgroundColor = if (filled) colors.accent else colors.tonal,
                 modifier = Modifier.weight(1f),
@@ -1279,20 +1272,6 @@ private const val MaxKeyguardActions = 3
 
 private val RecorderActions =
     setOf(NotificationActionType.PAUSE, NotificationActionType.RESUME, NotificationActionType.STOP)
-
-private fun keyguardActionIcon(kind: NotificationActionType): ImageVector? =
-    when (kind) {
-        NotificationActionType.PAUSE -> Icons.Filled.Pause
-        NotificationActionType.RESUME -> Icons.Filled.PlayArrow
-        NotificationActionType.STOP -> Icons.Filled.Stop
-        NotificationActionType.DELETE -> Icons.Filled.Delete
-        NotificationActionType.RESET -> Icons.Filled.RestartAlt
-        NotificationActionType.LAP -> Icons.Filled.Flag
-        NotificationActionType.ADD_MINUTE -> Icons.Filled.Add
-        NotificationActionType.SNOOZE -> Icons.Filled.Snooze
-        NotificationActionType.DISMISS -> Icons.Filled.Close
-        NotificationActionType.OTHER -> null
-    }
 
 /**
  * The battery card, opened from the lane's battery occupant.

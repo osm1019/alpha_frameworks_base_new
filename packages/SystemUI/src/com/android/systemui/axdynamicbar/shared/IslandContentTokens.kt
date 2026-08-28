@@ -25,7 +25,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -661,6 +670,27 @@ internal fun ExpandedCardLayout(
     }
 }
 
+/**
+ * The glyph for a classified notification action.
+ *
+ * Icon only — the label always comes from the app, because [NotificationActionType] says what an
+ * action *does*, not what it is called. [NotificationActionType.OTHER] draws nothing rather than
+ * a guess.
+ */
+internal fun actionIcon(kind: NotificationActionType): ImageVector? =
+    when (kind) {
+        NotificationActionType.PAUSE -> Icons.Filled.Pause
+        NotificationActionType.RESUME -> Icons.Filled.PlayArrow
+        NotificationActionType.STOP -> Icons.Filled.Stop
+        NotificationActionType.DELETE -> Icons.Filled.Delete
+        NotificationActionType.RESET -> Icons.Filled.RestartAlt
+        NotificationActionType.LAP -> Icons.Filled.Flag
+        NotificationActionType.ADD_MINUTE -> Icons.Filled.Add
+        NotificationActionType.SNOOZE -> Icons.Filled.Snooze
+        NotificationActionType.DISMISS -> Icons.Filled.Close
+        NotificationActionType.OTHER -> null
+    }
+
 @Composable
 internal fun ActionChip(
     label: String,
@@ -746,7 +776,10 @@ internal fun ExpressivePillButton(
         Row(
             modifier = Modifier.height(SizeActionHeight).padding(horizontal = SpacePanel),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SpaceMd),
+            // Centred, like [ActionChip]. Every caller stretches these with weight or
+            // fillMaxWidth, so a start-aligned label sits against the left edge of a pill that is
+            // far wider than it — which reads as a mistake, not as a button.
+            horizontalArrangement = Arrangement.spacedBy(SpaceMd, Alignment.CenterHorizontally),
         ) {
             if (icon != null) {
                 Icon(

@@ -18,6 +18,7 @@ import android.widget.Chronometer
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.android.systemui.axdynamicbar.model.IslandEvent
+import com.android.systemui.axdynamicbar.shared.DownloadShape
 import com.android.systemui.axdynamicbar.model.RecordingState
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -192,7 +193,20 @@ constructor(
                 if (!listening) return
                 val pkg = sbn.packageName ?: return
                 val extras = sbn.notification?.extras ?: return
-                when (classify(sbn)) {
+
+                val route = classify(sbn)
+
+                // A key is one kind of event at a time. A transfer's epilogue reuses the key and
+                // drops its counters — CloudStream re-posts "Download Canceled" with progress 0 of
+                // 0 and no actions — so it stops classifying as a transfer and lands on another
+                // route entirely. Nothing there used to clear the promoted event, which left the
+                // card alive with its last carried percentage and two buttons that do nothing.
+                if (route != NotificationRoute.PROMOTED) {
+                    _promotedOngoingEvents.value =
+                        _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
+                }
+
+                when (route) {
                     NotificationRoute.STOPWATCH -> {
                         val (labels, intents) = clockActionLists(sbn)
                         handleStopwatch(sbn, extras, labels, intents)
@@ -208,18 +222,10 @@ constructor(
                     NotificationRoute.AUDIO_RECORDING_SAVED ->
                         handleAudioRecordingSaved(sbn, extras)
                     NotificationRoute.SPORTS -> handleSportsPosted(sbn, extras, pkg)
-                    NotificationRoute.MEDIA -> {
-                        _promotedOngoingEvents.value =
-                            _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
-                    }
+                    NotificationRoute.MEDIA -> {}
                     NotificationRoute.PROMOTED -> handlePromotedOngoing(sbn, extras, pkg)
                     NotificationRoute.ALERT -> emitGenericAlert(sbn, extras, pkg)
-                    NotificationRoute.IGNORED -> {
-                        if (!sbn.isOngoing) {
-                            _promotedOngoingEvents.value =
-                                _promotedOngoingEvents.value.filter { it.sbn.key != sbn.key }
-                        }
-                    }
+                    NotificationRoute.IGNORED -> {}
                 }
             }
         }
@@ -344,6 +350,19 @@ constructor(
             return NotificationRoute.PROMOTED
         }
         if (transferInFlight && "promoted_ongoing" !in disabledTypes) {
+            return NotificationRoute.PROMOTED
+        }
+        // A transfer stops looking like one the moment it stops moving. Firefox posts progress 0
+        // of 0 while paused; CloudStream re-posts the same key with no counters and no actions to
+        // say "Download Canceled". Both are still that transfer speaking about itself, and letting
+        // them fall to another route stranded the card on its last live figures.
+        //
+        // Once a key is ours it stays ours until the notification is removed. Removal is the only
+        // honest end: it is what the app does when the story is over, and it takes the card with it.
+        if (
+            "promoted_ongoing" !in disabledTypes &&
+                _promotedOngoingEvents.value.any { it.sbn.key == sbn.key }
+        ) {
             return NotificationRoute.PROMOTED
         }
         if (sbn.isOngoing) return NotificationRoute.IGNORED
@@ -1170,10 +1189,39 @@ constructor(
         val progressRaw = extras.getInt("android.progress", -1)
         val progressMax = extras.getInt("android.progressMax", 0)
         val indeterminate = extras.getBoolean("android.progressIndeterminate", false)
-        val progress =
+        val reported =
             if (progressRaw >= 0 && progressMax > 0)
                 (progressRaw.toFloat() / progressMax.toFloat()).coerceIn(0f, 1f)
             else -1f
+
+        // A paused transfer stops reporting a position — Firefox posts 0 of 0 — but the bar it
+        // drew a moment ago is still true, and the pause is not where it restarted from. Carry the
+        // last position we were told; the next post that has one overwrites it, and a finished
+        // transfer drops its ongoing flag, which clears the event outright.
+        val tracked = _promotedOngoingEvents.value.firstOrNull { it.sbn.key == sbn.key }
+
+        // No counters and nothing left to press: the transfer is over, whatever the app calls it.
+        // A pause keeps its actions (Resume / Cancel), which is what separates the two — and only a
+        // pause inherits the position, because a finished transfer has no bar to hold.
+        val ended = reported < 0f && !indeterminate && actions.isEmpty()
+
+        val progress =
+            when {
+                reported >= 0f -> reported
+                ended -> -1f
+                else -> tracked?.progress ?: -1f
+            }
+
+        // A transfer's artwork does not change mid-transfer, and a downloader re-posts about once
+        // a second, so decode it once per key and carry it. Falling through while it is still null
+        // means an app that attaches the thumbnail on a later post is still picked up.
+        val largeIcon =
+            tracked?.largeIcon
+                ?: try {
+                    sbn.notification?.getLargeIcon()?.loadDrawable(context)
+                } catch (_: Exception) {
+                    null
+                }
 
         val event =
             IslandEvent.PromotedOngoing(
@@ -1182,15 +1230,22 @@ constructor(
                 text = text,
                 appName = appName,
                 appIcon = icon,
+                largeIcon = largeIcon,
                 sbn = sbn,
                 actions = actions,
                 progress = progress,
                 isIndeterminate = indeterminate,
             )
 
+        // Answered once per key and carried: neither end of a transfer's life looks like one.
+        val decided =
+            event.copy(
+                isTransfer = tracked?.isTransfer == true || DownloadShape.hasTransferShape(event)
+            )
+
         val current = _promotedOngoingEvents.value.toMutableList()
         current.removeAll { it.sbn.key == sbn.key }
-        current.add(0, event)
+        current.add(0, decided)
         _promotedOngoingEvents.value = current
     }
 

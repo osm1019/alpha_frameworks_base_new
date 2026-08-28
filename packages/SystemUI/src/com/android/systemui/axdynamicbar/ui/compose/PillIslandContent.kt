@@ -143,7 +143,8 @@ internal fun pillIconDrawable(event: IslandEvent): Drawable? =
     when (event) {
         is IslandEvent.Media -> event.albumArt
         is IslandEvent.Sports -> event.team1Icon ?: event.team2Icon ?: event.appIcon
-        is IslandEvent.PromotedOngoing -> if (event.isDownloadLike()) null else event.appIcon
+        is IslandEvent.PromotedOngoing ->
+            if (DownloadShape.isDownloadLike(event)) null else event.appIcon
         is IslandEvent.Call -> event.appIcon
         is IslandEvent.Notification -> event.senderIcon ?: event.appIcon
         else -> null
@@ -768,24 +769,12 @@ private fun NotificationPillIcon(event: IslandEvent.Notification) {
     } ?: Icon(Icons.Filled.Notifications, null, tint = BlueAccent, modifier = Modifier.size(SizeBadge))
 }
 
-private val DOWNLOAD_KEYWORDS = Regex(
-    "download",
-    RegexOption.IGNORE_CASE,
-)
-
-private fun IslandEvent.PromotedOngoing.isDownloadLike(): Boolean =
-    (progress >= 0f || isIndeterminate) && (
-        DOWNLOAD_KEYWORDS.containsMatchIn(title) ||
-            DOWNLOAD_KEYWORDS.containsMatchIn(text) ||
-            DOWNLOAD_KEYWORDS.containsMatchIn(shortText)
-    )
-
 @Composable
 private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Color? = null) {
     val hasProgress = event.progress >= 0f || event.isIndeterminate
     val color = tint ?: BlueAccent
 
-    if (event.isDownloadLike()) {
+    if (DownloadShape.isDownloadLike(event)) {
         AnimatedDownloadIcon(color)
     } else if (event.appIcon != null) {
         Image(
@@ -801,17 +790,22 @@ private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Co
     }
 }
 
+private const val DownloadStrokeRatio = 0.115f
+private const val DownloadTrayRatio = 0.143f
+
 @Composable
-private fun AnimatedDownloadIcon(color: Color) {
-    Canvas(modifier = Modifier.size(SizeBadge)) {
+internal fun AnimatedDownloadIcon(color: Color, glyphSize: Dp = SizeBadge) {
+    Canvas(modifier = Modifier.size(glyphSize)) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val sw = 1.6f.dp.toPx()
+        // Proportional, not a fixed dp: the same glyph is drawn at badge size on the pill and at
+        // button size on the transfer card, and a 1.6dp stroke reads as a hairline at 48dp.
+        val sw = size.width * DownloadStrokeRatio
         val arrowOffset = 0f
 
         val trayY = size.height * 0.82f
         val trayHalf = size.width * 0.32f
-        val trayDepth = SizeStrokeWidth.toPx()
+        val trayDepth = size.height * DownloadTrayRatio
         drawLine(color, Offset(cx - trayHalf, trayY), Offset(cx - trayHalf, trayY + trayDepth), sw, StrokeCap.Round)
         drawLine(color, Offset(cx - trayHalf, trayY + trayDepth), Offset(cx + trayHalf, trayY + trayDepth), sw, StrokeCap.Round)
         drawLine(color, Offset(cx + trayHalf, trayY + trayDepth), Offset(cx + trayHalf, trayY), sw, StrokeCap.Round)

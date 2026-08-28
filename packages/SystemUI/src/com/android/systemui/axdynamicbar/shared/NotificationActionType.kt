@@ -76,6 +76,9 @@ fun Notification.Action.classify(context: Context, packageName: String): Notific
     return when {
         label.contains("stop") -> NotificationActionType.STOP
         label.contains("delete") -> NotificationActionType.DELETE
+        // A transfer's terminal action. Not STOP: stopping a recorder keeps what it captured,
+        // cancelling a download keeps nothing, and the glyph should say so.
+        label.contains("cancel") -> NotificationActionType.DISMISS
         label.contains("pause") -> NotificationActionType.PAUSE
         label.contains("resume") || label.contains("play") -> NotificationActionType.RESUME
         label.contains("lap") -> NotificationActionType.LAP
