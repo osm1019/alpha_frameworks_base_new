@@ -95,6 +95,26 @@ import java.lang.Math.toRadians
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
+private val PillBitmapIconSize = 16.dp
+
+@Composable
+private fun PillBitmapIcon(
+    drawable: Drawable,
+    round: Boolean,
+    size: Dp = PillBitmapIconSize,
+    contentDescription: String? = null,
+) {
+    Image(
+        bitmap = drawable.toScaledBitmap(size),
+        contentDescription = contentDescription,
+        modifier = Modifier.size(size).clip(if (round) CircleShape else ShapeXs),
+        contentScale = ContentScale.Crop,
+    )
+}
+
+private fun sportsUsesRoundMask(event: IslandEvent.Sports): Boolean =
+    event.team1Icon != null || event.team2Icon != null
+
 @Composable
 internal fun PillEventIcon(
     event: IslandEvent,
@@ -147,14 +167,15 @@ internal fun pillIconDrawable(event: IslandEvent): Drawable? =
             if (DownloadShape.isDownloadLike(event)) null else event.appIcon
         is IslandEvent.Call -> event.appIcon
         is IslandEvent.Notification -> event.senderIcon ?: event.appIcon
+        is IslandEvent.AppSwitch -> (event.previousApp ?: event.recentApps.firstOrNull())?.appIcon
         else -> null
     }
 
 /** Whether [pillIconDrawable] is masked to a circle rather than the rounded-square plate. */
 internal fun pillIconIsRound(event: IslandEvent): Boolean =
     when (event) {
-        is IslandEvent.Media,
-        is IslandEvent.Sports -> true
+        is IslandEvent.Media -> true
+        is IslandEvent.Sports -> sportsUsesRoundMask(event)
         is IslandEvent.Notification -> event.isConversation && event.senderIcon != null
         else -> false
     }
@@ -168,12 +189,7 @@ private fun StaticPillEventIcon(event: IslandEvent, tint: Color? = null) {
         is IslandEvent.AospChip -> AospChipPillIcon(event, tint, animated = false)
         is IslandEvent.PromotedOngoing ->
             if (event.appIcon != null) {
-                Image(
-                    bitmap = event.appIcon.toScaledBitmap(16.dp),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp).clip(ShapeXs),
-                    contentScale = ContentScale.Crop,
-                )
+                PillBitmapIcon(drawable = event.appIcon, round = false)
             } else {
                 Icon(
                     Icons.Filled.Notifications,
@@ -671,7 +687,11 @@ private fun AnimatedTickIcon(color: Color, isRunning: Boolean) {
         val cy = size.height / 2
         val r = size.minDimension / 2 * 0.85f
 
-        drawCircle(drawColor.copy(alpha = AlphaDisabled), radius = r, style = Stroke(1.2f.dp.toPx()))
+        drawCircle(
+            drawColor.copy(alpha = AlphaDisabled),
+            radius = r,
+            style = Stroke(SizeStrokeThin.dp.toPx()),
+        )
 
         val rad = toRadians(angle.toDouble() - 90.0)
         drawLine(
@@ -732,15 +752,8 @@ private fun AnimatedRecentsIcon(color: Color) {
 @Composable
 private fun CallPillIcon(event: IslandEvent.Call) {
     val icon = event.appIcon
-    icon?.let {
-        Image(
-            bitmap = it.toScaledBitmap(16.dp),
-            contentDescription = null,
-            modifier =
-                Modifier.size(16.dp)
-                    .clip(ShapeXs),
-        )
-    } ?: Icon(Icons.Filled.Call, null, tint = GreenAccent, modifier = Modifier.size(SizeBadge))
+    icon?.let { PillBitmapIcon(drawable = it, round = false) }
+        ?: Icon(Icons.Filled.Call, null, tint = GreenAccent, modifier = Modifier.size(SizeBadge))
 }
 
 @Composable
@@ -758,13 +771,7 @@ private fun NotificationPillIcon(event: IslandEvent.Notification) {
                 isRound = true,
             )
         } else {
-            Image(
-                bitmap = it.toScaledBitmap(16.dp),
-                contentDescription = null,
-                modifier =
-                    Modifier.size(16.dp)
-                        .clip(if (isRound) CircleShape else ShapeXs),
-            )
+            PillBitmapIcon(drawable = it, round = isRound)
         }
     } ?: Icon(Icons.Filled.Notifications, null, tint = BlueAccent, modifier = Modifier.size(SizeBadge))
 }
@@ -777,12 +784,7 @@ private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Co
     if (DownloadShape.isDownloadLike(event)) {
         AnimatedDownloadIcon(color)
     } else if (event.appIcon != null) {
-        Image(
-            bitmap = event.appIcon.toScaledBitmap(16.dp),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp).clip(ShapeXs),
-            contentScale = ContentScale.Crop,
-        )
+        PillBitmapIcon(drawable = event.appIcon, round = false)
     } else if (hasProgress) {
         AnimatedDownloadIcon(color)
     } else {
@@ -843,12 +845,7 @@ private fun PromotedOngoingText(event: IslandEvent.PromotedOngoing, modifier: Mo
 private fun SportsPillIcon(event: IslandEvent.Sports) {
     val icon = event.team1Icon ?: event.team2Icon ?: event.appIcon
     if (icon != null) {
-        Image(
-            bitmap = icon.toScaledBitmap(16.dp),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp).clip(CircleShape),
-            contentScale = ContentScale.Crop,
-        )
+        PillBitmapIcon(drawable = icon, round = sportsUsesRoundMask(event))
     } else {
         AnimatedTrophyIcon(accentColorFor(event))
     }
@@ -902,12 +899,7 @@ private fun SportsText(event: IslandEvent.Sports, modifier: Modifier, overrideCo
 private fun SportsTeamLabel(name: String, icon: Drawable?, color: Color) {
     val badgeSize = 14.dp
     if (icon != null) {
-        Image(
-            bitmap = icon.toScaledBitmap(badgeSize),
-            contentDescription = name,
-            modifier = Modifier.size(badgeSize).clip(CircleShape),
-            contentScale = ContentScale.Crop,
-        )
+        PillBitmapIcon(drawable = icon, round = true, size = badgeSize, contentDescription = name)
     } else {
         Text(
             name.take(3).uppercase(),
@@ -921,14 +913,8 @@ private fun SportsTeamLabel(name: String, icon: Drawable?, color: Color) {
 @Composable
 private fun AppSwitchPillIcon(event: IslandEvent.AppSwitch, tint: Color? = null) {
     val app = event.previousApp ?: event.recentApps.firstOrNull()
-    app?.appIcon?.let {
-        Image(
-            bitmap = it.toScaledBitmap(16.dp),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp).clip(CircleShape),
-            contentScale = ContentScale.Crop,
-        )
-    } ?: AnimatedRecentsIcon(tint ?: SubtleGray)
+    app?.appIcon?.let { PillBitmapIcon(drawable = it, round = false) }
+        ?: AnimatedRecentsIcon(tint ?: SubtleGray)
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -952,8 +938,8 @@ private fun BiometricUnlockIcon(tint: Color? = null) {
             label = "bio_check",
         )
 
-    Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(18.dp)) {
+    Box(modifier = Modifier.size(SizeBadge), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(SizeBadge)) {
             val inset = 1.dp.toPx()
             drawArc(
                 color = color,
@@ -971,7 +957,7 @@ private fun BiometricUnlockIcon(tint: Color? = null) {
                 Icons.Filled.Lock,
                 null,
                 tint = color.copy(alpha = 1f - checkAlpha),
-                modifier = Modifier.size(10.dp),
+                modifier = Modifier.size(8.dp),
             )
         }
         if (checkAlpha > 0f) {
@@ -979,7 +965,7 @@ private fun BiometricUnlockIcon(tint: Color? = null) {
                 Icons.Filled.Check,
                 null,
                 tint = color.copy(alpha = checkAlpha),
-                modifier = Modifier.size(10.dp),
+                modifier = Modifier.size(8.dp),
             )
         }
     }
