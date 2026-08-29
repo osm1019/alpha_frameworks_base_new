@@ -18,6 +18,8 @@ package com.android.server.soundtrigger_middleware;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.Context;
+import android.database.ContentObserver;
 import android.media.soundtrigger.ModelParameterRange;
 import android.media.soundtrigger.PhraseSoundModel;
 import android.media.soundtrigger.Properties;
@@ -29,7 +31,9 @@ import android.media.soundtrigger.SoundModelType;
 import android.media.soundtrigger_middleware.RecognitionEventSys;
 import android.os.IBinder;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.os.SystemProperties;
+import android.provider.Settings;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
@@ -54,6 +58,11 @@ import java.util.concurrent.TimeUnit;
  * <p>No detection happens here or anywhere else on such a device. Waking the app on a timer means
  * it also listens to empty rooms, which a real always-on model would have skipped. The gate below
  * is what keeps that bounded: it is user consent, and nothing listens without it.
+ *
+ * <p>That consent is read here, from the Secure setting, because this is what owns the
+ * microphone. It used to arrive as a system property written by the app that renders the
+ * results, which made a display surface the thing deciding whether the mic ran -- its teardown
+ * disarmed recognition, and nothing re-armed it if that surface never came back.
  */
 class SoftwareMusicHal implements ISoundTriggerHal {
     private static final String TAG = "SoftwareMusicHal";
@@ -62,8 +71,8 @@ class SoftwareMusicHal implements ISoundTriggerHal {
     private static final String MUSIC_MODEL_VENDOR_UUID =
             "9f6ad62a-1f0b-11e7-87c5-40a8f03d3f15";
 
-    /** Armed by the surface that renders the results; nothing listens while this is false. */
-    private static final String GATE_PROP = "sys.now_playing.enabled";
+    /** User consent, read straight from the setting; nothing listens while this is false. */
+    private static final String GATE_SETTING = "now_playing_enabled";
 
     private static final String POLL_INTERVAL_PROP = "sys.now_playing.poll_ms";
     private static final int DEFAULT_POLL_INTERVAL_MILLIS = 30_000;
@@ -86,7 +95,7 @@ class SoftwareMusicHal implements ISoundTriggerHal {
     private ScheduledExecutorService mExecutor;
 
     @GuardedBy("mLock")
-    private Runnable mGateCallback;
+    private ContentObserver mGateObserver;
 
     @GuardedBy("mLock")
     private boolean mGateArmed;
@@ -98,6 +107,7 @@ class SoftwareMusicHal implements ISoundTriggerHal {
      */
     @GuardedBy("mLock")
     private long mLastTriggerElapsed = -1;
+    private final @NonNull Context mContext;
 
     private static final class Model {
         final @NonNull ModelCallback callback;
@@ -110,7 +120,8 @@ class SoftwareMusicHal implements ISoundTriggerHal {
         }
     }
 
-    SoftwareMusicHal(@NonNull ISoundTriggerHal delegate) {
+    SoftwareMusicHal(@NonNull Context context, @NonNull ISoundTriggerHal delegate) {
+        mContext = context;
         mDelegate = delegate;
     }
 
@@ -123,8 +134,9 @@ class SoftwareMusicHal implements ISoundTriggerHal {
                 SystemProperties.getInt(POLL_INTERVAL_PROP, DEFAULT_POLL_INTERVAL_MILLIS));
     }
 
-    private static boolean gateArmed() {
-        return SystemProperties.getBoolean(GATE_PROP, false);
+    private boolean gateArmed() {
+        return Settings.Secure.getIntForUser(mContext.getContentResolver(), GATE_SETTING, 1,
+                UserHandle.USER_CURRENT) != 0;
     }
 
     // -- Interception --------------------------------------------------------------------------
@@ -300,38 +312,42 @@ class SoftwareMusicHal implements ISoundTriggerHal {
 
     @GuardedBy("mLock")
     private void ensureGateWatchedLocked() {
-        if (mGateCallback != null) {
+        if (mGateObserver != null) {
             return;
         }
         mGateArmed = gateArmed();
-        // Fires for every property on the device, so only real transitions are worth acting on.
-        mGateCallback = () -> {
-            synchronized (mLock) {
-                final boolean armed = gateArmed();
-                if (armed == mGateArmed) {
-                    return;
-                }
-                mGateArmed = armed;
-                Slog.i(TAG, "Ambient music gate " + (armed ? "armed" : "disarmed"));
-                for (Map.Entry<Integer, Model> entry : mModels.entrySet()) {
-                    if (armed) {
-                        scheduleLocked(entry.getKey(), entry.getValue());
-                    } else {
-                        cancelLocked(entry.getValue());
+        mGateObserver = new ContentObserver(null) {
+            @Override
+            public void onChange(boolean selfChange) {
+                synchronized (mLock) {
+                    final boolean armed = gateArmed();
+                    if (armed == mGateArmed) {
+                        return;
+                    }
+                    mGateArmed = armed;
+                    Slog.i(TAG, "Ambient music gate " + (armed ? "armed" : "disarmed"));
+                    for (Map.Entry<Integer, Model> entry : mModels.entrySet()) {
+                        if (armed) {
+                            scheduleLocked(entry.getKey(), entry.getValue());
+                        } else {
+                            cancelLocked(entry.getValue());
+                        }
                     }
                 }
             }
         };
-        SystemProperties.addChangeCallback(mGateCallback);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.Secure.getUriFor(GATE_SETTING), false, mGateObserver,
+                UserHandle.USER_ALL);
     }
 
     @GuardedBy("mLock")
     private void releaseGateWatchLocked() {
-        if (mGateCallback == null) {
+        if (mGateObserver == null) {
             return;
         }
-        SystemProperties.removeChangeCallback(mGateCallback);
-        mGateCallback = null;
+        mContext.getContentResolver().unregisterContentObserver(mGateObserver);
+        mGateObserver = null;
         if (mExecutor != null) {
             mExecutor.shutdown();
             mExecutor = null;

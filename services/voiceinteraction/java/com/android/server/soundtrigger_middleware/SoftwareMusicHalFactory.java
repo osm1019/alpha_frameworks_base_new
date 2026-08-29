@@ -17,6 +17,7 @@
 package com.android.server.soundtrigger_middleware;
 
 import android.annotation.NonNull;
+import android.content.Context;
 
 /**
  * Wraps another factory's HAL in {@link SoftwareMusicHal}.
@@ -29,14 +30,16 @@ import android.annotation.NonNull;
  * arming the session, not this interception.
  */
 class SoftwareMusicHalFactory implements HalFactory {
+    private final @NonNull Context mContext;
     private final @NonNull HalFactory mDelegate;
 
-    SoftwareMusicHalFactory(@NonNull HalFactory delegate) {
+    SoftwareMusicHalFactory(@NonNull Context context, @NonNull HalFactory delegate) {
+        mContext = context;
         mDelegate = delegate;
     }
 
     @Override
     public ISoundTriggerHal create() {
-        return new SoftwareMusicHal(mDelegate.create());
+        return new SoftwareMusicHal(mContext, mDelegate.create());
     }
 }
