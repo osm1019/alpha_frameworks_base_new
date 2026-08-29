@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -112,7 +113,18 @@ internal fun MediaSessionPager(
                 key = { page -> sessions[page].sessionKey },
                 overscrollEffect = overscroll,
             ) { page ->
-                content(sessions[page])
+                // The pager's horizontalAlignment only reaches the cross axis, so a page narrower
+                // than the viewport is placed at its leading edge with every leftover pixel piled
+                // on the end. The keyguard card caps itself at ExpandedMaxWidth, so anything but a
+                // 420dp-wide screen left it visibly off-centre.
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    content(sessions[page])
+                }
             }
             if (pagerState.pageCount > 1) {
                 SessionPagerDots(
