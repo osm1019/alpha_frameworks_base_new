@@ -212,9 +212,24 @@ class SoftwareMusicHal implements ISoundTriggerHal {
             mDelegate.forceRecognitionEvent(modelHandle);
             return;
         }
-        // The app polls this every few seconds as a liveness check. Honouring it literally would
-        // open the mic at that rate, so the poll interval stays the only thing that triggers.
-        Slog.v(TAG, "Ignoring forced recognition on software handle " + modelHandle);
+        // The app polls this every few seconds as a liveness check, so honouring it literally
+        // would open the mic at that rate. Honouring it no more often than the poll interval
+        // costs nothing extra and makes the poke a recovery path: if a session ever loses its
+        // timer, the app's own liveness check is what starts it listening again.
+        synchronized (mLock) {
+            final Model model = mModels.get(modelHandle);
+            if (model == null || !model.started || !mGateArmed) {
+                Slog.v(TAG, "Ignoring forced recognition on idle handle " + modelHandle);
+                return;
+            }
+            if (mLastTriggerElapsed >= 0
+                    && SystemClock.elapsedRealtime() - mLastTriggerElapsed
+                            < pollIntervalMillis()) {
+                return;
+            }
+            cancelLocked(model);
+        }
+        trigger(modelHandle);
     }
 
     @Override
