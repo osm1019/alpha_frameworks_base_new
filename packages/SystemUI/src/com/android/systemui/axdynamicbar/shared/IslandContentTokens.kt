@@ -476,6 +476,17 @@ private fun buildColorScheme(raw: Color): IslandColorScheme {
     )
 }
 
+/**
+ * [IslandColorScheme.tonal] for a caller that brings its own hue rather than the event's.
+ *
+ * Every keyguard panel button is this plate; most take [IslandColorScheme.tonal] straight, because
+ * one card means one thing and the event's accent says what. The battery panel is the exception --
+ * its two buttons mean different things, so they colour-code -- and it was spelling the formula out
+ * inline, which is a second copy of both the alpha and the light-theme contrast step.
+ */
+@Composable
+internal fun tonalOf(raw: Color): Color = buildColorScheme(raw).tonal
+
 private fun ensureContrast(color: Color): Color {
     val lum = ColorUtils.calculateLuminance(color.toArgb()).toFloat()
     return if (lum > 0.5f) darkenColor(color, keep = 0.55f) else color

@@ -1319,7 +1319,7 @@ internal fun KeyguardBatteryPanel(
                             label = stringResource(R.string.ax_dynamic_bar_battery_usage),
                             icon = Icons.Filled.BarChart,
                             contentColor = BlueAccent,
-                            backgroundColor = BlueAccent.copy(alpha = AlphaFaint),
+                            backgroundColor = tonalOf(BlueAccent),
                             modifier = Modifier.weight(1f),
                             // Settings waits on the bouncer either way; closing is what tells you
                             // the tap landed, since the card would otherwise cover the whole answer.
@@ -1335,7 +1335,7 @@ internal fun KeyguardBatteryPanel(
                             label = stringResource(R.string.ax_dynamic_bar_dismiss),
                             icon = Icons.Filled.Close,
                             contentColor = RedAccent,
-                            backgroundColor = RedAccent.copy(alpha = AlphaFaint),
+                            backgroundColor = tonalOf(RedAccent),
                             modifier = Modifier.weight(1f),
                             onClick = onDismiss,
                         )

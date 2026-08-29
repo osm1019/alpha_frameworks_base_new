@@ -536,10 +536,11 @@ object AlphaColors {
         val progressTrail: Color @Composable @ReadOnlyComposable get() = onSurface.copy(alpha = 0.92f)
         val progressThumb: Color @Composable @ReadOnlyComposable get() = onSurface
 
-        /** Buttons that end up on the card from a notification action. */
-        val actionButton: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
-        val actionButtonText: Color
-            @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimary
+        // No action-button pair here on purpose. The keyguard card's buttons are the tonal plate
+        // from `IslandColorScheme.tonal` -- the event's accent at a tenth -- because the card
+        // floats over the wallpaper and a filled button would be the loudest thing on the
+        // lockscreen. A `primary`/`onPrimary` pair was declared here once and never read by
+        // anything.
     }
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────
