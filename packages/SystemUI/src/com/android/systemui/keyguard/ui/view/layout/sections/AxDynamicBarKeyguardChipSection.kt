@@ -29,13 +29,16 @@ private const val CHIP_ABOVE_LOCK_MARGIN_DP = 12f
 private const val EXPANDED_BOTTOM_PROTECTION_DP = 16f
 private const val UNSET = -1
 
-/** Notifications and smartspace only. The clock stays put — the card sits below it. */
+/**
+ * Notifications, smartspace and lockscreen widgets. The clock stays put — the card sits below it.
+ */
 private val HIDDEN_VIEW_IDS = listOf(
     R.id.shared_notification_container,
     R.id.notificationShelf,
     R.id.bc_smartspace_view,
     R.id.smartspace_card_pager,
     R.id.smartspace_page_indicator,
+    R.id.keyguard_widgets_area,
 )
 
 private fun Float.dpToPx(context: Context): Int =
