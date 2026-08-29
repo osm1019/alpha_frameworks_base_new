@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
@@ -208,6 +209,15 @@ private fun TransferExpanded(
                     contentDescription = null,
                     modifier = Modifier.size(SizeButtonLg).clip(ShapeIconLarge),
                     contentScale = ContentScale.Crop,
+                    // The fallback is the notification's small icon, which is a template by
+                    // contract -- a flat white glyph the consumer is meant to tint. A largeIcon is
+                    // a picture and is never tinted. See [pillIconIsTemplate].
+                    colorFilter =
+                        if (event.largeIcon == null && pillIconIsTemplate(event)) {
+                            ColorFilter.tint(glyph)
+                        } else {
+                            null
+                        },
                 )
             } else {
                 AnimatedDownloadIcon(glyph, SizeButtonLg)
