@@ -4,6 +4,7 @@ import android.content.Context
 import android.transition.TransitionManager
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import com.android.axion.compose.host.AxComposeView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -19,7 +20,6 @@ import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.KeyguardIndicationController
-import com.android.systemui.util.ScrimUtils
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.combine
@@ -56,7 +56,8 @@ constructor(
     private val chipViewId = R.id.ax_dynamic_bar_keyguard_chip
     private var bindHandle: DisposableHandle? = null
     private var expansionHandle: DisposableHandle? = null
-    private var enforceAction: Runnable? = null
+    private var enforcePreDraw: ViewTreeObserver.OnPreDrawListener? = null
+    private var enforceHost: ConstraintLayout? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val composeView = AxComposeView(context).apply { id = chipViewId }
@@ -122,13 +123,31 @@ constructor(
         }
     }
 
+    /**
+     * One-shot hiding does not hold: the notification stack, smartspace and widget area each have
+     * their own writers, and a cancelled shade drag re-shows them over a card that never
+     * collapsed. Re-asserting every frame is what covers those paths without having to enumerate
+     * them. It is a no-op once they are hidden, so a steady card costs nothing.
+     */
     private fun rebindPreDrawAction(constraintLayout: ConstraintLayout, expanded: Boolean) {
-        enforceAction?.let { ScrimUtils.get().removeKeyguardPreDrawAction(it) }
-        enforceAction = if (expanded) {
-            Runnable { enforceHidden(constraintLayout) }.also {
-                ScrimUtils.get().addKeyguardPreDrawAction(it)
-            }
-        } else null
+        clearPreDrawAction()
+        if (!expanded) return
+        val listener = ViewTreeObserver.OnPreDrawListener {
+            enforceHidden(constraintLayout)
+            true
+        }
+        constraintLayout.viewTreeObserver.addOnPreDrawListener(listener)
+        enforcePreDraw = listener
+        enforceHost = constraintLayout
+    }
+
+    private fun clearPreDrawAction() {
+        val listener = enforcePreDraw ?: return
+        // The observer is dead once the view detaches; going through the host keeps the removal
+        // on the same tree the listener was added to.
+        enforceHost?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnPreDrawListener(listener)
+        enforcePreDraw = null
+        enforceHost = null
     }
 
     private fun hiddenTargets(constraintLayout: ConstraintLayout): List<View> =
@@ -229,8 +248,7 @@ constructor(
     override fun removeViews(constraintLayout: ConstraintLayout) {
         TransitionManager.endTransitions(constraintLayout)
         clockInteractor.setDynamicBarKeyguardExpanded(false)
-        enforceAction?.let { ScrimUtils.get().removeKeyguardPreDrawAction(it) }
-        enforceAction = null
+        clearPreDrawAction()
         expansionHandle?.dispose()
         expansionHandle = null
         bindHandle?.dispose()
