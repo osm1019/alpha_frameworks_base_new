@@ -167,8 +167,11 @@ internal fun pillIconDrawable(event: IslandEvent): Drawable? =
     when (event) {
         is IslandEvent.Media -> event.albumArt
         is IslandEvent.Sports -> event.team1Icon ?: event.team2Icon ?: event.appIcon
+        // A transfer draws our own glyph, never the app's icon. Downloaders ship a *different*
+        // drawable per state -- Firefox alone has a white one for paused and a grey one for
+        // running -- so borrowing theirs makes the chip change brightness as the transfer does.
         is IslandEvent.PromotedOngoing ->
-            if (DownloadShape.isDownloadLike(event)) null else event.appIcon
+            if (event.isTransfer) null else event.appIcon
         is IslandEvent.Call -> event.appIcon
         is IslandEvent.Notification -> event.senderIcon ?: event.appIcon
         is IslandEvent.AppSwitch -> (event.previousApp ?: event.recentApps.firstOrNull())?.appIcon
@@ -869,7 +872,7 @@ private fun PromotedOngoingPillIcon(event: IslandEvent.PromotedOngoing, tint: Co
     val hasProgress = event.progress >= 0f || event.isIndeterminate
     val color = tint ?: BlueAccent
 
-    if (DownloadShape.isDownloadLike(event)) {
+    if (event.isTransfer) {
         AnimatedDownloadIcon(color)
     } else if (event.appIcon != null) {
         PillBitmapIcon(

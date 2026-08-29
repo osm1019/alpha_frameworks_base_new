@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
@@ -202,22 +201,16 @@ private fun TransferExpanded(
         // It is drawn in the layout's own icon cell, cropped square like the media card's art, so
         // it cannot reach the title or the bar the way the app's big content view could.
         icon = { glyph ->
-            val art = event.largeIcon ?: event.appIcon
+            // Artwork or our own glyph, and nothing in between: the app's small icon is a
+            // per-state drawable, so falling back to it made the card's icon brighten and dim
+            // as the transfer paused and resumed. Same rule as the chip -- see [pillIconDrawable].
+            val art = event.largeIcon
             if (art != null) {
                 Image(
                     bitmap = art.toScaledBitmap(SizeButtonLg),
                     contentDescription = null,
                     modifier = Modifier.size(SizeButtonLg).clip(ShapeIconLarge),
                     contentScale = ContentScale.Crop,
-                    // The fallback is the notification's small icon, which is a template by
-                    // contract -- a flat white glyph the consumer is meant to tint. A largeIcon is
-                    // a picture and is never tinted. See [pillIconIsTemplate].
-                    colorFilter =
-                        if (event.largeIcon == null && pillIconIsTemplate(event)) {
-                            ColorFilter.tint(glyph)
-                        } else {
-                            null
-                        },
                 )
             } else {
                 AnimatedDownloadIcon(glyph, SizeButtonLg)
