@@ -26,8 +26,8 @@ import android.content.Context;
  * {@code SoundTriggerManager}, which skips anything reporting {@code FAKE_HAL_ARCH} and attaches to
  * the first real one. A separate software module would be listed and never chosen.
  *
- * <p>Wrapping is unconditional. {@code config_supportsBackgroundMusicRecognition} gates QuickLook
- * arming the session, not this interception.
+ * <p>A device whose {@code config_supportsBackgroundMusicRecognition} overlay is false gets the
+ * delegate untouched, so opting out costs it not even the interception.
  */
 class SoftwareMusicHalFactory implements HalFactory {
     private final @NonNull Context mContext;
@@ -40,6 +40,11 @@ class SoftwareMusicHalFactory implements HalFactory {
 
     @Override
     public ISoundTriggerHal create() {
-        return new SoftwareMusicHal(mContext, mDelegate.create());
+        final ISoundTriggerHal delegate = mDelegate.create();
+        if (!mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_supportsBackgroundMusicRecognition)) {
+            return delegate;
+        }
+        return new SoftwareMusicHal(mContext, delegate);
     }
 }

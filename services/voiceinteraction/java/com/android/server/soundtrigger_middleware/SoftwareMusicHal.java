@@ -135,8 +135,10 @@ class SoftwareMusicHal implements ISoundTriggerHal {
     }
 
     private boolean gateArmed() {
-        return Settings.Secure.getIntForUser(mContext.getContentResolver(), GATE_SETTING, 0,
-                UserHandle.USER_CURRENT) != 0;
+        return mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.config_supportsBackgroundMusicRecognition)
+                && Settings.Secure.getIntForUser(mContext.getContentResolver(), GATE_SETTING, 0,
+                        UserHandle.USER_CURRENT) != 0;
     }
 
     // -- Interception --------------------------------------------------------------------------

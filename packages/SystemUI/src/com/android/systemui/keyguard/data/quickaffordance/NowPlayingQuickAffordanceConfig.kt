@@ -97,6 +97,14 @@ constructor(
             }
             .flowOn(backgroundDispatcher)
 
+    override suspend fun getPickerScreenState():
+        KeyguardQuickAffordanceConfig.PickerScreenState =
+        if (supported) {
+            KeyguardQuickAffordanceConfig.PickerScreenState.Default()
+        } else {
+            KeyguardQuickAffordanceConfig.PickerScreenState.UnavailableOnDevice
+        }
+
     override fun onTriggered(
         expandable: Expandable?
     ): KeyguardQuickAffordanceConfig.OnTriggeredResult {

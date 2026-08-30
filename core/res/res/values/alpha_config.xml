@@ -7,9 +7,10 @@
     <!-- Whether device has physical tri state switch -->
     <bool name="config_hasAlertSlider">false</bool>
 
-    <!-- Whether this device was validated for background music recognition.
-         The framework provides the software trigger (SoftwareMusicHal); this bool is the
-         maintainer saying the session may arm. Default false. Overlay true per device. -->
-    <bool name="config_supportsBackgroundMusicRecognition">false</bool>
+    <!-- Whether this device may offer background music recognition. The framework provides
+         the software trigger (SoftwareMusicHal), so this is on everywhere; overlay it false
+         to take the feature off a device entirely. Listening still needs the user to switch
+         it on - Settings.Secure.now_playing_enabled defaults off. -->
+    <bool name="config_supportsBackgroundMusicRecognition">true</bool>
 
 </resources>
