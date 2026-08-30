@@ -135,7 +135,7 @@ class SoftwareMusicHal implements ISoundTriggerHal {
     }
 
     private boolean gateArmed() {
-        return Settings.Secure.getIntForUser(mContext.getContentResolver(), GATE_SETTING, 1,
+        return Settings.Secure.getIntForUser(mContext.getContentResolver(), GATE_SETTING, 0,
                 UserHandle.USER_CURRENT) != 0;
     }
 
