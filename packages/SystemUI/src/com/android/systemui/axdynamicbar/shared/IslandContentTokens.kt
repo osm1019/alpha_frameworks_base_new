@@ -11,6 +11,8 @@ import androidx.core.graphics.ColorUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +70,8 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -813,7 +817,10 @@ internal fun ExpressivePillButton(
         modifier = modifier,
     ) {
         Row(
-            modifier = Modifier.height(SizeActionHeight).padding(horizontal = SpacePanel),
+            // SpacePanel here was costing 48dp of a pill that is often only ~90dp wide. The label
+            // is centre-arranged and every caller stretches the pill, so the padding bought
+            // nothing and took half the room the text had to fit in.
+            modifier = Modifier.height(SizeActionHeight).padding(horizontal = SpaceLg),
             verticalAlignment = Alignment.CenterVertically,
             // Centred, like [ActionChip]. Every caller stretches these with weight or
             // fillMaxWidth, so a start-aligned label sits against the left edge of a pill that is
@@ -825,7 +832,25 @@ internal fun ExpressivePillButton(
                     icon, null, tint = contentColor, modifier = Modifier.size(SizeIconSm),
                 )
             }
-            Text(label, color = contentColor, style = MaterialTheme.typography.labelLarge)
+            // An ongoing call puts three of these in one row, and the label that has to fit is
+            // whatever the dialer wrote. Shrink to fit rather than wrap: "Speake / r" reads as a
+            // broken button, and truncating a control's name is barely better.
+            BasicText(
+                text = label,
+                style =
+                    MaterialTheme.typography.labelLarge.copy(
+                        color = contentColor,
+                        textAlign = TextAlign.Center,
+                    ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize =
+                    TextAutoSize.StepBased(
+                        minFontSize = 11.sp,
+                        maxFontSize = MaterialTheme.typography.labelLarge.fontSize,
+                        stepSize = 0.5.sp,
+                    ),
+            )
         }
     }
 }
