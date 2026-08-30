@@ -47,7 +47,7 @@ constructor(
     falsingManager: FalsingManager,
     metricsLogger: MetricsLogger,
     statusBarStateController: StatusBarStateController,
-    private val activityStarter: ActivityStarter,
+    activityStarter: ActivityStarter,
     qsLogger: QSLogger,
     private val uiStyleRepository: UiStyleRepository,
     private val uiStyleDialogManager: UiStyleDialogManager,
@@ -67,6 +67,11 @@ constructor(
 
     companion object {
         const val TILE_SPEC = "ui_style"
+
+        private const val ALPHA_VISUALS_PACKAGE = "com.alpha.settings.ui"
+        private const val ALPHA_VISUALS_MAIN = "com.alpha.settings.ui.MainActivity"
+        private const val EXTRA_DESTINATION = "com.alpha.settings.ui.extra.DESTINATION"
+        private const val DESTINATION_UI_STYLES = "ui_styles"
     }
 
     private var styleCollectionJob: Job? = null
@@ -78,10 +83,6 @@ constructor(
         mainHandler.post {
             uiStyleDialogManager.create(expandable)
         }
-    }
-
-    override fun handleLongClick(expandable: Expandable?) {
-        openQuickSettings()
     }
 
     override fun handleUpdateState(state: QSTile.State, arg: Any?) {
@@ -103,7 +104,11 @@ constructor(
     override fun getTileLabel(): CharSequence =
         mContext.getString(InternalR.string.ui_style_tile_label)
 
-    override fun getLongClickIntent(): Intent? = null
+    override fun getLongClickIntent(): Intent =
+        Intent(Intent.ACTION_MAIN).apply {
+            component = ComponentName(ALPHA_VISUALS_PACKAGE, ALPHA_VISUALS_MAIN)
+            putExtra(EXTRA_DESTINATION, DESTINATION_UI_STYLES)
+        }
 
     override fun isAvailable(): Boolean = true
 
@@ -124,17 +129,6 @@ constructor(
                 styleCollectionJob = null
             }
         }
-    }
-
-    private fun openQuickSettings() {
-        val intent = Intent().apply {
-            component = ComponentName(
-                "com.android.settings",
-                "com.alpha.settings.trampoline.QuickSettingsActivity"
-            )
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        activityStarter.postStartActivityDismissingKeyguard(intent, 0)
     }
 
     private fun formatStyleName(id: String): String {
