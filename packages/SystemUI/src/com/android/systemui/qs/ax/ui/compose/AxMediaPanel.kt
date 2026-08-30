@@ -892,11 +892,6 @@ private fun ExpandedMediaContent(
     interactive: Boolean,
 ) {
     val playing = session?.state == MediaSessionState.Playing
-    val playPauseCornerRadius by
-        animateDpAsState(
-            targetValue = if (playing) ExpandedMediaPlayCorner else ExpandedMediaPlaySize / 2,
-            label = "AxExpandedMediaPlayPauseCornerRadius",
-        )
     val showCoreActions =
         session?.actionButtonLayout != MediaCardActionButtonLayout.SecondaryActionsOnly
     val progress = session?.let(viewModel::progress) ?: 0f
@@ -916,6 +911,12 @@ private fun ExpandedMediaContent(
     val bareColors = colors.copy(primary = Color.Transparent, onPrimary = colors.foreground)
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val horizontalPadding = mediaHorizontalPadding(maxWidth)
+        val transport = expandedMediaTransportSizes(maxWidth)
+        val playPauseCornerRadius by
+            animateDpAsState(
+                targetValue = if (playing) transport.playCorner else transport.play / 2,
+                label = "AxExpandedMediaPlayPauseCornerRadius",
+            )
         // The art takes whatever the fixed chrome leaves. Derived from the card's own span, so it
         // is decided once at layout and never moves while the card is on screen.
         val artSize =
@@ -1015,14 +1016,14 @@ private fun ExpandedMediaContent(
                         colors = bareColors,
                         interactive = interactive,
                         compact = false,
-                        iconSize = ExpandedMediaExtraIconSize,
+                        iconSize = transport.extraIcon,
                     )
                     middleExtras.forEach { action ->
                         MediaAction(
                             action = action,
                             viewModel = viewModel,
-                            width = ExpandedMediaExtraSize,
-                            iconSize = ExpandedMediaExtraIconSize,
+                            width = transport.extra,
+                            iconSize = transport.extraIcon,
                             tint = colors.foreground,
                             interactive = interactive,
                         )
@@ -1034,8 +1035,8 @@ private fun ExpandedMediaContent(
                             viewModel = viewModel,
                             colors = colors,
                             interactive = interactive,
-                            size = ExpandedMediaSkipSize,
-                            iconSize = ExpandedMediaSkipIconSize,
+                            size = transport.skip,
+                            iconSize = transport.skipIcon,
                             imageVector = Icons.Filled.SkipPrevious,
                         )
                         CoreMediaAction(
@@ -1045,8 +1046,8 @@ private fun ExpandedMediaContent(
                             animatedIconRes = R.drawable.ic_media_play_button,
                             animatedIconAtEnd = playing,
                             viewModel = viewModel,
-                            width = ExpandedMediaPlaySize,
-                            iconSize = ExpandedMediaPlayIconSize,
+                            width = transport.play,
+                            iconSize = transport.playIcon,
                             // The card's one accent, normalised so the near-white glyph reads on
                             // it whatever the cover was.
                             tint = AlphaColors.QsMediaCard.playGlyph,
@@ -1060,8 +1061,8 @@ private fun ExpandedMediaContent(
                             viewModel = viewModel,
                             colors = colors,
                             interactive = interactive,
-                            size = ExpandedMediaSkipSize,
-                            iconSize = ExpandedMediaSkipIconSize,
+                            size = transport.skip,
+                            iconSize = transport.skipIcon,
                             imageVector = Icons.Filled.SkipNext,
                         )
                     }
@@ -1071,13 +1072,13 @@ private fun ExpandedMediaContent(
                         MediaAction(
                             action = trailingExtra,
                             viewModel = viewModel,
-                            width = ExpandedMediaExtraSize,
-                            iconSize = ExpandedMediaExtraIconSize,
+                            width = transport.extra,
+                            iconSize = transport.extraIcon,
                             tint = colors.foreground,
                             interactive = interactive,
                         )
                     } else {
-                        Spacer(Modifier.size(ExpandedMediaExtraSize))
+                        Spacer(Modifier.size(transport.extra))
                     }
                 }
             }
@@ -1754,6 +1755,52 @@ private val ExpandedMediaChromeHeight = 86.dp
 private val ExpandedMediaArtSize = 72.dp
 private val ExpandedMediaArtMinSize = 40.dp
 private val ExpandedMediaArtCorner = 16.dp
+
+/**
+ * The transport's fixed widths, chosen from the card's own span.
+ *
+ * At full size the five slots sum to 186dp. A half-width card is about 200dp and spends 24dp of
+ * that on padding, so [Arrangement.SpaceEvenly] has nothing left to distribute and the play
+ * button's rounded square lands against the skips. Read once inside the card's constraints, like
+ * the art size — nothing here changes while the card is on screen.
+ */
+private data class ExpandedMediaTransport(
+    val play: Dp,
+    val playIcon: Dp,
+    val playCorner: Dp,
+    val skip: Dp,
+    val skipIcon: Dp,
+    val extra: Dp,
+    val extraIcon: Dp,
+)
+
+private fun expandedMediaTransportSizes(width: Dp): ExpandedMediaTransport =
+    if (width < ExpandedMediaDenseWidth) {
+        ExpandedMediaTransport(
+            play = 36.dp,
+            playIcon = 22.dp,
+            // The 16dp on 44dp, kept as the same ratio so the squared-off play button reads as
+            // the same shape at either size.
+            playCorner = 13.dp,
+            skip = 32.dp,
+            skipIcon = 20.dp,
+            extra = 28.dp,
+            extraIcon = 18.dp,
+        )
+    } else {
+        ExpandedMediaTransport(
+            play = ExpandedMediaPlaySize,
+            playIcon = ExpandedMediaPlayIconSize,
+            playCorner = ExpandedMediaPlayCorner,
+            skip = ExpandedMediaSkipSize,
+            skipIcon = ExpandedMediaSkipIconSize,
+            extra = ExpandedMediaExtraSize,
+            extraIcon = ExpandedMediaExtraIconSize,
+        )
+    }
+
+/** Below this the transport does not fit at full size. */
+private val ExpandedMediaDenseWidth = 240.dp
 
 private val ExpandedMediaPlaySize = 44.dp
 private val ExpandedMediaPlayIconSize = 24.dp
