@@ -113,7 +113,7 @@ constructor(
     }
 
     private fun isEnabled(): Boolean =
-        secureSettings.getIntForUser(SETTING, 0, userTracker.userId) != 0
+        secureSettings.getIntForUser(SETTING, 1, userTracker.userId) != 0
 
     companion object {
         private const val SETTING = "now_playing_enabled"
