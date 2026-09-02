@@ -110,11 +110,12 @@ public class FullscreenVideoBrightnessModifier implements BrightnessStateModifie
     @VisibleForTesting static final float PIN_BRIGHT = 1.00f * USER_MAX_BRIGHTNESS; // 0.80
 
     /**
-     * Auto-brightness floor while fullscreen SDR video plays (float 0.40 ≈ 175 nits).
+     * Auto-brightness floor while fullscreen SDR video plays (float 0.50 ≈ 175 nits
+     * on dodge's stock OOS curve; 0.40 is only 107 nits here).
      * Unlike the HDR pin this is a max(): bright rooms keep the (now content-immune)
      * auto value, dark rooms are lifted so video is not reproduced too dim.
      */
-    @VisibleForTesting static final float SDR_VIDEO_FLOOR = 0.50f * USER_MAX_BRIGHTNESS; // 0.40
+    @VisibleForTesting static final float SDR_VIDEO_FLOOR = 0.626f * USER_MAX_BRIGHTNESS; // 0.50
 
     /**
      * Mirror of {@code HdrLayerInfoReporter::HDR_INFO_FLAG_FULLSCREEN_VIDEO}
