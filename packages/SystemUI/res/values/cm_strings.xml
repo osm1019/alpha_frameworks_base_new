@@ -111,6 +111,11 @@
     <string name="accessibility_status_bar_clear_voice">Clear Voice working</string>
     <string name="status_bar_clear_voice_slot" translatable="false">clear_voice</string>
 
+    <!-- Clear Voice QS tile -->
+    <string name="quick_settings_clear_voice_label">Clear Voice</string>
+    <string name="accessibility_quick_settings_clear_voice_on">Clear Voice on.</string>
+    <string name="accessibility_quick_settings_clear_voice_off">Clear Voice off.</string>
+
     <!-- Channel name for Battery notifications -->
     <string name="battery_notification_channel_tv">Battery warning</string>
 

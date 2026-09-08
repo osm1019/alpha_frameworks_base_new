@@ -17,12 +17,22 @@
 package com.android.systemui.statusbar.policy
 
 import com.android.systemui.CoreStartable
+import com.android.systemui.qs.QsEventLogger
+import com.android.systemui.qs.pipeline.shared.TileSpec
+import com.android.systemui.qs.shared.model.TileCategory
+import com.android.systemui.qs.tileimpl.QSTileImpl
+import com.android.systemui.qs.tiles.ClearVoiceTile
+import com.android.systemui.qs.tiles.base.shared.model.QSTileConfig
+import com.android.systemui.qs.tiles.base.shared.model.QSTileUIConfig
+import com.android.systemui.res.R
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.multibindings.ClassKey
 import dagger.multibindings.IntoMap
+import dagger.multibindings.StringKey
 
-/** Clear Voice in-call status-bar icon (Oplus / vendor/oplus/clearcalling). */
+/** Clear Voice status-bar icon + SystemUI QS tile (vendor/oplus/clearcalling). */
 @Module
 abstract class ClearVoiceModule {
     @Binds
@@ -31,4 +41,27 @@ abstract class ClearVoiceModule {
     abstract fun bindClearVoiceStatusBarIconController(
         impl: ClearVoiceStatusBarIconController
     ): CoreStartable
+
+    /** Inject ClearVoiceTile into tileMap in QSModule */
+    @Binds
+    @IntoMap
+    @StringKey(ClearVoiceTile.TILE_SPEC)
+    abstract fun bindClearVoiceTile(tile: ClearVoiceTile): QSTileImpl<*>
+
+    companion object {
+        @Provides
+        @IntoMap
+        @StringKey(ClearVoiceTile.TILE_SPEC)
+        fun provideClearVoiceTileConfig(uiEventLogger: QsEventLogger): QSTileConfig =
+            QSTileConfig(
+                tileSpec = TileSpec.create(ClearVoiceTile.TILE_SPEC),
+                uiConfig =
+                    QSTileUIConfig.Resource(
+                        iconRes = R.drawable.ic_qs_clear_voice,
+                        labelRes = R.string.quick_settings_clear_voice_label
+                    ),
+                instanceId = uiEventLogger.getNewInstanceId(),
+                category = TileCategory.CONNECTIVITY,
+            )
+    }
 }
