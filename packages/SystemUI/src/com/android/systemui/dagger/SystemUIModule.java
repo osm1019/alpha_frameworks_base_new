@@ -147,6 +147,7 @@ import com.android.systemui.statusbar.disableflags.dagger.DisableFlagsModule;
 import com.android.systemui.statusbar.domain.interactor.StatusBarRegionSamplingInteractorModule;
 import com.android.systemui.statusbar.events.StatusBarEventsModule;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
+import com.android.systemui.statusbar.policy.ClearVoiceModule;
 import com.android.systemui.statusbar.featurepods.av.AvControlsChipModule;
 import com.android.systemui.statusbar.notification.NotifPipelineFlags;
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
@@ -253,6 +254,7 @@ import javax.inject.Named;
         BouncerViewModule.class,
         CameraProtectionModule.class,
         ClipboardOverlayModule.class,
+        ClearVoiceModule.class,
         ClockRegistryModule.class,
         CommunalModule.class,
         CommonDataLayerModule.class,

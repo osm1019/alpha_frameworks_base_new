@@ -107,6 +107,10 @@
     <string name="status_bar_firewall">Firewall</string>
     <string name="status_bar_firewall_slot" translatable="false">firewall</string>
 
+    <!-- Clear Voice in-call status bar icon (Oplus / vendor/oplus/clearcalling). -->
+    <string name="accessibility_status_bar_clear_voice">Clear Voice working</string>
+    <string name="status_bar_clear_voice_slot" translatable="false">clear_voice</string>
+
     <!-- Channel name for Battery notifications -->
     <string name="battery_notification_channel_tv">Battery warning</string>
 
