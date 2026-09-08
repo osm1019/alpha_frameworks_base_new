@@ -16079,6 +16079,30 @@ public final class Settings {
         public static final String PI_SNAPCHAT_SPOOF = "pi_snapchat_spoof";
 
         /**
+         * JSON map of package → spoof profile for per-app device spoofing.
+         * @hide
+         */
+        public static final String PER_APPS_DEVICE_SPOOF = "per_apps_device_spoof";
+
+        /**
+         * Cached resolved props for per-app device spoofing.
+         * @hide
+         */
+        public static final String PER_APPS_DEVICE_SPOOF_CACHE = "per_apps_device_spoof_cache";
+
+        /**
+         * Master switch for per-app device spoofing.
+         * @hide
+         */
+        public static final String PER_APPS_DEVICE_SPOOF_ENABLED = "per_apps_device_spoof_enabled";
+
+        /**
+         * Custom device spoof profiles for per-app spoofing.
+         * @hide
+         */
+        public static final String CUSTOM_SPOOF_PROFILES = "custom_spoof_profiles";
+
+        /**
          * @hide
          */
         public static final String SPOOF_GAMEPROPS_CONFIG = "spoof_gameprops_config";
