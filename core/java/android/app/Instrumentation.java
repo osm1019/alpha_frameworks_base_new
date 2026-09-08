@@ -16,6 +16,8 @@
 
 package android.app;
 
+import com.android.internal.util.alpha.PixelPropsUtils;
+
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -1359,6 +1361,7 @@ public class Instrumentation {
         Application app = getFactory(context.getPackageName())
                 .instantiateApplication(cl, className);
         app.attach(context);
+        PixelPropsUtils.setProps(context);
         return app;
     }
     
@@ -1377,6 +1380,7 @@ public class Instrumentation {
             ClassNotFoundException {
         Application app = (Application)clazz.newInstance();
         app.attach(context);
+        PixelPropsUtils.setProps(context);
         return app;
     }
 

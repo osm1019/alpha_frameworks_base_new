@@ -16055,6 +16055,30 @@ public final class Settings {
         public static final String SPOOF_PIF_PHOTOS = "spoof_pif_photos";
 
         /**
+         * Master switch for PixelPropsUtils per-app Build prop spoofing.
+         * @hide
+         */
+        public static final String PI_PP_SPOOF = "pi_pp_spoof";
+
+        /**
+         * Whether to spoof Tensor experience features for targeted apps.
+         * @hide
+         */
+        public static final String PI_TENSOR_SPOOF = "pi_tensor_spoof";
+
+        /**
+         * Whether PixelProps should spoof Google Photos as Pixel XL.
+         * @hide
+         */
+        public static final String PI_PHOTOS_SPOOF = "pi_photos_spoof";
+
+        /**
+         * Whether PixelProps should apply Snapchat-specific spoofing.
+         * @hide
+         */
+        public static final String PI_SNAPCHAT_SPOOF = "pi_snapchat_spoof";
+
+        /**
          * @hide
          */
         public static final String SPOOF_GAMEPROPS_CONFIG = "spoof_gameprops_config";
