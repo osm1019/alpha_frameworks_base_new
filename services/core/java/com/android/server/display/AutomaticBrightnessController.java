@@ -128,6 +128,8 @@ public class AutomaticBrightnessController {
      * Allows real progressive darkening once ambient is already low.
      */
     private static final float FUSION_HARD_ZERO_MIN_AMBIENT = 2.0f;
+    /** An exact zero is an engine refusal, not darkness; dropped regardless of ambient. */
+    private static final float FUSION_REFUSAL_LUX_MAX = 0.05f;
 
     private static final int MSG_UPDATE_AMBIENT_LUX = 1;
     private static final int MSG_BRIGHTNESS_ADJUSTMENT_SAMPLE = 2;
@@ -835,6 +837,12 @@ public class AutomaticBrightnessController {
         }
         if (lux > FUSION_HARD_ZERO_LUX_MAX) {
             return false;
+        }
+        // An exact 0 is the engine refusing to report (panel glow swamps ambient), never a real
+        // reading — the fused path always leaves a residual in a dark room. Drop it at any
+        // ambient, or a dim room loses the guard exactly where glow is worst.
+        if (lux <= FUSION_REFUSAL_LUX_MAX) {
+            return true;
         }
         // Established ambient well above residual dark → a sudden ≤0.5 lux is content over-sub,
         // not the room going black.
