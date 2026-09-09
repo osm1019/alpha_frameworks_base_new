@@ -17,6 +17,7 @@
 package android.app;
 
 import com.android.internal.util.alpha.PixelPropsUtils;
+import android.security.gameprops.GamePropsSpoofService;
 
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
@@ -1362,6 +1363,7 @@ public class Instrumentation {
                 .instantiateApplication(cl, className);
         app.attach(context);
         PixelPropsUtils.setProps(context);
+        GamePropsSpoofService.getInstance().applyPerAppSpoofFromContext(context);
         return app;
     }
     
@@ -1381,6 +1383,7 @@ public class Instrumentation {
         Application app = (Application)clazz.newInstance();
         app.attach(context);
         PixelPropsUtils.setProps(context);
+        GamePropsSpoofService.getInstance().applyPerAppSpoofFromContext(context);
         return app;
     }
 

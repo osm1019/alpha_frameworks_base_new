@@ -16067,6 +16067,12 @@ public final class Settings {
         public static final String PI_TENSOR_SPOOF = "pi_tensor_spoof";
 
         /**
+         * Whether to spoof Pixel props for Play Store / vending.
+         * @hide
+         */
+        public static final String PI_VENDING_SPOOF = "pi_vending_spoof";
+
+        /**
          * Whether PixelProps should spoof Google Photos as Pixel XL.
          * @hide
          */
