@@ -46,7 +46,6 @@ import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.res.R;
 import com.android.systemui.settings.UserTracker;
-import com.android.systemui.statusbar.policy.ClearVoiceStatusBarIconController;
 import com.android.systemui.util.settings.SecureSettings;
 
 import javax.inject.Inject;
@@ -54,12 +53,14 @@ import javax.inject.Inject;
 /**
  * Quick Settings tile: Clear Voice (Oplus voice-call NC).
  *
- * <p>Toggles {@link ClearVoiceStatusBarIconController#SETTINGS_KEY_ENABLED} and
- * drives the same audio parameters / persist props as Settings.
+ * <p>Toggles {@link #SETTINGS_KEY_ENABLED} and drives the same audio parameters /
+ * persist props as Settings.
  */
 public class ClearVoiceTile extends QSTileImpl<BooleanState> {
 
     public static final String TILE_SPEC = "clear_voice";
+    /** Must match Settings {@code ClearVoiceTogglePreferenceController.SETTINGS_KEY}. */
+    public static final String SETTINGS_KEY_ENABLED = "oplus_clear_voice_enabled";
     private static final String TAG = "ClearVoiceTile";
 
     private static final String OP_VOICE_CALL_NC = "op_voice_call_nc_enabled";
@@ -103,7 +104,7 @@ public class ClearVoiceTile extends QSTileImpl<BooleanState> {
                 new UserSettingObserver(
                         secureSettings,
                         mHandler,
-                        ClearVoiceStatusBarIconController.SETTINGS_KEY_ENABLED,
+                        SETTINGS_KEY_ENABLED,
                         userTracker.getUserId(),
                         /* defaultValue= */ 1) {
                     @Override
@@ -143,9 +144,7 @@ public class ClearVoiceTile extends QSTileImpl<BooleanState> {
         // Also mirror Global for Settings parity / older readers.
         try {
             Settings.Global.putInt(
-                    mContext.getContentResolver(),
-                    ClearVoiceStatusBarIconController.SETTINGS_KEY_ENABLED,
-                    next ? 1 : 0);
+                    mContext.getContentResolver(), SETTINGS_KEY_ENABLED, next ? 1 : 0);
         } catch (RuntimeException e) {
             Log.w(TAG, "Global.putInt failed", e);
         }
