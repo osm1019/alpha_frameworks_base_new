@@ -702,10 +702,13 @@ public class VibratorInfo implements Parcelable {
             }
 
             if (!isValid) {
-                Slog.e(TAG, "Invalid frequency profile received from HAL."
-                        + " resonantFrequencyHz=" + resonantFrequencyHz
-                        + ", frequenciesHz=" + Arrays.toString(frequenciesHz)
-                        + ", outputAccelerationsGs=" + Arrays.toString(outputAccelerationsGs));
+                // Empty (null, null) is the no-CAP_FREQUENCY_CONTROL path, not a HAL error.
+                if (frequenciesHz != null || outputAccelerationsGs != null) {
+                    Slog.e(TAG, "Invalid frequency profile received from HAL."
+                            + " resonantFrequencyHz=" + resonantFrequencyHz
+                            + ", frequenciesHz=" + Arrays.toString(frequenciesHz)
+                            + ", outputAccelerationsGs=" + Arrays.toString(outputAccelerationsGs));
+                }
 
                 mFrequenciesHz = null;
                 mOutputAccelerationsGs = null;

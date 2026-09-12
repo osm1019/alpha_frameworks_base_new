@@ -20085,6 +20085,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (proc.userId != currentUser) return;
                     if (state <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) return;
                     if (state == ActivityManager.PROCESS_STATE_HOME) return;
+                    if (proc.isPreviousProcess()) return;
+                    if (proc.hasRecentTasks()) return;
                     if (!includeUIProcesses && proc.hasActivities()) return;
 
                     if (setAdj >= minAdj) victims.add(proc);

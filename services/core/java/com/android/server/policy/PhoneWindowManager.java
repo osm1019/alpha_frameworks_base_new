@@ -8241,13 +8241,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void releaseMemoryAtScreenOn() {
         long currentTime = System.currentTimeMillis();
-        if (lastMemoryReleaseTime == 0L || currentTime - lastMemoryReleaseTime > MEMORY_RELEASE_INTERVAL_MS) {
-            try {
-                mActivityManagerService.releaseMemory(900, 25, false, false);
-                lastMemoryReleaseTime = currentTime;
-                Slog.d(TAG, "Performing screen-on memory reclaim.");
-            } catch (RemoteException e) {
+        if (lastMemoryReleaseTime != 0L
+                && currentTime - lastMemoryReleaseTime <= MEMORY_RELEASE_INTERVAL_MS) {
+            return;
+        }
+        ActivityManager am = mContext.getSystemService(ActivityManager.class);
+        if (am != null) {
+            ActivityManager.MemoryInfo memInfo = new ActivityManager.MemoryInfo();
+            am.getMemoryInfo(memInfo);
+            if (!memInfo.lowMemory) {
+                return;
             }
+        }
+        try {
+            mActivityManagerService.releaseMemory(900, 25, false, false);
+            lastMemoryReleaseTime = currentTime;
+            Slog.d(TAG, "Performing screen-on memory reclaim.");
+        } catch (RemoteException e) {
         }
     }
 }
