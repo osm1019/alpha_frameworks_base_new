@@ -153,7 +153,9 @@ public final class PlayIntegritySpoofService {
     private volatile boolean mSpoofProps = true;
     private volatile boolean mSpoofProvider = true;
     private volatile boolean mSpoofSignature = false;
-    private volatile boolean mSpoofVendingBuild = true;
+    // PlayIntegrityFork-style: "0"/empty = disabled, "1"/"true" = same FINGERPRINT as
+    // DroidGuard, anything else = literal custom FINGERPRINT for Play Store.
+    private volatile String mSpoofVendingFinger = "0";
     private volatile boolean mSpoofVendingSdk = false;
     private volatile boolean mSpoofPhotos = false;
     private volatile boolean mDebug = false;
@@ -225,7 +227,7 @@ public final class PlayIntegritySpoofService {
         mSpoofProps = true;
         mSpoofProvider = true;
         mSpoofSignature = false;
-        mSpoofVendingBuild = true;
+        mSpoofVendingFinger = "0";
         mSpoofVendingSdk = false;
         mDebug = false;
 
@@ -331,8 +333,16 @@ public final class PlayIntegritySpoofService {
             case "spoofSignature":
                 mSpoofSignature = "1".equals(value) || "true".equalsIgnoreCase(value);
                 break;
+            case "spoofVendingFinger":
+                mSpoofVendingFinger = value;
+                break;
             case "spoofVendingBuild":
-                mSpoofVendingBuild = "1".equals(value) || "true".equalsIgnoreCase(value);
+                // Deprecated: honor only if spoofVendingFinger is still default-disabled.
+                if ("0".equals(mSpoofVendingFinger)
+                        && ("1".equals(value) || "true".equalsIgnoreCase(value))) {
+                    Log.w(TAG, "spoofVendingBuild is deprecated, treating as spoofVendingFinger=1");
+                    mSpoofVendingFinger = "1";
+                }
                 break;
             case "spoofVendingSdk":
                 mSpoofVendingSdk = "1".equals(value) || "true".equalsIgnoreCase(value);
@@ -379,14 +389,12 @@ public final class PlayIntegritySpoofService {
         if (!isDroidGuard && !isVending) return;
 
         if (isVending) {
-            if (!mSpoofVendingBuild) {
-                if (mVerboseLogs > 0) Log.d(TAG, "Vending build spoofing disabled");
+            String vendingFingerprint = resolveVendingFingerprint();
+            if (vendingFingerprint == null) {
+                if (mVerboseLogs > 0) Log.d(TAG, "Vending FINGERPRINT spoofing disabled");
                 return;
             }
-            for (Map.Entry<String, String> entry : mBuildFields.entrySet()) {
-                if ("SDK_INT".equals(entry.getKey())) continue;
-                spoofField(entry.getKey(), entry.getValue(), "PS");
-            }
+            spoofField("FINGERPRINT", vendingFingerprint, "PS");
             return;
         }
 
@@ -407,7 +415,33 @@ public final class PlayIntegritySpoofService {
         }
     }
 
-    public void spoofSignature() {
+    /**
+     * Resolves the FINGERPRINT spoofed to Play Store based on spoofVendingFinger.
+     * Returns null when vending fingerprint spoofing is disabled.
+     * "0"/"false"/empty -> disabled; "1"/"true" -> DroidGuard FINGERPRINT;
+     * anything else -> literal custom FINGERPRINT.
+     */
+    private String resolveVendingFingerprint() {
+        String setting = mSpoofVendingFinger;
+        if (setting == null || setting.isEmpty()
+                || "0".equals(setting) || "false".equalsIgnoreCase(setting)) {
+            return null;
+        }
+        if ("1".equals(setting) || "true".equalsIgnoreCase(setting)) {
+            return mBuildFields.get("FINGERPRINT");
+        }
+        return setting;
+    }
+
+    /**
+     * Applies signature spoofing. Skipped for Play Store (com.android.vending);
+     * only meaningful/safe for DroidGuard package-info checks.
+     */
+    public void spoofSignature(String processName) {
+        if (isVending(processName)) {
+            if (mVerboseLogs > 0) Log.d(TAG, "Signature spoofing skipped for Vending");
+            return;
+        }
         if (!mSpoofSignature || mSignatureSpoofed) return;
 
         Signature spoofedSignature = new Signature(Base64.decode(ROM_SIGNATURE_DATA, Base64.DEFAULT));
@@ -597,6 +631,10 @@ public final class PlayIntegritySpoofService {
 
     public Map<String, String> getSystemProps() {
         return mSystemProps;
+    }
+
+    public String getSpoofVendingFinger() {
+        return mSpoofVendingFinger;
     }
 
     public boolean isConfigLoaded() {
