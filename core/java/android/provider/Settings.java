@@ -16055,60 +16055,6 @@ public final class Settings {
         public static final String SPOOF_PIF_PHOTOS = "spoof_pif_photos";
 
         /**
-         * Master switch for PixelPropsUtils per-app Build prop spoofing.
-         * @hide
-         */
-        public static final String PI_PP_SPOOF = "pi_pp_spoof";
-
-        /**
-         * Whether to spoof Tensor experience features for targeted apps.
-         * @hide
-         */
-        public static final String PI_TENSOR_SPOOF = "pi_tensor_spoof";
-
-        /**
-         * Whether to spoof Pixel props for Play Store / vending.
-         * @hide
-         */
-        public static final String PI_VENDING_SPOOF = "pi_vending_spoof";
-
-        /**
-         * Whether PixelProps should spoof Google Photos as Pixel XL.
-         * @hide
-         */
-        public static final String PI_PHOTOS_SPOOF = "pi_photos_spoof";
-
-        /**
-         * Whether PixelProps should apply Snapchat-specific spoofing.
-         * @hide
-         */
-        public static final String PI_SNAPCHAT_SPOOF = "pi_snapchat_spoof";
-
-        /**
-         * JSON map of package → spoof profile for per-app device spoofing.
-         * @hide
-         */
-        public static final String PER_APPS_DEVICE_SPOOF = "per_apps_device_spoof";
-
-        /**
-         * Cached resolved props for per-app device spoofing.
-         * @hide
-         */
-        public static final String PER_APPS_DEVICE_SPOOF_CACHE = "per_apps_device_spoof_cache";
-
-        /**
-         * Master switch for per-app device spoofing.
-         * @hide
-         */
-        public static final String PER_APPS_DEVICE_SPOOF_ENABLED = "per_apps_device_spoof_enabled";
-
-        /**
-         * Custom device spoof profiles for per-app spoofing.
-         * @hide
-         */
-        public static final String CUSTOM_SPOOF_PROFILES = "custom_spoof_profiles";
-
-        /**
          * @hide
          */
         public static final String SPOOF_GAMEPROPS_CONFIG = "spoof_gameprops_config";

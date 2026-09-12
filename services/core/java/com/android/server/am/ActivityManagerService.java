@@ -19778,6 +19778,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         return AxExtServiceFactory.getSpoofManager().getPifConfig();
     }
 
+    @Override
+    public String getSpoofPifSpoofPhotos() {
+        return AxExtServiceFactory.getSpoofManager().getPifSpoofPhotos();
+    }
 
     @Override
     public String getSpoofGamePropsConfig() {

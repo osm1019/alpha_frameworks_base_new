@@ -12,6 +12,7 @@ import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.Base64;
 import android.util.JsonReader;
 import android.util.Log;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,6 +33,90 @@ public final class PlayIntegritySpoofService {
     private static final String DROIDGUARD_PACKAGE = "com.google.android.gms.unstable";
     private static final String VENDING_PACKAGE = "com.android.vending";
     private static final String GMS_PACKAGE = "com.google.android.gms";
+    private static final String GPHOTOS_PACKAGE = "com.google.android.apps.photos";
+
+    private static final Map<String, Object> PIXEL_XL_PROPS = Map.of(
+        "BRAND", "google",
+        "MANUFACTURER", "Google",
+        "DEVICE", "marlin",
+        "PRODUCT", "marlin",
+        "HARDWARE", "marlin",
+        "ID", "QP1A.191005.007.A3",
+        "MODEL", "Pixel XL",
+        "FINGERPRINT", "google/marlin/marlin:10/QP1A.191005.007.A3/5972272:user/release-keys"
+    );
+
+    private static final ArraySet<String> PRIV_PKGS = new ArraySet<>();
+    private static final ArraySet<String> FEATURES_PIXEL = new ArraySet<>();
+    private static final ArraySet<String> FEATURES_PIXEL_OTHERS = new ArraySet<>();
+    private static final ArraySet<String> FEATURES_TENSOR = new ArraySet<>();
+    private static final ArraySet<String> FEATURES_NEXUS = new ArraySet<>();
+
+    static {
+        Collections.addAll(FEATURES_PIXEL,
+                "com.google.android.apps.photos.PIXEL_2019_PRELOAD",
+                "com.google.android.apps.photos.PIXEL_2019_MIDYEAR_PRELOAD",
+                "com.google.android.apps.photos.PIXEL_2018_PRELOAD",
+                "com.google.android.apps.photos.PIXEL_2017_PRELOAD",
+                "com.google.android.feature.PIXEL_2021_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2020_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2020_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2019_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2019_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2018_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2017_EXPERIENCE",
+                "com.google.android.feature.PIXEL_EXPERIENCE",
+                "com.google.android.feature.GOOGLE_BUILD",
+                "com.google.android.feature.GOOGLE_EXPERIENCE"
+        );
+
+        Collections.addAll(FEATURES_PIXEL_OTHERS,
+                "com.google.android.feature.ASI",
+                "com.google.android.feature.ANDROID_ONE_EXPERIENCE",
+                "com.google.android.feature.GOOGLE_FI_BUNDLED",
+                "com.google.android.feature.LILY_EXPERIENCE",
+                "com.google.android.feature.TURBO_PRELOAD",
+                "com.google.android.feature.WELLBEING",
+                "com.google.lens.feature.IMAGE_INTEGRATION",
+                "com.google.lens.feature.CAMERA_INTEGRATION",
+                "com.google.photos.trust_debug_certs",
+                "com.google.android.feature.AER_OPTIMIZED",
+                "com.google.android.feature.NEXT_GENERATION_ASSISTANT",
+                "android.software.game_service",
+                "com.google.android.feature.EXCHANGE_6_2",
+                "com.google.android.apps.dialer.call_recording_audio",
+                "com.google.android.apps.dialer.SUPPORTED"
+        );
+
+        Collections.addAll(FEATURES_TENSOR,
+                "com.google.android.feature.PIXEL_2026_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2026_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2025_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2025_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2024_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2024_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2023_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2023_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2022_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2022_MIDYEAR_EXPERIENCE",
+                "com.google.android.feature.PIXEL_2021_EXPERIENCE"
+        );
+
+        Collections.addAll(FEATURES_NEXUS,
+                "com.google.android.apps.photos.NEXUS_PRELOAD",
+                "com.google.android.apps.photos.nexus_preload",
+                "com.google.android.feature.PIXEL_EXPERIENCE",
+                "com.google.android.feature.GOOGLE_BUILD",
+                "com.google.android.feature.GOOGLE_EXPERIENCE"
+        );
+
+        Collections.addAll(PRIV_PKGS,
+                "com.google.android.googlequicksearchbox",
+                "com.google.android.apps.photos",
+                "com.google.android.apps.pixel.agent",
+                "com.google.android.apps.pixel.creativeassistant"
+        );
+    }
 
     private static final String ROM_SIGNATURE_DATA = "MIIFyTCCA7GgAwIBAgIVALyxxl+zDS9SL68SzOr48309eAZyMA0GCSqGSIb3DQEBCwUAMHQxCzAJ" +
             "BgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQw" +
@@ -67,12 +153,9 @@ public final class PlayIntegritySpoofService {
     private volatile boolean mSpoofProps = true;
     private volatile boolean mSpoofProvider = true;
     private volatile boolean mSpoofSignature = false;
-    // Replaces the old all-or-nothing "spoofVendingBuild" boolean. This now matches
-    // upstream PlayIntegrityFork semantics: "0"/empty = disabled (default), "1"/"true" =
-    // spoof the configured FINGERPRINT field only, or any other value = use that literal
-    // string as a custom FINGERPRINT to serve to Play Store instead of the DroidGuard one.
-    private volatile String mSpoofVendingFinger = "0";
+    private volatile boolean mSpoofVendingBuild = true;
     private volatile boolean mSpoofVendingSdk = false;
+    private volatile boolean mSpoofPhotos = false;
     private volatile boolean mDebug = false;
 
     private final Map<String, String> mBuildFields = new ConcurrentHashMap<>();
@@ -81,6 +164,8 @@ public final class PlayIntegritySpoofService {
     private volatile boolean mConfigLoaded = false;
     private volatile boolean mSignatureSpoofed = false;
 
+    private final Object mLoadLock = new Object();
+
     private PlayIntegritySpoofService() {}
 
     public static synchronized PlayIntegritySpoofService getInstance() {
@@ -88,34 +173,66 @@ public final class PlayIntegritySpoofService {
             sInstance = new PlayIntegritySpoofService();
             sInstance.loadConfig();
         }
+        sInstance.ensureLoaded();
         return sInstance;
     }
 
-    public void loadConfig() {
-        mBuildFields.clear();
-        mSystemProps.clear();
-        mConfigLoaded = false;
+    private void ensureLoaded() {
+        if (mConfigLoaded) return;
+        synchronized (mLoadLock) {
+            if (mConfigLoaded) return;
+            loadConfigInternal();
+        }
+    }
 
+    private void loadConfig() {
+        synchronized (mLoadLock) {
+            loadConfigInternal();
+        }
+    }
+
+    private void loadConfigInternal() {
         IActivityManager am = ActivityManager.getService();
         if (am == null) {
-            Log.w(TAG, "ActivityManager not ready, skipping PIF config load");
+            if (mVerboseLogs > 0) Log.w(TAG, "ActivityManager not ready, skipping PIF config load");
             return;
         }
 
         String content;
         try {
             content = am.getSpoofPifConfig();
+            String spoofPhotos = am.getSpoofPifSpoofPhotos();
+            mSpoofPhotos = spoofPhotos == null || "1".equals(spoofPhotos)
+                            || "true".equalsIgnoreCase(spoofPhotos);
         } catch (Throwable e) {
             Log.e(TAG, "Failed to fetch PIF config from system_server", e);
             return;
         }
 
+        Map<String, String> newBuildFields = new ConcurrentHashMap<>();
+        Map<String, String> newSystemProps = new ConcurrentHashMap<>();
+
         if (content == null || content.isEmpty()) {
-            Log.w(TAG, "No PIF config in Settings.Secure");
+            mBuildFields.clear();
+            mSystemProps.clear();
+            mConfigLoaded = false;
+            if (mVerboseLogs > 0) Log.w(TAG, "No PIF config in Settings.Secure");
             return;
         }
 
+        mVerboseLogs = 0;
+        mSpoofBuild = true;
+        mSpoofProps = true;
+        mSpoofProvider = true;
+        mSpoofSignature = false;
+        mSpoofVendingBuild = true;
+        mSpoofVendingSdk = false;
+        mDebug = false;
+
         try {
+            mBuildFields.clear();
+            mSystemProps.clear();
+
             String trimmed = content.trim();
             if (trimmed.startsWith("{")) {
                 parseJson(content);
@@ -214,18 +331,8 @@ public final class PlayIntegritySpoofService {
             case "spoofSignature":
                 mSpoofSignature = "1".equals(value) || "true".equalsIgnoreCase(value);
                 break;
-            case "spoofVendingFinger":
-                mSpoofVendingFinger = value;
-                break;
             case "spoofVendingBuild":
-                // Deprecated key from before this service matched upstream's
-                // FINGERPRINT-only vending spoof. Only honored as a fallback if
-                // spoofVendingFinger hasn't already been set by this config.
-                if ("0".equals(mSpoofVendingFinger)
-                        && ("1".equals(value) || "true".equalsIgnoreCase(value))) {
-                    Log.w(TAG, "spoofVendingBuild is deprecated, treating as spoofVendingFinger=1");
-                    mSpoofVendingFinger = "1";
-                }
+                mSpoofVendingBuild = "1".equals(value) || "true".equalsIgnoreCase(value);
                 break;
             case "spoofVendingSdk":
                 mSpoofVendingSdk = "1".equals(value) || "true".equalsIgnoreCase(value);
@@ -244,6 +351,7 @@ public final class PlayIntegritySpoofService {
     }
 
     public boolean shouldSpoof(String processName) {
+        ensureLoaded();
         if (!mConfigLoaded) return false;
         return DROIDGUARD_PACKAGE.equals(processName) || VENDING_PACKAGE.equals(processName);
     }
@@ -262,6 +370,7 @@ public final class PlayIntegritySpoofService {
     }
 
     public void spoofBuildFields(String processName) {
+        ensureLoaded();
         if (!mConfigLoaded) return;
 
         boolean isVending = isVending(processName);
@@ -270,12 +379,14 @@ public final class PlayIntegritySpoofService {
         if (!isDroidGuard && !isVending) return;
 
         if (isVending) {
-            String vendingFingerprint = resolveVendingFingerprint();
-            if (vendingFingerprint == null) {
-                if (mVerboseLogs > 0) Log.d(TAG, "Vending FINGERPRINT spoofing disabled");
+            if (!mSpoofVendingBuild) {
+                if (mVerboseLogs > 0) Log.d(TAG, "Vending build spoofing disabled");
                 return;
             }
-            spoofField("FINGERPRINT", vendingFingerprint, "PS");
+            for (Map.Entry<String, String> entry : mBuildFields.entrySet()) {
+                if ("SDK_INT".equals(entry.getKey())) continue;
+                spoofField(entry.getKey(), entry.getValue(), "PS");
+            }
             return;
         }
 
@@ -296,73 +407,32 @@ public final class PlayIntegritySpoofService {
         }
     }
 
-    /**
-     * Resolves the FINGERPRINT value that should be spoofed to the Play Store
-     * (com.android.vending) process, based on the spoofVendingFinger setting.
-     * Returns null if vending fingerprint spoofing is disabled.
-     *
-     * spoofVendingFinger may be:
-     *   "0" / "false" / empty -> disabled (default)
-     *   "1" / "true"          -> use the same FINGERPRINT configured for DroidGuard
-     *   anything else          -> treated as a literal custom FINGERPRINT value
-     */
-    private String resolveVendingFingerprint() {
-        String setting = mSpoofVendingFinger;
-        if (setting == null || setting.isEmpty()
-                || "0".equals(setting) || "false".equalsIgnoreCase(setting)) {
-            return null;
-        }
-        if ("1".equals(setting) || "true".equalsIgnoreCase(setting)) {
-            return mBuildFields.get("FINGERPRINT");
-        }
-        return setting;
-    }
-
-    /**
-     * Applies signature spoofing. Must be called with the current process name so
-     * this can be skipped for Play Store (com.android.vending); signature spoofing
-     * is only meaningful, and only safe, for DroidGuard's package-info checks.
-     */
-    public void spoofSignature(String processName) {
-        if (isVending(processName)) {
-            if (mVerboseLogs > 0) Log.d(TAG, "Signature spoofing skipped for Vending");
-            return;
-        }
+    public void spoofSignature() {
         if (!mSpoofSignature || mSignatureSpoofed) return;
 
         Signature spoofedSignature = new Signature(Base64.decode(ROM_SIGNATURE_DATA, Base64.DEFAULT));
         Parcelable.Creator<PackageInfo> originalCreator = PackageInfo.CREATOR;
         Parcelable.Creator<PackageInfo> customCreator = new CustomPackageInfoCreator(originalCreator, spoofedSignature);
 
-        Field creatorField;
         try {
-            creatorField = findField(PackageInfo.class, "CREATOR");
-        } catch (Exception e) {
-            Log.e(TAG, "Couldn't find PackageInfo.CREATOR: " + e);
-            return;
-        }
-        try {
+            Field creatorField = findField(PackageInfo.class, "CREATOR");
             creatorField.setAccessible(true);
             creatorField.set(null, customCreator);
+            creatorField.setAccessible(false);
         } catch (Exception e) {
             Log.e(TAG, "Couldn't replace PackageInfoCreator: " + e);
             return;
-        } finally {
-            creatorField.setAccessible(false);
         }
 
         try {
             Field cacheField = findField(PackageManager.class, "sPackageInfoCache");
             cacheField.setAccessible(true);
-            try {
-                Object cache = cacheField.get(null);
-                if (cache != null) {
-                    Method clearMethod = cache.getClass().getMethod("clear");
-                    clearMethod.invoke(cache);
-                }
-            } finally {
-                cacheField.setAccessible(false);
+            Object cache = cacheField.get(null);
+            if (cache != null) {
+                Method clearMethod = cache.getClass().getMethod("clear");
+                clearMethod.invoke(cache);
             }
+            cacheField.setAccessible(false);
         } catch (Exception e) {
             if (mDebug) Log.d(TAG, "Couldn't clear PackageInfoCache: " + e);
         }
@@ -370,12 +440,9 @@ public final class PlayIntegritySpoofService {
         try {
             Field creatorsField = findField(Parcel.class, "mCreators");
             creatorsField.setAccessible(true);
-            try {
-                Map<?, ?> mCreators = (Map<?, ?>) creatorsField.get(null);
-                if (mCreators != null) mCreators.clear();
-            } finally {
-                creatorsField.setAccessible(false);
-            }
+            Map<?, ?> mCreators = (Map<?, ?>) creatorsField.get(null);
+            if (mCreators != null) mCreators.clear();
+            creatorsField.setAccessible(false);
         } catch (Exception e) {
             if (mDebug) Log.d(TAG, "Couldn't clear Parcel mCreators: " + e);
         }
@@ -383,12 +450,9 @@ public final class PlayIntegritySpoofService {
         try {
             Field creatorsField = findField(Parcel.class, "sPairedCreators");
             creatorsField.setAccessible(true);
-            try {
-                Map<?, ?> sPairedCreators = (Map<?, ?>) creatorsField.get(null);
-                if (sPairedCreators != null) sPairedCreators.clear();
-            } finally {
-                creatorsField.setAccessible(false);
-            }
+            Map<?, ?> sPairedCreators = (Map<?, ?>) creatorsField.get(null);
+            if (sPairedCreators != null) sPairedCreators.clear();
+            creatorsField.setAccessible(false);
         } catch (Exception e) {
             if (mDebug) Log.d(TAG, "Couldn't clear Parcel sPairedCreators: " + e);
         }
@@ -420,25 +484,17 @@ public final class PlayIntegritySpoofService {
             targetSdk = 32;
         }
 
-        Field field;
         try {
-            field = Build.VERSION.class.getDeclaredField("SDK_INT");
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to spoof SDK_INT", e);
-            return;
-        }
-
-        field.setAccessible(true);
-        try {
+            Field field = Build.VERSION.class.getDeclaredField("SDK_INT");
+            field.setAccessible(true);
             int oldValue = field.getInt(null);
             if (oldValue != targetSdk) {
                 field.set(null, targetSdk);
                 Log.d(TAG + "/Java:DG", "[SDK_INT]: " + oldValue + " -> " + targetSdk);
             }
+            field.setAccessible(false);
         } catch (Exception e) {
             Log.e(TAG, "Failed to spoof SDK_INT", e);
-        } finally {
-            field.setAccessible(false);
         }
     }
 
@@ -448,8 +504,10 @@ public final class PlayIntegritySpoofService {
             return;
         }
 
-        Field field;
         try {
+            Field field;
+            String oldValue;
+
             if (hasField(Build.class, fieldName)) {
                 field = Build.class.getDeclaredField(fieldName);
             } else if (hasField(Build.VERSION.class, fieldName)) {
@@ -458,17 +516,13 @@ public final class PlayIntegritySpoofService {
                 if (mVerboseLogs > 1) Log.d(TAG, "Field not found: " + fieldName);
                 return;
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to locate field " + fieldName, e);
-            return;
-        }
 
-        field.setAccessible(true);
-        try {
-            String oldValue = String.valueOf(field.get(null));
+            field.setAccessible(true);
+            oldValue = String.valueOf(field.get(null));
 
             if (value.equals(oldValue)) {
                 if (mVerboseLogs > 2) Log.d(TAG, "[" + fieldName + "]: " + value + " (unchanged)");
+                field.setAccessible(false);
                 return;
             }
 
@@ -485,16 +539,17 @@ public final class PlayIntegritySpoofService {
                 newValue = Boolean.parseBoolean(value);
             } else {
                 Log.w(TAG, "Unsupported field type: " + fieldType);
+                field.setAccessible(false);
                 return;
             }
 
             field.set(null, newValue);
+            field.setAccessible(false);
+
             Log.d(TAG + "/Java:" + logSuffix, "[" + fieldName + "]: " + oldValue + " -> " + value);
 
         } catch (Exception e) {
             Log.e(TAG, "Failed to spoof " + fieldName, e);
-        } finally {
-            field.setAccessible(false);
         }
     }
 
@@ -506,6 +561,7 @@ public final class PlayIntegritySpoofService {
     }
 
     public String getSpoofedProperty(String key) {
+        ensureLoaded();
         if (key == null || !mSpoofProps || !mConfigLoaded) return null;
 
         String value = mSystemProps.get(key);
@@ -522,10 +578,12 @@ public final class PlayIntegritySpoofService {
     }
 
     public boolean isSpoofSignatureEnabled() {
+        ensureLoaded();
         return mSpoofSignature && mConfigLoaded;
     }
 
     public boolean isSpoofProviderEnabled() {
+        ensureLoaded();
         return mSpoofProvider && mConfigLoaded;
     }
 
@@ -541,16 +599,48 @@ public final class PlayIntegritySpoofService {
         return mSystemProps;
     }
 
-    public String getSpoofVendingFinger() {
-        return mSpoofVendingFinger;
-    }
-
     public boolean isConfigLoaded() {
         return mConfigLoaded;
     }
 
     public byte[] getRomSignatureBytes() {
         return Base64.decode(ROM_SIGNATURE_DATA, Base64.DEFAULT);
+    }
+
+    public boolean shouldSpoofPhotos(String packageName) {
+        if (!TextUtils.equals(GPHOTOS_PACKAGE, packageName)) return false;
+        return mSpoofPhotos;
+    }
+
+    public void spoofPhotosProps() {
+        for (Map.Entry<String, Object> entry : PIXEL_XL_PROPS.entrySet()) {
+            spoofField(entry.getKey(), String.valueOf(entry.getValue()), "Photos");
+        }
+        Log.i(TAG, "Photos spoofing enabled - device appears as Pixel XL");
+    }
+
+    public Boolean hasSystemFeature(String name, int version) {
+        if (name == null) return null;
+
+        final String pkgName = ActivityThread.currentPackageName();
+        if (pkgName != null && PRIV_PKGS.contains(pkgName)) {
+            if (shouldSpoofPhotos(pkgName)) {
+                if (FEATURES_PIXEL.contains(name)) return false;
+                if (FEATURES_PIXEL_OTHERS.contains(name)) return true;
+                if (FEATURES_TENSOR.contains(name)) return false;
+                if (FEATURES_NEXUS.contains(name)) return true;
+            } else {
+                if (FEATURES_PIXEL.contains(name)) return true;
+                if (FEATURES_PIXEL_OTHERS.contains(name)) return true;
+                if (FEATURES_TENSOR.contains(name)) return true;
+                if (FEATURES_NEXUS.contains(name)) return true;
+            }
+        }
+
+        if (FEATURES_PIXEL.contains(name)) return true;
+        if (FEATURES_PIXEL_OTHERS.contains(name)) return true;
+
+        return null;
     }
 
     public void logBuildFields() {
